@@ -1,0 +1,177 @@
+version: 2.1
+
+# ── CircleCI contexts required ────────────────────────────────────────────────
+#
+#   agnt-npm-publish
+#     NPM_TOKEN                    npm publish access for the @agnt-sdk scope
+#
+#   agnt-release
+#     PORTAL_CLI_RELEASE_SECRET    must match agnt-backend's env var of the same
+#                                   name — authenticates release_builds' call to
+#                                   POST /portal/portal-cli/release
+#     CIRCLECI_WEBHOOK_SECRET      must match agnt-backend's env var of the same
+#                                   name — also attached to hydrate_build_publish
+#                                   (below), since that job posts back to
+#                                   POST /portal/portal-cli/webhook too
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Pipeline parameters ────────────────────────────────────────────────────────
+# Git-push-triggered pipelines use the defaults below (run_publish: false),
+# which routes into the `build-and-test` workflow. agnt-backend's
+# portalCliPublishController triggers this same project via the CircleCI API
+# with run_publish: true and the account_* / build_id / webhook_url params
+# filled in, which routes into `publish-account` instead — one real account
+# per API-triggered pipeline, exactly like agnt-portal's Electron build.
+parameters:
+  run_publish:
+    type: boolean
+    default: false
+  account_slug:
+    type: string
+    default: ""
+  account_name:
+    type: string
+    default: ""
+  build_id:
+    type: string
+    default: ""
+  webhook_url:
+    type: string
+    default: ""
+
+jobs:
+  # Runs on every push, every branch. Hydrates with a fixed dummy account
+  # (never a real one — see scripts/hydrate.mjs) since `npm ci`/`npm test`
+  # can't run against the repo's literal {{accountSlug}} placeholders.
+  test:
+    docker:
+      - image: cimg/node:20.11
+    steps:
+      - checkout
+      - run:
+          name: Hydrate with a dummy test account
+          command: node scripts/hydrate.mjs --account-slug test --account-name "Test Account"
+      - run:
+          name: Install
+          command: npm ci
+      - run:
+          # Fetches the current schema straight from agnt-backend's live
+          # OpenAPI spec (GET /openapi.json, unauthenticated) — this is what
+          # keeps Task/Memory/etc. types from drifting out of sync with the
+          # real API without anyone having to remember to update this repo.
+          name: Sync types from agnt-backend's OpenAPI spec
+          command: npm run sync:openapi
+      - run:
+          name: Test
+          command: npm test
+
+  # Runs only on push to main, only after `test` passes. Calls agnt-backend's
+  # hidden fan-out endpoint, which republishes every account that has the CLI
+  # enabled — so a fix to this shared template doesn't silently go stale on
+  # already-published per-account packages. Requires the PORTAL_CLI_RELEASE_SECRET
+  # env var (see the agnt-release context referenced below) to match what's
+  # configured in agnt-backend's secrets.
+  release_builds:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - run:
+          name: Trigger release-all on agnt-backend
+          command: |
+            curl -sf -X POST "${AGNT_API_URL:-https://api.agnt.ai}/portal/portal-cli/release" \
+              -H "x-release-secret: ${PORTAL_CLI_RELEASE_SECRET}" \
+              -H "Content-Type: application/json"
+
+  # One real account, API-triggered (run_publish: true). Hydrates the repo
+  # with that account's real slug/name, bumps the package version past
+  # whatever's currently published (npm rejects republishing an unchanged
+  # version — this can't be a manual version-bump commit like the Electron
+  # build uses, since this job runs automatically and often), builds, and
+  # publishes. Reports success/failure back to agnt-backend either way so the
+  # PortalCliPublish record (and the console's CLI tab) reflects the outcome.
+  hydrate_build_publish:
+    docker:
+      - image: cimg/node:20.11
+    steps:
+      - checkout
+      - run:
+          name: Hydrate with the real account
+          command: |
+            node scripts/hydrate.mjs \
+              --account-slug "<< pipeline.parameters.account_slug >>" \
+              --account-name "<< pipeline.parameters.account_name >>"
+      - run:
+          name: Install
+          command: npm ci
+      - run:
+          name: Sync types from agnt-backend's OpenAPI spec
+          command: npm run sync:openapi
+      - run:
+          name: Bump version past whatever's currently published
+          command: |
+            cd packages/portal-cli
+            PKG_NAME=$(node -p "require('./package.json').name")
+            CURRENT=$(npm view "$PKG_NAME" version 2>/dev/null || echo "")
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+              const current = '$CURRENT';
+              if (current) {
+                const [maj, min, patch] = current.split('.').map(Number);
+                pkg.version = [maj, min, patch + 1].join('.');
+              }
+              // else: nothing published yet under this name — keep the checked-in version (0.1.0).
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+              console.log('Publishing version:', pkg.version);
+            "
+      - run:
+          name: Build
+          command: npm run build
+      - run:
+          name: Publish to npm
+          command: |
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+            cd packages/portal-cli
+            npm publish
+      - run:
+          name: Report success
+          when: on_success
+          command: |
+            VERSION=$(node -p "require('./packages/portal-cli/package.json').version")
+            curl -sf -X POST "<< pipeline.parameters.webhook_url >>" \
+              -H "x-webhook-secret: ${CIRCLECI_WEBHOOK_SECRET}" \
+              -H "Content-Type: application/json" \
+              -d "{\"buildId\":\"<< pipeline.parameters.build_id >>\",\"status\":\"success\",\"npmPackageVersion\":\"$VERSION\"}"
+      - run:
+          name: Report failure
+          when: on_fail
+          command: |
+            curl -sf -X POST "<< pipeline.parameters.webhook_url >>" \
+              -H "x-webhook-secret: ${CIRCLECI_WEBHOOK_SECRET}" \
+              -H "Content-Type: application/json" \
+              -d "{\"buildId\":\"<< pipeline.parameters.build_id >>\",\"status\":\"failed\",\"error\":\"build or publish step failed — see CircleCI logs\"}"
+
+workflows:
+  build-and-test:
+    when:
+      not: << pipeline.parameters.run_publish >>
+    jobs:
+      - test
+      - release_builds:
+          requires:
+            - test
+          filters:
+            branches:
+              only: main
+          context: agnt-release
+
+  publish-account:
+    when: << pipeline.parameters.run_publish >>
+    jobs:
+      - hydrate_build_publish:
+          # Needs BOTH: agnt-npm-publish for NPM_TOKEN, agnt-release for
+          # CIRCLECI_WEBHOOK_SECRET (the success/failure report-back steps).
+          context:
+            - agnt-npm-publish
+            - agnt-release

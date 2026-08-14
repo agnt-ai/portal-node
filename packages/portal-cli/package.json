@@ -1,0 +1,64 @@
+{
+  "name": "@agnt-sdk/{{accountSlug}}",
+  "version": "0.1.0",
+  "description": "Connect your own agent to your {{accountName}} account — signup, tasks, and connections from the command line",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "{{accountSlug}}": "dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist coverage",
+    "prepublishOnly": "npm run build && chmod +x dist/cli/index.js"
+  },
+  "keywords": [
+    "agnt",
+    "cli",
+    "agent",
+    "mcp",
+    "ai-assistant"
+  ],
+  "author": "Agnt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agnt-ai/portal-node.git",
+    "directory": "packages/portal-cli"
+  },
+  "homepage": "https://github.com/agnt-ai/portal-node/tree/main/packages/portal-cli#readme",
+  "bugs": {
+    "url": "https://github.com/agnt-ai/portal-node/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.3.3",
+    "vitest": "^2.1.8"
+  }
+}

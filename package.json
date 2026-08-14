@@ -1,0 +1,17 @@
+{
+  "name": "portal-node",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "hydrate": "node scripts/hydrate.mjs",
+    "sync:openapi": "node scripts/sync-openapi-types.mjs",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
