@@ -1238,6 +1238,8 @@ export interface AgentAuthUser {
   email: string;
   firstName?: string;
   lastName?: string;
+  /** false until timezone + working hours are set and confirmed via `onboarding.markOnboarded()`. */
+  portalOnboarded: boolean;
 }
 
 export interface AgentAuthVerifyResult {

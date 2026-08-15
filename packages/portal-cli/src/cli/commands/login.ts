@@ -91,6 +91,15 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   await saveProfile(profileName, { apiUrl, apiKey: result!.apiKey, apiKeyId: result!.apiKeyId, account });
 
   console.log(`Connected as ${result!.user.email} (${account}).`);
-  console.log(`Saved profile "${profileName}" to ~/.{{accountSlug}}/credentials — you're ready to go.`);
+  console.log(`Saved profile "${profileName}" to ~/.{{accountSlug}}/credentials.`);
+
+  if (!result!.user.portalOnboarded) {
+    console.log('');
+    console.log('One more step before this account can be used: set a timezone and working hours.');
+    console.log('Run: {{accountSlug}} onboard --timezone "America/New_York" --working-hours \'{"MO":[{"start":"09:00","end":"17:00"}]}\'');
+    console.log('(every other command will fail with "onboarding_required" until this is done)');
+    return;
+  }
+
   console.log(`Try: {{accountSlug}} tasks list`);
 }

@@ -12,6 +12,7 @@ import { runLogin } from './commands/login.js';
 import { runLogout } from './commands/logout.js';
 import { runConfigure } from './commands/configure.js';
 import { runProfilesList, runProfilesUse } from './commands/profiles.js';
+import { runOnboard } from './commands/onboard.js';
 import {
   runTasksList, runTasksCreate, runTasksGet, runTasksActivities, runTasksMessage,
   runTasksResume, runTasksStop, runTasksApprove, runTasksDecline, runTasksMarkDone,
@@ -92,9 +93,19 @@ import { runKillSwitchGet, runKillSwitchFreeze, runKillSwitchRelease } from './c
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
 import { AgntApiError } from '../HttpClient.js';
 
+const ONBOARDING_ERROR_CODES = new Set(['onboarding_required', 'onboarding_incomplete']);
+
 function reportAndExit(err: unknown): never {
   if (err instanceof AgntApiError) {
     console.error(`Error: ${err.message}`);
+    // Every account-using command funnels its error through here, so this is
+    // the one place that reliably catches an agent that skipped (or never
+    // saw) login's own onboarding hint and hit the server-side gate later on
+    // some other command instead.
+    if (err.errorCode && ONBOARDING_ERROR_CODES.has(err.errorCode)) {
+      console.error('');
+      console.error('Run: {{accountSlug}} onboard --timezone "America/New_York" --working-hours \'{"MO":[{"start":"09:00","end":"17:00"}]}\'');
+    }
   } else if (err instanceof Error) {
     console.error(`Error: ${err.message}`);
   } else {
@@ -113,6 +124,7 @@ program
     'Connect your own agent to your {{accountName}} account — no browser required.\n\n' +
       'Typical first run:\n' +
       '  {{accountSlug}} login --email you@example.com\n' +
+      '  {{accountSlug}} onboard --timezone "America/New_York" --working-hours \'{"MO":[{"start":"09:00","end":"17:00"}]}\'  # required — everything else 428s until this is done\n' +
       '  {{accountSlug}} tasks list\n' +
       '  {{accountSlug}} connections connect --mcp-server-url https://mcp.notion.com'
   )
@@ -138,6 +150,24 @@ program
   .option('--api-url <url>', 'Override the API base URL')
   .action(async (opts) => {
     await runLogin(opts);
+  });
+
+program
+  .command('onboard')
+  .description(
+    'Set your timezone and working hours — required before any other command\n' +
+    'will work (the server blocks everything else until this is done). Both\n' +
+    'flags are required; there is no default working-hours guess.\n\n' +
+    'Example:\n' +
+    '  {{accountSlug}} onboard --timezone "America/New_York" \\\n' +
+    '    --working-hours \'{"MO":[{"start":"09:00","end":"17:00"}],"TU":[{"start":"09:00","end":"17:00"}]}\''
+  )
+  .option('--timezone <tz>', 'IANA timezone, e.g. "America/New_York"')
+  .option('--working-hours <json>', 'Day-keyed JSON of {start,end} ranges — keys MO/TU/WE/TH/FR/SA/SU')
+  .option('--profile <name>', 'Credentials profile to use')
+  .option('--json', 'Print raw JSON')
+  .action(async (opts) => {
+    await runOnboard(opts);
   });
 
 program
