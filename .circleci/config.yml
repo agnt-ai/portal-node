@@ -1,19 +1,20 @@
 version: 2.1
 
-# ── CircleCI contexts required ────────────────────────────────────────────────
+# ── CircleCI context required ─────────────────────────────────────────────────
 #
-#   agnt-npm-publish
+#   agnt-production (existing — also used by agnt-backend's own deploy jobs)
 #     NPM_TOKEN                    npm publish access for the @agnt-sdk scope
-#
-#   agnt-release
 #     PORTAL_CLI_RELEASE_SECRET    must match agnt-backend's env var of the same
 #                                   name — authenticates release_builds' call to
 #                                   POST /portal/portal-cli/release
 #     CIRCLECI_WEBHOOK_SECRET      must match agnt-backend's env var of the same
-#                                   name — also attached to hydrate_build_publish
-#                                   (below), since that job posts back to
-#                                   POST /portal/portal-cli/webhook too
+#                                   name (already present) — also attached to
+#                                   hydrate_build_publish, since that job posts
+#                                   back to POST /portal/portal-cli/webhook too
 #
+# Originally referenced two contexts (agnt-npm-publish, agnt-release) that were
+# never actually created in this CircleCI org — every run of release_builds
+# and hydrate_build_publish failed as a result until this was caught and fixed.
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Pipeline parameters ────────────────────────────────────────────────────────
@@ -200,14 +201,19 @@ workflows:
           filters:
             branches:
               only: main
-          context: agnt-release
+          # agnt-release/agnt-npm-publish (originally referenced here and
+          # below) never existed in this CircleCI org — every run of both
+          # jobs failed as a result. agnt-production already exists, already
+          # carries CIRCLECI_WEBHOOK_SECRET (matching agnt-backend's own
+          # value), and now also has NPM_TOKEN + PORTAL_CLI_RELEASE_SECRET
+          # added — reusing it instead of creating new contexts.
+          context: agnt-production
 
   publish-account:
     when: << pipeline.parameters.run_publish >>
     jobs:
       - hydrate_build_publish:
-          # Needs BOTH: agnt-npm-publish for NPM_TOKEN, agnt-release for
-          # CIRCLECI_WEBHOOK_SECRET (the success/failure report-back steps).
-          context:
-            - agnt-npm-publish
-            - agnt-release
+          # Single context, same one release_builds now uses — see that
+          # job's comment. Carries NPM_TOKEN, CIRCLECI_WEBHOOK_SECRET, and
+          # (unused here, harmless) PORTAL_CLI_RELEASE_SECRET all at once.
+          context: agnt-production
