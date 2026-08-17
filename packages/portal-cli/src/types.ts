@@ -2,9 +2,14 @@
  * Types sourced from agnt-backend's own OpenAPI spec where possible — see
  * `components` below, generated into ./generated/api.d.ts by
  * `npm run sync:openapi` (scripts/sync-openapi-types.mjs at the repo root).
- * That file is gitignored and regenerated fresh before every build/test, so
- * these aliases stay in sync with the real API automatically rather than
- * drifting the way a hand-copied type would.
+ * That file IS committed (not gitignored) — regenerate it locally and
+ * review the diff like any other change, same pattern as agnt-console/
+ * agnt-portal/agnt-studio already use for their own copies of this spec
+ * (agnt-backend's own `sync:openapi` triggers this repo's sync too, reading
+ * a local sibling agnt-backend checkout directly when one exists). Also
+ * regenerated fresh on every CI run (`test`/`hydrate_build_publish` in
+ * .circleci/config.yml) via the same script's HTTPS fallback, so a build
+ * never trusts a commit that's gone stale between syncs.
  *
  * Not everything used here is in the spec yet (activity feed shapes, list
  * envelopes, integrations/identifiers) — those stay hand-typed below, same
