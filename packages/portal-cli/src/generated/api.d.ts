@@ -3101,7 +3101,7 @@ export interface components {
             conversational?: boolean;
             origin?: {
                 /** @enum {string|null} */
-                platform: "chat" | "newTaskUI" | "email" | "slack" | "teams" | "sms" | "whatsapp" | "imessage" | "phone" | "discord" | "telegram" | "workflow_spawned" | "unknown" | null;
+                platform: "chat" | "newTaskUI" | "task_activity" | "email" | "slack" | "teams" | "sms" | "whatsapp" | "imessage" | "phone" | "discord" | "telegram" | "workflow_spawned" | "unknown" | null;
             } | null;
             order?: number;
             title: string;
@@ -3120,6 +3120,7 @@ export interface components {
             }[];
             clarificationNeeded?: unknown;
             error?: string | null;
+            pauseReason?: string | null;
             /** @example 2025-01-15T10:30:00.000Z */
             scheduledFor?: string | null;
             scheduledHeadline?: string | null;
@@ -3294,6 +3295,8 @@ export interface components {
                 parkedAt?: string | null;
                 /** @example 2025-01-15T10:30:00.000Z */
                 lastPauseNotifiedAt?: string | null;
+                /** @example 2025-01-15T10:30:00.000Z */
+                overBudgetAskDeliveredAt?: string | null;
                 /** @example 2025-01-15T10:30:00.000Z */
                 landingWrapUpIssuedAt?: string | null;
                 zeroBalanceLandingOverrideCount?: number;
@@ -6302,7 +6305,7 @@ export interface components {
             category?: string | null;
             secondaryCategory?: string | null;
             /** @default [] */
-            serviceCategories: ("cloud_storage" | "docs" | "meeting_notes" | "crm" | "contacts" | "task_management" | "notes" | "video_meeting" | "calendar" | "email")[];
+            serviceCategories: ("cloud_storage" | "docs" | "meeting_notes" | "crm" | "contacts" | "task_management" | "notes" | "calendar" | "email")[];
             /** @enum {string|null} */
             setupDifficulty?: "easy" | "moderate" | "developer-only" | null;
             /** @enum {string|null} */
@@ -6616,7 +6619,7 @@ export interface components {
             category?: string | null;
             secondaryCategory?: string | null;
             /** @default [] */
-            serviceCategories: ("cloud_storage" | "docs" | "meeting_notes" | "crm" | "contacts" | "task_management" | "notes" | "video_meeting" | "calendar" | "email")[];
+            serviceCategories: ("cloud_storage" | "docs" | "meeting_notes" | "crm" | "contacts" | "task_management" | "notes" | "calendar" | "email")[];
             /** @enum {string|null} */
             setupDifficulty?: "easy" | "moderate" | "developer-only" | null;
             /** @enum {string|null} */
