@@ -53,22 +53,28 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
 
   const apiUrl = opts.apiUrl?.trim() || DEFAULT_API_URL;
 
-  console.log(`Sending a verification code to ${email}...`);
-  try {
-    await publicRequest(apiUrl, '/portal/auth/agent/start', { email, account });
-  } catch (err) {
-    if (err instanceof AgntApiError) {
-      console.error(`Failed to start login: ${err.message}`);
-    } else {
-      console.error(`Failed to start login: ${(err as Error).message}`);
-    }
-    process.exit(1);
-  }
-
-  const code = opts.code?.trim() || (await promptForCode());
+  let code = opts.code?.trim();
   if (!code) {
-    console.error('A verification code is required.');
-    process.exit(1);
+    // Only request a fresh code when the caller doesn't already have one —
+    // requesting one unconditionally would invalidate a code passed via
+    // --code before it's ever checked (each /start issues a new OTP).
+    console.log(`Sending a verification code to ${email}...`);
+    try {
+      await publicRequest(apiUrl, '/portal/auth/agent/start', { email, account });
+    } catch (err) {
+      if (err instanceof AgntApiError) {
+        console.error(`Failed to start login: ${err.message}`);
+      } else {
+        console.error(`Failed to start login: ${(err as Error).message}`);
+      }
+      process.exit(1);
+    }
+
+    code = await promptForCode();
+    if (!code) {
+      console.error('A verification code is required.');
+      process.exit(1);
+    }
   }
 
   const label = opts.label?.trim() || `CLI (${(await import('os')).hostname()})`;
