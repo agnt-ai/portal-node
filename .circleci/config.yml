@@ -53,8 +53,16 @@ jobs:
           name: Hydrate with a dummy test account
           command: node scripts/hydrate.mjs --account-slug test --account-name "Test Account"
       - run:
+          # `npm ci` needs a pre-existing package-lock.json — but the checked-in
+          # tree still has the literal {{accountSlug}} placeholder in every
+          # package.json's `name`, which npm refuses to resolve at all (not
+          # just "no lockfile", an outright invalid-package-name error). A
+          # valid lockfile can only exist post-hydration, and hydration is
+          # fresh every run, so there's no lockfile state that could ever be
+          # committed for `npm ci` to consume. `npm install` generates one
+          # on the fly instead of requiring it up front.
           name: Install
-          command: npm ci
+          command: npm install
       - run:
           # Fetches the current schema straight from agnt-backend's live
           # OpenAPI spec (GET /openapi.json, unauthenticated) — this is what
@@ -131,8 +139,10 @@ jobs:
               --account-slug "$ACCOUNT_SLUG" \
               --account-name "$ACCOUNT_NAME"
       - run:
+          # See the `test` job's Install step for why this is `npm install`,
+          # not `npm ci` — no lockfile can validly exist pre-hydration.
           name: Install
-          command: npm ci
+          command: npm install
       - run:
           name: Sync types from agnt-backend's OpenAPI spec
           command: npm run sync:openapi
