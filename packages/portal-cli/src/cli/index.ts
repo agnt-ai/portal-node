@@ -87,7 +87,7 @@ import { runDriveList, runDriveGet, runDriveDownload, runDriveRename, runDriveDe
 import { runBookingLinksList, runBookingLinksGet, runBookingLinksDelete } from './commands/bookingLinks.js';
 import { runTagsList } from './commands/tags.js';
 import { runMeGet, runMeUpdate } from './commands/me.js';
-import { runSkillsList, runSkillsGet, runSkillsRunNow, runSkillsDelete } from './commands/skills.js';
+import { runSkillsList, runSkillsGet, runSkillsRunNow, runSkillsUpdate, runSkillsDelete } from './commands/skills.js';
 import { runTeamsList, runTeamsGet, runTeamsCreate, runTeamsDelete, runTeamsMembers, runTeamsAddMember, runTeamsRemoveMember } from './commands/teams.js';
 import { runOrgsList, runOrgsGet, runOrgsCreate, runOrgsDelete } from './commands/organizations.js';
 import { runUsersList, runUsersGet, runUsersDelete } from './commands/users.js';
@@ -1880,6 +1880,18 @@ skillsCmd
   .option('--json', 'Print raw JSON')
   .action(async (skillId, opts) => {
     await runSkillsRunNow(skillId, opts);
+  });
+
+skillsCmd
+  .command('update <skillId> <body>')
+  .description(
+    'Update a skill (e.g. description, instructions) from a JSON body\n\n' +
+    'Example: {{accountSlug}} skills update sk_123 \'{"instructions":"..."}\''
+  )
+  .option('--profile <name>', 'Credentials profile to use')
+  .option('--json', 'Print raw JSON')
+  .action(async (skillId, body, opts) => {
+    await runSkillsUpdate(skillId, body, opts);
   });
 
 skillsCmd

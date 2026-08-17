@@ -1,5 +1,14 @@
 import { clientFor } from '../utils/api.js';
 
+function parseJsonBody(body: string, example: string): any {
+  try {
+    return JSON.parse(body);
+  } catch {
+    console.error(`Body must be valid JSON, e.g. '${example}'`);
+    process.exit(1);
+  }
+}
+
 export interface SkillsListOptions {
   kind?: string;
   q?: string;
@@ -49,6 +58,23 @@ export async function runSkillsRunNow(skillId: string, opts: SkillsRunOptions): 
     return;
   }
   console.log(`Started run — task ${task.id}.`);
+}
+
+export interface SkillsUpdateOptions {
+  profile?: string;
+  json?: boolean;
+}
+
+export async function runSkillsUpdate(skillId: string, body: string, opts: SkillsUpdateOptions): Promise<void> {
+  const client = await clientFor(opts.profile);
+  const parsed = parseJsonBody(body, '{"description":"..."}');
+  const skill = await client.skills.update(skillId, parsed);
+
+  if (opts.json) {
+    console.log(JSON.stringify(skill, null, 2));
+    return;
+  }
+  console.log(`Updated skill ${skill.id}: ${skill.title ?? skill.name}`);
 }
 
 export interface SkillsDeleteOptions {
