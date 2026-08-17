@@ -7,6 +7,9 @@
  * task board, connections, and more.
  */
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { Command } from 'commander';
 import { runLogin } from './commands/login.js';
 import { runLogout } from './commands/logout.js';
@@ -116,6 +119,12 @@ function reportAndExit(err: unknown): never {
 
 process.on('unhandledRejection', reportAndExit);
 
+// dist/cli/index.js -> ../../package.json is the package root's own file,
+// not the caller's — read it fresh each run rather than hardcoding a
+// version string that drifts from what's actually published.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8'));
+
 const program = new Command();
 
 program
@@ -128,7 +137,7 @@ program
       '  {{accountSlug}} tasks list\n' +
       '  {{accountSlug}} connections connect --mcp-server-url https://mcp.notion.com'
   )
-  .version('0.1.0');
+  .version(pkg.version);
 
 program
   .command('login')
