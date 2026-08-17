@@ -64,13 +64,13 @@ jobs:
           name: Install
           command: npm install
       - run:
-          # Fetches the current schema straight from agnt-backend's live
-          # OpenAPI spec (GET /openapi.json, unauthenticated) — this is what
-          # keeps Task/Memory/etc. types from drifting out of sync with the
-          # real API without anyone having to remember to update this repo.
-          name: Sync types from agnt-backend's OpenAPI spec
-          command: npm run sync:openapi
-      - run:
+          # No sync:openapi here — src/generated/api.d.ts is a committed
+          # file now (see agnt-backend's sync:openapi, which regenerates it
+          # from a local sibling checkout and pushes the diff into this repo
+          # directly), not gitignored/CI-only like it used to be. Re-fetching
+          # it here would just make this job depend on agnt-backend's live
+          # /openapi.json being up — a dependency the committed-file design
+          # exists specifically to remove.
           name: Test
           command: npm test
 
@@ -143,9 +143,6 @@ jobs:
           # not `npm ci` — no lockfile can validly exist pre-hydration.
           name: Install
           command: npm install
-      - run:
-          name: Sync types from agnt-backend's OpenAPI spec
-          command: npm run sync:openapi
       - run:
           name: Bump version past whatever's currently published
           command: |
