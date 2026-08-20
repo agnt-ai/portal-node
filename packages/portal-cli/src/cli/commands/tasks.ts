@@ -1,4 +1,22 @@
 import { clientFor } from '../utils/api.js';
+import type { PortalClient } from '../../index.js';
+
+/**
+ * `--assistant` is documented (and consistently used, e.g. `login --account`,
+ * `tasks create ... --assistant travel@agnt.ai` in this command's own help
+ * text) as an email address, but POST /tasks requires an assistant ObjectId —
+ * passing the raw email straight through hits a Mongoose CastError server-
+ * side ("Cast to ObjectId failed for value ... at path assistant"). Resolve
+ * it here so the CLI's documented input actually works. A bare ObjectId
+ * (no "@") passes through unresolved, in case a caller already has one.
+ */
+async function resolveAssistantId(client: PortalClient, assistantRef: string): Promise<string> {
+  if (!assistantRef.includes('@')) return assistantRef;
+  const assistants = await client.assistants.list();
+  const match = assistants.find(a => a.email?.toLowerCase() === assistantRef.toLowerCase());
+  if (!match) throw new Error(`No assistant found with email "${assistantRef}"`);
+  return match.id;
+}
 
 export interface TasksListOptions {
   status?: string;
@@ -45,7 +63,8 @@ export interface TasksCreateOptions {
 
 export async function runTasksCreate(title: string, opts: TasksCreateOptions): Promise<void> {
   const client = await clientFor(opts.profile);
-  const task = await client.tasks.create({ title, assistant: opts.assistant, description: opts.description });
+  const assistantId = await resolveAssistantId(client, opts.assistant);
+  const task = await client.tasks.create({ title, assistant: assistantId, description: opts.description });
 
   if (opts.message) {
     await client.tasks.sendMessage(task.id, opts.message);
