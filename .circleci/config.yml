@@ -195,9 +195,21 @@ workflows:
       not: << pipeline.parameters.run_publish >>
     jobs:
       - test
-      - release_builds:
+      # Manual gate, same pattern as the other repos' approve/hold-production
+      # step — a merge to main runs tests immediately, but release_builds
+      # (which fans out to a real npm publish for every account with the CLI
+      # enabled, via agnt-backend's release-all endpoint) waits for someone
+      # to click approve in the CircleCI UI, not automatically.
+      - approve_release:
+          type: approval
           requires:
             - test
+          filters:
+            branches:
+              only: main
+      - release_builds:
+          requires:
+            - approve_release
           filters:
             branches:
               only: main
