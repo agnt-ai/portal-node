@@ -92,7 +92,6 @@ import { runTeamsList, runTeamsGet, runTeamsCreate, runTeamsDelete, runTeamsMemb
 import { runOrgsList, runOrgsGet, runOrgsCreate, runOrgsDelete } from './commands/organizations.js';
 import { runUsersList, runUsersGet, runUsersDelete } from './commands/users.js';
 import { runTrashList, runTrashRestore } from './commands/trash.js';
-import { runKillSwitchGet, runKillSwitchFreeze, runKillSwitchRelease } from './commands/killSwitch.js';
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
 import { AgntApiError } from '../HttpClient.js';
 
@@ -2052,38 +2051,6 @@ trashCmd
   .option('--profile <name>', 'Credentials profile to use')
   .action(async (kind, id, opts) => {
     await runTrashRestore(kind, id, opts);
-  });
-
-const killSwitchCmd = program
-  .command('kill-switch')
-  .description('Account-wide emergency stop — freezing halts ALL agent activity');
-
-killSwitchCmd
-  .command('status')
-  .description('Check the kill switch state')
-  .option('--profile <name>', 'Credentials profile to use')
-  .action(async (opts) => {
-    await runKillSwitchGet(opts);
-  });
-
-killSwitchCmd
-  .command('freeze')
-  .description('Stop all agent activity on the account immediately')
-  .option('--reason <text>', 'Optional reason')
-  .option('--profile <name>', 'Credentials profile to use')
-  .option('--json', 'Print raw JSON')
-  .action(async (opts) => {
-    await runKillSwitchFreeze(opts);
-  });
-
-killSwitchCmd
-  .command('release')
-  .description('Resume normal activity after a freeze')
-  .option('--reason <text>', 'Optional reason')
-  .option('--profile <name>', 'Credentials profile to use')
-  .option('--json', 'Print raw JSON')
-  .action(async (opts) => {
-    await runKillSwitchRelease(opts);
   });
 
 program.parseAsync(process.argv).catch(reportAndExit);
