@@ -179,18 +179,6 @@ export interface ListSkillsParams {
   limit?: number;
 }
 
-// Not in the OpenAPI spec — hand-typed, matching agnt-portal's lib/api/killSwitch.ts exactly.
-export type KillSwitchState = 'active' | 'paused' | 'frozen';
-export type KillSwitchAction = 'freeze' | 'release';
-
-export interface KillSwitchSnapshot {
-  state: KillSwitchState;
-  engagedAt: string | null;
-  engagedBy: { actor: string | null; source: 'user' | 'staff' | 'auto' | null } | null;
-  autoTrigger: { kind: string | null; count: number | null; windowMs: number | null } | null;
-  reason: string | null;
-}
-
 export type TrashKind = 'skills' | 'assistants' | 'inbox';
 
 // Not in the OpenAPI spec — hand-typed, matching agnt-portal's lib/api/trash.ts exactly.
