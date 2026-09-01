@@ -47,7 +47,18 @@ jobs:
   # can't run against the repo's literal {{accountSlug}} placeholders.
   test:
     docker:
-      - image: cimg/node:20.11
+      # vitest 4's transitive deps (vite@8.x, which now pulls in rolldown)
+      # declare engines.node: "^20.19.0 || >=22.12.0" — cimg/node:20.11
+      # predates that (no node:util styleText export until 20.12), so the
+      # whole test run crashed at module load before any test could run.
+      # Node 20 is also EOL-track; bumping the image forward to Node 24 LTS
+      # (rather than patch-bumping within 20.x or pinning deps backward to
+      # stay on 20.11) matches the direction the rest of the toolchain is
+      # moving. This is CI-toolchain-only — packages/portal-cli's own
+      # engines.node (>=18.0.0) is a promise about the published package,
+      # which never ships vite/vitest/rolldown (see its `files` allowlist),
+      # so it's untouched.
+      - image: cimg/node:24.20
     steps:
       - checkout
       - run:
