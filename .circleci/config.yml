@@ -136,7 +136,16 @@ jobs:
   # as this job does now.
   hydrate_build_publish:
     docker:
-      - image: cimg/node:20.11
+      # Same reasoning as the `test` job above: vitest 4's transitive `vite`
+      # dep resolves fresh (no lockfile) to vite@8.2.2, which bundles rolldown
+      # and declares engines.node "^20.19.0 || >=22.12.0". This job's `npm
+      # install` step is unaffected by anything in `test`'s own fix commit,
+      # which only bumped `test`'s image and left this one on cimg/node:20.11
+      # — the older npm bundled there crashes in its Arborist dependency-graph
+      # resolver on vite 8's shape ("Cannot read properties of null (reading
+      # 'edgesOut')") instead of the runtime SyntaxError `test` hit, but it's
+      # the same root cause. Bumped to match `test`'s fix.
+      - image: cimg/node:24.20
     environment:
       ACCOUNT_SLUG: << pipeline.parameters.account_slug >>
       ACCOUNT_NAME: << pipeline.parameters.account_name >>
