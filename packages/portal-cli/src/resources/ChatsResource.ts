@@ -73,7 +73,18 @@ export class ChatsResource {
    *   }
    */
   async *process(chatId: string, body?: { message?: string; files?: unknown[] }): AsyncGenerator<ProcessChatEvent> {
-    for await (const raw of this.http.stream(`/chats/${chatId}/process`, body ?? {})) {
+    // The server's inline-save path (chatsController.mjs's processChat) only saves a
+    // new message when `req.body.message` is an OBJECT with a `.content` string —
+    // the same shape addMessage()/AddMessageBody use. A bare string (this method's
+    // own prior wire format) has no `.content`, so the server silently skips saving
+    // it, `triggeringActivityId` is never set, and the run resolves some OTHER
+    // activity instead — observed live as a `claim_lost` reply against an unrelated,
+    // already-claimed row from earlier chat history, with no new message ever
+    // appearing in the chat. Wrapped here so callers keep passing a plain string.
+    const payload = body?.message !== undefined || body?.files !== undefined
+      ? { message: { content: body.message ?? '', ...(body.files !== undefined ? { files: body.files } : {}) } }
+      : {};
+    for await (const raw of this.http.stream(`/chats/${chatId}/process`, payload)) {
       const event = raw as ProcessChatEvent;
       yield event;
       if (event.event === 'error') {

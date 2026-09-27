@@ -78,11 +78,35 @@ describe('ChatsResource', () => {
 
     const events = await collect(new ChatsResource(http).process('c1', { message: 'hi' }));
 
-    expect(http.stream).toHaveBeenCalledWith('/chats/c1/process', { message: 'hi' });
     expect(events).toEqual([
       { event: 'status_update', data: { message: 'thinking' } },
       { event: 'message', data: { content: 'hello' } }
     ]);
+  });
+
+  it('process() wraps the string message as { content } — the server only saves the message when it is an object with .content, same shape addMessage()/AddMessageBody use', async () => {
+    async function* fakeStream() {
+      yield { event: 'message', data: { content: 'hello' } };
+    }
+    const http = fakeHttp({ stream: vi.fn().mockReturnValue(fakeStream()) });
+
+    await collect(new ChatsResource(http).process('c1', { message: 'hi' }));
+
+    expect(http.stream).toHaveBeenCalledWith('/chats/c1/process', { message: { content: 'hi' } });
+  });
+
+  it('process() carries files alongside the wrapped content, and omits both when no body is passed', async () => {
+    async function* fakeStream() {
+      yield { event: 'message', data: { content: 'hello' } };
+    }
+    const http = fakeHttp({ stream: vi.fn().mockReturnValue(fakeStream()) });
+    const resource = new ChatsResource(http);
+
+    await collect(resource.process('c1', { message: 'hi', files: [{ id: 'f1' }] }));
+    expect(http.stream).toHaveBeenCalledWith('/chats/c1/process', { message: { content: 'hi', files: [{ id: 'f1' }] } });
+
+    await collect(resource.process('c1'));
+    expect(http.stream).toHaveBeenCalledWith('/chats/c1/process', {});
   });
 
   it('process() throws on an error event instead of yielding past it silently', async () => {
