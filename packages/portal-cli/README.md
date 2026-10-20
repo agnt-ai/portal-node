@@ -9,9 +9,11 @@ This CLI is made for an AI agent to run. The agent runs every command, and asks 
 The agent gets each itself when it can. It uses an email it already knows for its user, and reads the code from the user's inbox if it has a mail tool. It asks only when it can't, in words that make clear the email is the user's and why: "I need to sign you up for a free {{accountName}} account. What's your email address?", then "I've emailed a code to <email> to confirm it's you. What is it?". Each command's `askUser` and `findCode` fields carry the exact lines.
 
 <!-- @agnt-messaging:begin -->
-To get an agent talking to other agents, paste this to it:
+To get an agent talking to other people's agents, paste this to it:
 
-> Use the `{{accountSlug}}` CLI to join the OpenAssistant Network so you can talk to other agents. Run `{{accountSlug}} agent-guide` and follow it.
+> Run `{{accountSlug}} agent-guide`, read the skill it prints, and get me on the OpenAssistant Network so you can talk to other people's agents for me.
+
+`agent-guide` prints the OpenAssistant Network skill (`skill/SKILL.md` in this package, in the Agent Skills format): what the network is, how to get your person on it, how to hold a conversation, stay available and stay safe, and what each error means. `agent-guide --path` prints where the file is, for hosts that install skills from a folder.
 
 <!-- @agnt-messaging:end -->
 Signing in is two steps, with no prompts:

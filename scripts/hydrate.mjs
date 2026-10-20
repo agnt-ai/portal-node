@@ -41,13 +41,26 @@ const TEST_FILE_RE = /\.test\.[cm]?[jt]sx?$/;
 
 // AGNT messaging (the `agnt` commands, agent-guide, agent sign-up) ships only in these apps' CLIs. Every other
 // app's build has it removed before anything is compiled, so its CLI, help and package never carry it:
-//   - a file whose first line holds AGNT_ONLY_MARK is deleted;
+//   - a file whose first line holds AGNT_ONLY_MARK is deleted, and so is a Markdown file whose frontmatter does
+//     (a skill's first line must be its frontmatter's opening ---);
 //   - in any other file, the lines from one holding AGNT_BEGIN through the next holding AGNT_END are deleted.
 // The markers are plain comments, so in these apps' builds they stay and change nothing.
 const AGNT_MESSAGING_APPS = new Set(['openassistant']);
 const AGNT_ONLY_MARK = '@agnt-messaging-only';
 const AGNT_BEGIN = '@agnt-messaging:begin';
 const AGNT_END = '@agnt-messaging:end';
+
+/** The file is AGNT-only: its first line holds the mark, or its leading frontmatter does. */
+export function isAgntOnly(text) {
+  const lines = text.split('\n');
+  if (lines[0].includes(AGNT_ONLY_MARK)) return true;
+  if (lines[0].trim() !== '---') return false;
+  for (const line of lines.slice(1)) {
+    if (line.trim() === '---') return false;
+    if (line.includes(AGNT_ONLY_MARK)) return true;
+  }
+  return false;
+}
 
 /** The text without its AGNT messaging regions. Throws on a region that is not closed, or an end with no begin. */
 export function stripAgntMessaging(text, file = 'file') {
@@ -78,8 +91,7 @@ async function removeAgntMessaging(files, root) {
     if (file === SELF_PATH) continue;
     const buf = await readFile(file, 'utf-8').catch(() => null);
     if (buf === null) continue;
-    const firstLine = buf.slice(0, buf.indexOf('\n') === -1 ? buf.length : buf.indexOf('\n'));
-    if (firstLine.includes(AGNT_ONLY_MARK)) {
+    if (isAgntOnly(buf)) {
       await unlink(file);
       removed++;
       continue;
@@ -89,6 +101,22 @@ async function removeAgntMessaging(files, root) {
     stripped++;
   }
   console.log(`AGNT messaging not in this app: ${removed} file(s) removed, ${stripped} file(s) stripped.`);
+}
+
+/**
+ * In an app that keeps AGNT messaging, a Markdown file's frontmatter mark is only build bookkeeping: drop that
+ * line, so the shipped file (a skill an agent reads) carries none of it.
+ */
+async function dropFrontmatterMarks(files) {
+  for (const file of files) {
+    if (file === SELF_PATH || !file.endsWith('.md')) continue;
+    const buf = await readFile(file, 'utf-8').catch(() => null);
+    if (buf === null || !buf.startsWith('---') || !isAgntOnly(buf) || buf.split('\n')[0].includes(AGNT_ONLY_MARK)) continue;
+    const lines = buf.split('\n');
+    const end = lines.indexOf('---', 1);
+    const kept = lines.filter((line, i) => !(i > 0 && i < end && line.includes(AGNT_ONLY_MARK)));
+    await writeFile(file, kept.join('\n'), 'utf-8');
+  }
 }
 
 function parseArgs(argv) {
@@ -132,6 +160,8 @@ async function main() {
   if (!AGNT_MESSAGING_APPS.has(accountSlug)) {
     await removeAgntMessaging(files, root);
     files = await collectFiles(root, root);
+  } else {
+    await dropFrontmatterMarks(files);
   }
 
   let changed = 0;

@@ -118,7 +118,7 @@ describe('agnt join', () => {
     expect(saveProfile).toHaveBeenCalledWith('claude-code', { apiUrl: 'https://api.example.test', apiKey: 'ak_live_secret', apiKeyId: 'k1', account: 'acme' });
     expect(result.savedProfile).toBe('claude-code');
     expect(result.status).toBe('joined');
-    expect(result.conversation).toMatch(/^When your user names an agent to talk to.*wait --timeout 0 until it exits 3/);
+    expect(result.conversation).toMatch(/^When your person names an agent to talk to.*wait --timeout 0 until it exits 3/);
     expect(result.tellUser).toMatch(new RegExp(`^I signed you up for a free .* account with person@example\\.com\\. I'm all set\\. My OpenAssistant Network ID is ${tried[1]}@agent\\.example\\.test\\. Which agent do you want me to talk to\\?$`));
     expect(JSON.stringify(result)).not.toContain('ak_live_secret');
   });

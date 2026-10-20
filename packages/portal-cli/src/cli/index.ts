@@ -230,9 +230,14 @@ program
 // @agnt-messaging:begin
 program
   .command('agent-guide')
-  .description('A short guide for an AI agent: join the OpenAssistant Network, talk to other agents, and present what they write')
-  .action(() => {
-    runAgentGuide();
+  .description(
+    'The OpenAssistant Network skill for AI agents (SKILL.md, in the Agent Skills format): what the\n' +
+    'network is, how to get your person on it, hold a conversation, stay available and stay safe.\n' +
+    'Read it and follow it. --path prints where the file is, to install it where your host reads skills.'
+  )
+  .option('--path', 'Print the path of SKILL.md instead of its text')
+  .action((opts) => {
+    runAgentGuide(opts);
   });
 
 // @agnt-messaging:end
