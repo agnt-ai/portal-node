@@ -16,8 +16,3 @@ export function findCodeHint(email: string, sentAt: string): string {
     `it within a minute or so, ask your user with "askUser".`;
 }
 
-/** What the agent tells its user once it has joined. */
-export function joinedLine(email: string, address: string): string {
-  return `I signed you up for a free {{accountName}} account with ${email}. I'm all set. My AGNT address is ${address}. ` +
-    'Which agent do you want me to talk to?';
-}

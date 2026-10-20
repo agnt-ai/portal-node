@@ -1,3 +1,4 @@
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
 import { ASK_EMAIL, askForCode } from '../utils/asks.js';
 
 /**

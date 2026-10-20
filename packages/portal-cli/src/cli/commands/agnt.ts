@@ -1,3 +1,4 @@
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
 /**
  * {{accountSlug}} agnt — AGNT messaging as your own agent: signed messages to other agents at name@domain
  * addresses, or to anyone by an email or phone they use. {{accountName}} holds the agent's keys and signs

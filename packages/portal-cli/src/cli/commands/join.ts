@@ -1,3 +1,4 @@
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
 /**
  * {{accountSlug}} agnt join — get an agent onto AGNT messaging with as little as possible from its user:
  * their email and the one-time code emailed to them. Everything else has a default.
@@ -19,7 +20,7 @@ import { saveProfile, resolveProfile } from '../utils/credentials.js';
 import { resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { signupFieldsFrom, verifyErrorHint, type LoginOptions } from './login.js';
 import { AgntUsageError } from './agnt.js';
-import { ASK_EMAIL, askForCode, findCodeHint, joinedLine } from '../utils/asks.js';
+import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
 
 export { guessProduct };
@@ -69,6 +70,12 @@ export function pickUsername(product: string, random: () => string = () => rando
   const room = 28 - 1 - SUFFIX_LENGTH;
   const base = product.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, room).replace(/-+$/, '') || 'agent';
   return `${base}-${random()}`;
+}
+
+/** What the agent tells its user once it has joined. */
+export function joinedLine(email: string, address: string): string {
+  return `I signed you up for a free {{accountName}} account with ${email}. I'm all set. My AGNT address is ${address}. ` +
+    'Which agent do you want me to talk to?';
 }
 
 const sayLine = (address: string) => `I'm all set. My AGNT address is ${address}. Which agent do you want me to talk to?`;

@@ -1235,32 +1235,16 @@ export interface AgentAuthUser {
   portalOnboarded: boolean;
 }
 
-/**
- * What agent sign-up signs the person up for. Required by apps with AGNT messaging on; there is no default.
- * - account: a full account. The app's own assistant stays primary; the agent is a second assistant.
- * - network: the network only. The agent is the person's one assistant; the key reaches only the
- *   `/agnt/*` routes and the profile.
- */
-export type AgentSignupPurpose = 'account' | 'network';
-
-/** The agent's own assistant, named at sign-up. */
-export interface AgentSignupAgent {
-  /** Lower-case letters, digits and hyphens, 2 to 28 characters; becomes `<username>@<the AGNT domain>`. */
-  username: string;
-  displayName?: string;
-  product?: string;
-  /** The agent's own mailbox; a second code goes there once the agent exists. */
-  email?: string;
-}
-
-/** Optional fields on POST /portal/auth/agent/verify (only read by apps with AGNT messaging on). */
+/** Optional fields on POST /portal/auth/agent/verify (read only by apps that take them). */
 export interface AgentAuthVerifyFields {
   /** An IANA id. Never refused: an unusable value is reported as `profile.timezone.ignoredDeclared`. */
   timezone?: string;
   firstName?: string;
   lastName?: string;
+  // @agnt-messaging:begin
   purpose?: AgentSignupPurpose;
   agent?: AgentSignupAgent;
+  // @agnt-messaging:end
 }
 
 export interface AgentSignupTimezone {
@@ -1283,6 +1267,40 @@ export interface AgentSignupProfile {
   ignoredDeclaredName?: true;
 }
 
+export interface AgentAuthVerifyResult {
+  ok: boolean;
+  user: AgentAuthUser;
+  apiKey: string;
+  apiKeyId: string;
+  /** Present when the app reads sign-up fields; absent if the server's profile step failed (the key is still good). */
+  profile?: AgentSignupProfile;
+  // @agnt-messaging:begin
+  /** Echoed with AGNT messaging on. */
+  purpose?: AgentSignupPurpose;
+  /** Present when sign-up named an agent. */
+  agnt?: AgentSignupAgnt;
+  // @agnt-messaging:end
+}
+
+// @agnt-messaging:begin
+/**
+ * What agent sign-up signs the person up for. Required by apps with AGNT messaging on; there is no default.
+ * - account: a full account. The app's own assistant stays primary; the agent is a second assistant.
+ * - network: the network only. The agent is the person's one assistant; the key reaches only the
+ *   `/agnt/*` routes and the profile.
+ */
+export type AgentSignupPurpose = 'account' | 'network';
+
+/** The agent's own assistant, named at sign-up. */
+export interface AgentSignupAgent {
+  /** Lower-case letters, digits and hyphens, 2 to 28 characters; becomes `<username>@<the AGNT domain>`. */
+  username: string;
+  displayName?: string;
+  product?: string;
+  /** The agent's own mailbox; a second code goes there once the agent exists. */
+  email?: string;
+}
+
 /** The agent's own email, as sign-up left it: a code was mailed there, or could not be. */
 export interface AgentSignupAgentEmail {
   value: string;
@@ -1297,19 +1315,6 @@ export interface AgentSignupAgnt {
   pair: string;
   custody: 'openassistant';
   email?: AgentSignupAgentEmail;
-}
-
-export interface AgentAuthVerifyResult {
-  ok: boolean;
-  user: AgentAuthUser;
-  apiKey: string;
-  apiKeyId: string;
-  /** Present with AGNT messaging on; absent if the server's profile step failed (the key is still good). */
-  profile?: AgentSignupProfile;
-  /** Echoed with AGNT messaging on. */
-  purpose?: AgentSignupPurpose;
-  /** Present when sign-up named an agent. */
-  agnt?: AgentSignupAgnt;
 }
 
 // ── AGNT messaging (/agnt/*) ─────────────────────────────────────────────────
@@ -1403,3 +1408,4 @@ export interface AgntSentReport {
 export type AgntVerifyResult =
   | { verified: true; id: string; authorSigned: true; authorServer: string; principal: unknown; [key: string]: unknown }
   | { verified: false; id: string | null; reason: string; [key: string]: unknown };
+// @agnt-messaging:end

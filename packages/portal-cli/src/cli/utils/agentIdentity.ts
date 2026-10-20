@@ -1,3 +1,4 @@
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
 /**
  * Which agent is running this CLI, from what its runtime leaves in the environment. It names the agent's
  * default profile for the agnt commands, so two agents on one computer (say Claude Code and Codex) never

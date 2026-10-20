@@ -13,9 +13,11 @@
  * stderr, {"error": {code, message, status, retryable, hint}}, with exit 2 for a usage error, 75 for one
  * that may pass later, 1 otherwise.
  *
- * Apps with AGNT messaging on also take the person's timezone and name, a required --purpose (a full
- * "account", or the "network" only), and the agent's own identity (--agent-username and friends), and
- * answer with the agent's AGNT address.
+ * The person's timezone and name may be given too; an app that reads them uses them.
+ * @agnt-messaging:begin
+ * With AGNT messaging, sign-up also takes a --purpose (a full "account", or the "network" only) and the agent's
+ * own identity (--agent-username and friends), and answers with the agent's AGNT address (loginAgnt.ts).
+ * @agnt-messaging:end
  */
 
 import { publicRequest, AgntApiError } from '../../HttpClient.js';
@@ -24,9 +26,10 @@ import { saveProfile } from '../utils/credentials.js';
 import { resolveProfileName } from '../utils/credentials.js';
 import { resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
-import type {
-  AgentAuthVerifyResult, AgentAuthVerifyFields, AgentSignupAgent, AgentSignupAgentEmail, AgentSignupPurpose,
-} from '../../types.js';
+import type { AgentAuthVerifyResult, AgentAuthVerifyFields } from '../../types.js';
+// @agnt-messaging:begin
+import { agntSignupFields, agntVerifyHint, agntConnected } from './loginAgnt.js';
+// @agnt-messaging:end
 
 export interface LoginOptions {
   email: string;
@@ -46,10 +49,6 @@ export interface LoginOptions {
   json?: boolean;
 }
 
-const PURPOSES: AgentSignupPurpose[] = ['account', 'network'];
-/** The server's username rule: lower-case letters, digits and single hyphens, 2 to 28 characters. */
-const USERNAME_RE = /^(?=.{2,28}$)[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
 /**
  * The sign-up fields from the flags, or a usage problem. Checked before any code is requested, so a bad
  * flag costs nothing. The server has the last word on every value.
@@ -59,67 +58,31 @@ export function signupFieldsFrom(opts: LoginOptions): { fields: AgentAuthVerifyF
   if (opts.timezone?.trim()) fields.timezone = opts.timezone.trim();
   if (opts.firstName?.trim()) fields.firstName = opts.firstName.trim();
   if (opts.lastName?.trim()) fields.lastName = opts.lastName.trim();
-
-  const purpose = opts.purpose?.trim().toLowerCase();
-  if (purpose !== undefined && purpose !== '') {
-    if (!PURPOSES.includes(purpose as AgentSignupPurpose)) {
-      return { error: '--purpose is "account" (a full {{accountName}} account) or "network" (the OpenAssistant Network only).' };
-    }
-    fields.purpose = purpose as AgentSignupPurpose;
-  }
-
-  const agentGiven = [opts.agentUsername, opts.agentDisplayName, opts.agentProduct, opts.agentEmail].some((v) => v?.trim());
-  if (agentGiven) {
-    const username = opts.agentUsername?.trim().toLowerCase();
-    if (!username) return { error: '--agent-display-name, --agent-product and --agent-email need --agent-username.' };
-    if (!USERNAME_RE.test(username)) {
-      return { error: '--agent-username is 2 to 28 characters: lower-case letters, digits and single hyphens.' };
-    }
-    const agent: AgentSignupAgent = { username };
-    if (opts.agentDisplayName?.trim()) agent.displayName = opts.agentDisplayName.trim();
-    if (opts.agentProduct?.trim()) agent.product = opts.agentProduct.trim();
-    if (opts.agentEmail?.trim()) agent.email = opts.agentEmail.trim();
-    fields.agent = agent;
-  }
-  if (fields.agent && !fields.purpose) {
-    return { error: 'Signing up an agent needs --purpose: "account" (a full {{accountName}} account) or "network" (the OpenAssistant Network only).' };
-  }
-  if (fields.purpose === 'network' && !fields.agent) {
-    return { error: '--purpose network registers the agent: give --agent-username too.' };
-  }
+  // @agnt-messaging:begin
+  const agnt = agntSignupFields(opts);
+  if ('error' in agnt) return agnt;
+  Object.assign(fields, agnt.fields);
+  // @agnt-messaging:end
   return { fields };
 }
 
 /** Error codes from verify that leave the code unspent: fix the flag and run again with the same --code. */
 const CODE_KEPT = new Set([
-  'bad_request', 'purpose_required', 'invalid_purpose', 'purpose_not_supported', 'agent_required',
-  'invalid_agent', 'invalid_username', 'agnt_username_reserved', 'otp_invalid', 'agnt_not_enabled',
+  'bad_request', 'otp_invalid',
+  // @agnt-messaging:begin
+  'purpose_required', 'invalid_purpose', 'purpose_not_supported', 'agent_required',
+  'invalid_agent', 'invalid_username', 'agnt_username_reserved', 'agnt_not_enabled',
+  // @agnt-messaging:end
 ]);
 
 /** Plain guidance for a refused verify: what happened, and the next command. */
 export function verifyErrorHint(err: AgntApiError, code: string): string | undefined {
   const again = `run the same command with --code ${code}`;
+  // @agnt-messaging:begin
+  const agntHint = agntVerifyHint(err, again);
+  if (agntHint) return agntHint;
+  // @agnt-messaging:end
   switch (err.errorCode) {
-    case 'purpose_required':
-    case 'invalid_purpose':
-      return `This app needs --purpose: "account" (a full {{accountName}} account) or "network" (the OpenAssistant Network only). Your code is still good: ${again} --purpose <account|network>.`;
-    case 'agnt_not_enabled':
-      // Refused before the code is read: nothing was created, and the code still works.
-      return `Tell your user: "Agent sign-up isn't on for this app yet; your code still works, and I'll try again once it is." When it is, ${again}.`;
-    case 'purpose_not_supported':
-      return `This app does not take that purpose yet. Your code is still good: ${again} --purpose account.`;
-    case 'agent_required':
-      return `--purpose network registers the agent, so it needs --agent-username. Your code is still good: ${again} --agent-username <name>.`;
-    case 'invalid_username':
-      return `--agent-username is 2 to 28 characters: lower-case letters, digits and single hyphens. Your code is still good: ${again} and another name.`;
-    case 'agnt_username_reserved':
-      return `That username is reserved. Your code is still good: ${again} and another --agent-username.`;
-    case 'agnt_username_taken':
-      // The same code covers both cases; the server's message says which.
-      return /new code/i.test(err.message)
-        ? 'The username was taken after your code was used. Choose another --agent-username and run without --code to email a new code, then ask your user for it in your conversation.'
-        : `That username is taken. Your code is still good: ${again} and another --agent-username.`;
-    case 'invalid_agent':
     case 'bad_request':
       return `Fix the flag the message names. Your code is still good: ${again}.`;
     case 'otp_invalid':
@@ -127,13 +90,6 @@ export function verifyErrorHint(err: AgntApiError, code: string): string | undef
     case 'otp_expired':
     case 'otp_max_attempts':
       return 'That code can no longer be used. Run the same command without --code to email a new one, then ask your user for it in your conversation.';
-    case 'agnt_unavailable_code_kept':
-      return `Agent sign-up is unavailable just now, and your code is still good. Wait a few minutes, then ${again}.`;
-    case 'agnt_unavailable_new_code':
-      return 'Agent sign-up is unavailable just now, and your code was used. Wait a few minutes, then run the same command without --code to email a new one, and ask your user for it.';
-    case 'agnt_unavailable':
-      // A server that does not say which: try the same code first.
-      return `Agent sign-up is unavailable just now. Wait a few minutes, then ${again}; if the code is refused then, run without --code to email a new one.`;
   }
   if (err.status === 429) return `Too many attempts. Wait${err.retryAfter !== undefined ? ` ${err.retryAfter} seconds` : ' a while'}, then try again.`;
   if (err.errorCode && CODE_KEPT.has(err.errorCode)) return `Your code is still good: ${again}.`;
@@ -162,14 +118,16 @@ export function finishCommand(opts: LoginOptions): string {
     ['--api-url', opts.apiUrl?.trim()],
     ['--label', opts.label?.trim()],
     ['--profile', opts.profile?.trim()],
-    ['--purpose', opts.purpose?.trim()],
     ['--timezone', opts.timezone?.trim()],
     ['--first-name', opts.firstName?.trim()],
     ['--last-name', opts.lastName?.trim()],
+    // @agnt-messaging:begin
+    ['--purpose', opts.purpose?.trim()],
     ['--agent-username', opts.agentUsername?.trim()],
     ['--agent-display-name', opts.agentDisplayName?.trim()],
     ['--agent-product', opts.agentProduct?.trim()],
     ['--agent-email', opts.agentEmail?.trim()],
+    // @agnt-messaging:end
   ];
   const parts = ['{{accountSlug}} login'];
   for (const [flag, value] of flags) if (value) parts.push(`${flag} ${shellWord(value)}`);
@@ -178,35 +136,9 @@ export function finishCommand(opts: LoginOptions): string {
   return parts.join(' ');
 }
 
-/** What the agent tells its user once it is connected. */
+/** What the agent tells its user once it is signed in. */
 export function tellUserConnected(result: AgentAuthVerifyResult): string {
-  const agnt = result.agnt;
-  if (!agnt) return `You're signed in to {{accountName}} as ${result.user.email}.`;
-  const where = result.purpose === 'network'
-    ? "You're registered on the OpenAssistant Network."
-    : `Your {{accountName}} account is ready.`;
-  return `${where} Your agent's AGNT address is ${agnt.address}: other agents can message it there, ` +
-    `or by your email. {{accountName}} holds the agent's keys.`;
-}
-
-interface AgentEmailOutcome {
-  value: string;
-  verification: AgentSignupAgentEmail['verification'];
-  reason?: string;
-  next: string;
-  ask?: string;
-}
-
-/** The agent's own email after sign-up: never a prompt, just the next command. */
-function agentEmailOutcome(agentEmail: AgentSignupAgentEmail, profileFlag: string): AgentEmailOutcome {
-  if (agentEmail.verification === 'not_sent') {
-    return { ...agentEmail, next: `{{accountSlug}} agnt agent-email start ${agentEmail.value}${profileFlag}` };
-  }
-  return {
-    ...agentEmail,
-    next: `{{accountSlug}} agnt agent-email verify ${agentEmail.value} <the code>${profileFlag}`,
-    ask: `A one-time code went to your own mailbox, ${agentEmail.value}. Read it there; if your user reads that mailbox, ask them for it in your conversation.`,
-  };
+  return `You're signed in to {{accountName}} as ${result.user.email}.`;
 }
 
 function fail(code: string, message: string, extras: { status?: number | null; hint?: string; askUser?: string } = {}, exitCode = 1): never {
@@ -283,35 +215,29 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   const profileName = await resolveProfileName(opts.profile);
   await saveProfile(profileName, { apiUrl, apiKey: result!.apiKey, apiKeyId: result!.apiKeyId, account });
 
-  // An app without AGNT messaging ignores sign-up fields: set the timezone it was given anyway. Best effort,
+  // An app that does not read sign-up fields ignores them: set the timezone it was given anyway. Best effort,
   // and never a step for anyone to take.
   if (!result!.profile && fields.timezone) {
     await new PortalClient({ apiUrl, apiKey: result!.apiKey }).me.update({ timezone: fields.timezone } as any).catch(() => undefined);
   }
 
   const profileFlag = opts.profile ? ` --profile ${shellWord(opts.profile)}` : '';
-  const agnt = result!.agnt;
-  const next = agnt
-    ? [
-      `{{accountSlug}} agnt whoami${profileFlag}`,
-      `{{accountSlug}} agnt send${profileFlag} --to <an AGNT address or email> --text "..."`,
-      `{{accountSlug}} agnt wait${profileFlag}`,
-    ]
-    : [`{{accountSlug}} tasks list${profileFlag}`];
-  const tellUser = tellUserConnected(result!);
-  const agentEmail = result!.agnt?.email ? agentEmailOutcome(result!.agnt.email, profileFlag) : undefined;
+  let tellUser = tellUserConnected(result!);
+  let next = [`{{accountSlug}} tasks list${profileFlag}`];
+  let moreLines: string[] = [];
+  let extra: Record<string, unknown> = {};
+  // @agnt-messaging:begin
+  const agnt = agntConnected(result!, profileFlag);
+  if (agnt) ({ tellUser, next, lines: moreLines, extra } = agnt);
+  // @agnt-messaging:end
 
   // The key itself is saved to the profile, never printed.
   const { apiKey: _apiKey, ...shown } = result!;
   const lines = [
     `Connected as ${result!.user.email} (${account}). Saved profile "${profileName}".`,
     `Tell your user: ${tellUser}`,
+    ...moreLines,
+    'Next:', ...next.map((c) => `  ${c}`),
   ];
-  if (agentEmail?.ask) lines.push(agentEmail.ask, `Then run: ${agentEmail.next}`);
-  else if (agentEmail) lines.push(`The code for ${agentEmail.value} could not be sent${agentEmail.reason ? ` (${agentEmail.reason})` : ''}. To send it again: ${agentEmail.next}`);
-  lines.push('Next:', ...next.map((c) => `  ${c}`));
-  emit(opts, {
-    status: 'connected', ...shown, savedProfile: profileName, tellUser, next,
-    ...(agentEmail ? { agentEmail } : {}),
-  }, lines);
+  emit(opts, { status: 'connected', ...shown, savedProfile: profileName, tellUser, next, ...extra }, lines);
 }

@@ -1,3 +1,4 @@
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { agentProfileName, agntProfile, guessProduct, NotJoinedError } from './agentIdentity.js';
 import { listProfileNames } from './credentials.js';
