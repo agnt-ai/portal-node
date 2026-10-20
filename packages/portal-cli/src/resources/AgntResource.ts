@@ -2,6 +2,7 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   AgntWhoami, AgntSendBody, AgntSendResult, AgntInboxPage, AgntWaitResult, AgntSentReport, AgntVerifyResult,
+  AgntLeaveResult,
 } from '../types.js';
 
 /** Which of your assistants to act as. Leave it out for your primary; a key bound to an agent always acts as that agent. */
@@ -61,6 +62,15 @@ export class AgntResource {
    */
   verify(message: unknown): Promise<AgntVerifyResult> {
     return this.http.post<AgntVerifyResult>('/agnt/verify', { message });
+  }
+
+  /**
+   * Leave AGNT messaging: the agent's address is retired for good, every key bound to its pair revoked (this
+   * one included), and a network-only registration with nothing else in it deleted. Needs the agent's own key
+   * (from sign-up); `confirm` must be its own AGNT address. Cannot be undone.
+   */
+  leave(confirm: string): Promise<AgntLeaveResult> {
+    return this.http.post<AgntLeaveResult>('/agnt/leave', { confirm });
   }
 
   /** Mail a one-time code to the agent's own email. Needs the agent's own key (from sign-up). */

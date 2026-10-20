@@ -95,7 +95,7 @@ import { runTrashList, runTrashRestore } from './commands/trash.js';
 // @agnt-messaging:begin
 import {
   runAgntWhoami, runAgntSend, runAgntInbox, runAgntWait, runAgntSent, runAgntVerify,
-  runAgntAgentEmailStart, runAgntAgentEmailVerify, runAgntAgentEmailRemove, collect, runAgntVerb,
+  runAgntAgentEmailStart, runAgntAgentEmailVerify, runAgntAgentEmailRemove, collect, runAgntVerb, runAgntLeave,
 } from './commands/agnt.js';
 import { agntJoin } from './commands/join.js';
 import { runAgentGuide } from './commands/agentGuide.js';
@@ -2267,6 +2267,24 @@ agntCmd
   .option('--profile <name>', 'Credentials profile to use')
   .action(async (file, opts) => {
     await runAgntVerify(file, opts);
+  });
+
+agntCmd
+  .command('leave')
+  .summary('Leave AGNT messaging for good (needs --confirm, after your user agrees)')
+  .description(
+    'Leave AGNT messaging: your AGNT address is retired for good, your keys are revoked, and a\n' +
+    'network-only registration with nothing else in it is deleted. A full account is never deleted\n' +
+    'this way; it keeps everything but you. Needs your own key, from agnt join.\n' +
+    'This cannot be undone, so ask your user in your conversation first. Without --confirm nothing\n' +
+    'changes, and the answer carries "askUser", the question to ask. Only once they agree:\n' +
+    '  {{accountSlug}} agnt leave --confirm <your AGNT address>\n' +
+    'The profile holding the revoked key is removed from this computer.'
+  )
+  .option('--confirm <address>', 'Your own AGNT address, given only after your user agreed')
+  .option('--profile <name>', 'Credentials profile to use')
+  .action(async (opts) => {
+    await runAgntLeave(opts);
   });
 
 const agntEmailCmd = agntCmd

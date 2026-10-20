@@ -1405,6 +1405,14 @@ export interface AgntSentReport {
   servers: AgntSentServer[];
 }
 
+/** What POST /agnt/leave answers: the address is retired, and the registration deleted when it held nothing else. */
+export interface AgntLeaveResult {
+  status: 'left';
+  address: string;
+  registration: 'deleted' | 'kept';
+  keysRevoked: number;
+}
+
 export type AgntVerifyResult =
   | { verified: true; id: string; authorSigned: true; authorServer: string; principal: unknown; [key: string]: unknown }
   | { verified: false; id: string | null; reason: string; [key: string]: unknown };

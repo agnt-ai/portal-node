@@ -16,6 +16,7 @@
 import { readFileSync } from 'node:fs';
 import { clientFor } from '../utils/api.js';
 import { agntProfile, NotJoinedError } from '../utils/agentIdentity.js';
+import { removeProfile, resolveProfileName } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
 import type { PortalClient } from '../../index.js';
 import type { AgntSendBody, AgntWaitResult } from '../../types.js';
@@ -78,6 +79,20 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
       return 'This account has no assistant to send as yet.';
     case 'network_scope':
       return 'This key is an OpenAssistant Network registration: it reaches the agnt commands and your profile only.';
+    case 'confirm_mismatch':
+      return '--confirm must be your own AGNT address (see agnt whoami). Nothing was changed.';
+    case 'pair_bound_key_required':
+      return verb === 'leave'
+        ? "Only the agent's own key (from agnt join) can leave. Your user can remove it with the link in the sign-up email."
+        : "Only the agent's own key, from sign-up with --agent-username, can do this.";
+    case 'already_left':
+      return 'This agent has already left. Remove the leftover profile with: {{accountSlug}} logout';
+    case 'no_agent_signup':
+      return 'This agent has no sign-up record to remove. Your user can remove it with the link in the sign-up email.';
+    case 'agnt_unavailable':
+      return verb === 'leave'
+        ? 'Not finished yet. Wait a minute, then run the same command again: a retry finishes it.'
+        : 'AGNT messaging is unavailable just now. Wait a minute, then run the same command once.';
     case 'insufficient_scope':
       return 'This connection was not granted AGNT messaging.';
     case 'invalid':
@@ -91,8 +106,6 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
       return 'That code can no longer be used. Get a new one: {{accountSlug}} agnt agent-email start <email>.';
     case 'agnt_identifier_taken':
       return 'That email already belongs to someone in this app.';
-    case 'pair_bound_key_required':
-      return "Only the agent's own key, from sign-up with --agent-username, can add the agent's email.";
   }
   if (status === 401) return 'Not signed in, or the key was revoked. Run: {{accountSlug}} login --email <email>';
   if (status === 404) return 'Not found. AGNT messaging may not be on for this app.';
@@ -338,6 +351,43 @@ export async function agntAgentEmailRemove(client: PortalClient, email: string) 
   return { result: await client.agnt.removeAgentEmail(email) };
 }
 
+// ── leave ───────────────────────────────────────────────────────────────────
+
+/** What to ask before leaving AGNT messaging: it cannot be undone. */
+export function askToLeave(address: string): string {
+  return `Do you want me to leave AGNT messaging? Other agents could no longer reach me at ${address}, ` +
+    `and if your {{accountName}} registration exists only for me, it would be deleted too (a full account stays). ` +
+    "This can't be undone.";
+}
+
+export interface AgntLeaveOptions {
+  profile?: string;
+  confirm?: string;
+}
+
+/**
+ * Leave AGNT messaging, for good. Needs --confirm with the agent's own address, given only after its user
+ * agreed in conversation: without it, nothing changes and the error carries "askUser", the question to ask.
+ */
+export async function agntLeave(client: PortalClient, opts: AgntLeaveOptions) {
+  const me = await client.agnt.whoami();
+  const confirm = opts.confirm?.trim().toLowerCase();
+  if (!confirm) {
+    throw new AgntUsageError(
+      `Leaving can't be undone. Ask your user first ("askUser"); only once they agree, run: {{accountSlug}} agnt leave --confirm ${me.address}`,
+      askToLeave(me.address),
+    );
+  }
+  if (confirm !== me.address.toLowerCase()) {
+    throw new AgntUsageError(`--confirm must be your own AGNT address, ${me.address}. Nothing was changed.`);
+  }
+  const left = await client.agnt.leave(me.address);
+  const tellUser = left.registration === 'deleted'
+    ? `I've left AGNT messaging. ${left.address} no longer reaches me, and your {{accountName}} registration is deleted.`
+    : `I've left AGNT messaging. ${left.address} no longer reaches me. Your {{accountName}} account itself is unchanged.`;
+  return { result: { ...left, tellUser } };
+}
+
 // ── CLI entry points (resolve the profile's client, then print) ─────────────
 
 const withClient = (profile: string | undefined, fn: (client: PortalClient) => Promise<{ result: unknown; exitCode?: number }>) =>
@@ -372,3 +422,11 @@ export const runAgntAgentEmailVerify = (email: string, code: string, opts: AgntB
   runAgntVerb('agent-email', withClient(opts.profile, (c) => agntAgentEmailVerify(c, email, code)));
 export const runAgntAgentEmailRemove = (email: string, opts: AgntBaseOptions) =>
   runAgntVerb('agent-email', withClient(opts.profile, (c) => agntAgentEmailRemove(c, email)));
+export const runAgntLeave = (opts: AgntLeaveOptions) =>
+  runAgntVerb('leave', async () => {
+    const profile = await agntProfile(opts.profile);
+    const out = await agntLeave(await clientFor(profile), opts);
+    // The key was revoked with the agent: drop the profile that held it.
+    await removeProfile(profile ?? await resolveProfileName()).catch(() => undefined);
+    return out;
+  });

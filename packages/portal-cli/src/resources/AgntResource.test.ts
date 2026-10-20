@@ -56,6 +56,12 @@ describe('AgntResource', () => {
     expect(http.post).toHaveBeenCalledWith('/agnt/verify', { message: entry });
   });
 
+  it('leave POSTs only the typed confirmation', async () => {
+    const http = fakeHttp();
+    await new AgntResource(http).leave('sally@agent.example.test');
+    expect(http.post).toHaveBeenCalledWith('/agnt/leave', { confirm: 'sally@agent.example.test' });
+  });
+
   it("the agent's own email: start, verify and remove", async () => {
     const http = fakeHttp();
     const agnt = new AgntResource(http);
