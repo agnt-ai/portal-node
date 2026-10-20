@@ -45,6 +45,7 @@ import { TeamsResource } from './resources/TeamsResource.js';
 import { OrganizationsResource } from './resources/OrganizationsResource.js';
 import { UsersResource } from './resources/UsersResource.js';
 import { TrashResource } from './resources/TrashResource.js';
+import { AgntResource } from './resources/AgntResource.js';
 import { DEFAULT_API_URL } from './defaults.js';
 
 export interface PortalClientOptions {
@@ -85,6 +86,7 @@ export class PortalClient {
   readonly organizations: OrganizationsResource;
   readonly users: UsersResource;
   readonly trash: TrashResource;
+  readonly agnt: AgntResource;
 
   constructor(options: PortalClientOptions) {
     if (!options.apiKey) throw new Error('[PortalClient] apiKey is required');
@@ -121,10 +123,11 @@ export class PortalClient {
     this.organizations = new OrganizationsResource(http);
     this.users = new UsersResource(http);
     this.trash = new TrashResource(http);
+    this.agnt = new AgntResource(http);
   }
 }
 
-export { HttpClient, AgntApiError, publicRequest } from './HttpClient.js';
+export { HttpClient, AgntApiError, publicRequest, parseRetryAfter } from './HttpClient.js';
 export { TasksResource } from './resources/TasksResource.js';
 export { ConnectionsResource } from './resources/ConnectionsResource.js';
 export { MemoriesResource } from './resources/MemoriesResource.js';
@@ -157,5 +160,6 @@ export { TeamsResource } from './resources/TeamsResource.js';
 export { OrganizationsResource } from './resources/OrganizationsResource.js';
 export { UsersResource } from './resources/UsersResource.js';
 export { TrashResource } from './resources/TrashResource.js';
+export { AgntResource } from './resources/AgntResource.js';
 export * from './types.js';
 export { DEFAULT_API_URL, resolveDefaultAccountSlug, resolveDefaultAccountName } from './defaults.js';

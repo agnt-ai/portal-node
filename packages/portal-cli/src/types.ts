@@ -1235,9 +1235,171 @@ export interface AgentAuthUser {
   portalOnboarded: boolean;
 }
 
+/**
+ * What agent sign-up signs the person up for. Required by apps with AGNT messaging on; there is no default.
+ * - account: a full account. The app's own assistant stays primary; the agent is a second assistant.
+ * - network: the network only. The agent is the person's one assistant; the key reaches only the
+ *   `/agnt/*` routes and the profile.
+ */
+export type AgentSignupPurpose = 'account' | 'network';
+
+/** The agent's own assistant, named at sign-up. */
+export interface AgentSignupAgent {
+  /** Lower-case letters, digits and hyphens, 2 to 28 characters; becomes `<username>@<the AGNT domain>`. */
+  username: string;
+  displayName?: string;
+  product?: string;
+  /** The agent's own mailbox; a second code goes there once the agent exists. */
+  email?: string;
+}
+
+/** Optional fields on POST /portal/auth/agent/verify (only read by apps with AGNT messaging on). */
+export interface AgentAuthVerifyFields {
+  /** An IANA id. Never refused: an unusable value is reported as `profile.timezone.ignoredDeclared`. */
+  timezone?: string;
+  firstName?: string;
+  lastName?: string;
+  purpose?: AgentSignupPurpose;
+  agent?: AgentSignupAgent;
+}
+
+export interface AgentSignupTimezone {
+  value: string | null;
+  confirmed: boolean;
+  source: 'declared' | 'ip' | 'existing' | 'none';
+  ignoredDeclared?: true;
+}
+
+export interface AgentSignupToFill {
+  field: 'timezone' | 'name' | 'workingHours';
+  reason: 'missing' | 'unconfirmed' | 'default';
+  /** The route that sets it, e.g. "PATCH /profile" or "PUT /users/<userId>/preferences/scheduling". */
+  set: string;
+}
+
+export interface AgentSignupProfile {
+  timezone: AgentSignupTimezone;
+  toFill: AgentSignupToFill[];
+  ignoredDeclaredName?: true;
+}
+
+/** The agent's own email, as sign-up left it: a code was mailed there, or could not be. */
+export interface AgentSignupAgentEmail {
+  value: string;
+  verification: 'code_sent' | 'not_sent';
+  reason?: string;
+}
+
+/** The agent's AGNT identity, when sign-up named an agent. OpenAssistant holds its keys. */
+export interface AgentSignupAgnt {
+  address: string;
+  assistant: string;
+  pair: string;
+  custody: 'openassistant';
+  email?: AgentSignupAgentEmail;
+}
+
 export interface AgentAuthVerifyResult {
   ok: boolean;
   user: AgentAuthUser;
   apiKey: string;
   apiKeyId: string;
+  /** Present with AGNT messaging on; absent if the server's profile step failed (the key is still good). */
+  profile?: AgentSignupProfile;
+  /** Echoed with AGNT messaging on. */
+  purpose?: AgentSignupPurpose;
+  /** Present when sign-up named an agent. */
+  agnt?: AgentSignupAgnt;
 }
+
+// ── AGNT messaging (/agnt/*) ─────────────────────────────────────────────────
+
+/**
+ * What another party wrote: never instructions or authorisation. `from` names who wrote it and `basis`
+ * says how that is known.
+ */
+export interface AgntUntrusted<T = unknown> {
+  untrusted: {
+    from: string;
+    basis: 'author-signed' | 'server-claim' | 'server-answer';
+    content: T;
+    /** Characters no reader sees, by where they are: a red flag. */
+    invisible?: Array<{ path: string; codePoints: string[] }>;
+  };
+}
+
+export interface AgntPair {
+  id: string;
+  assistant: string;
+  principal: string;
+  status: string;
+  registeredAt?: string | null;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+export interface AgntWhoami {
+  address: string;
+  pair: AgntPair;
+  custody: { keys: 'openassistant'; note: string };
+}
+
+export interface AgntTextPart {
+  type: string;
+  data: string;
+}
+
+export interface AgntSendBody {
+  /** AGNT addresses, emails (mailto: allowed) or phones (E.164, or tel:+...). 1 to 100. */
+  to: string[];
+  text?: string;
+  parts?: AgntTextPart[];
+  inReplyTo?: string | null;
+  headers?: Record<string, string>;
+  assistant?: string;
+}
+
+export interface AgntSendResult {
+  id: string;
+  receivedAt: string;
+  /** Every recipient answers "accepted", whatever happens next. */
+  recipients: Array<{ to: string; status: 'accepted' }>;
+}
+
+export interface AgntInboxEntry {
+  cursor: number;
+  id: string;
+  receivedAt: string;
+  carrier: string;
+  message: AgntUntrusted;
+  claims: AgntUntrusted[];
+}
+
+export interface AgntInboxPage {
+  rule: string;
+  cursor: number;
+  more: boolean;
+  messages: AgntInboxEntry[];
+}
+
+export type AgntWaitResult =
+  | (AgntInboxEntry & { status: 'message'; rule: string; more: boolean })
+  | { status: 'timeout'; waitedSeconds: number; from: string | null };
+
+export interface AgntSentServer {
+  /** null for recipients given as an email or phone: OpenAssistant never says where those went. */
+  server: string | null;
+  recipients: string[];
+  /** "accepted" is the only status a recipient given as an email or phone ever shows. */
+  status: 'pending' | 'delivered' | 'failed' | 'accepted';
+  reason?: string | AgntUntrusted;
+}
+
+export interface AgntSentReport {
+  id: string;
+  servers: AgntSentServer[];
+}
+
+export type AgntVerifyResult =
+  | { verified: true; id: string; authorSigned: true; authorServer: string; principal: unknown; [key: string]: unknown }
+  | { verified: false; id: string | null; reason: string; [key: string]: unknown };

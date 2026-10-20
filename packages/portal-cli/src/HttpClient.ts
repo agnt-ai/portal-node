@@ -8,15 +8,62 @@
  * not something re-signed per call.
  */
 
+export interface AgntApiErrorExtras {
+  /** The error body's `details`, when the server sent one. */
+  details?: Record<string, unknown>;
+  /** Seconds to wait before retrying, from a `Retry-After` header. */
+  retryAfter?: number;
+  /** The whole parsed error body, for fields beyond the common shape (e.g. 428's `confirm`). */
+  body?: Record<string, unknown>;
+}
+
 export class AgntApiError extends Error {
+  public readonly details?: Record<string, unknown>;
+  public readonly retryAfter?: number;
+  public readonly body?: Record<string, unknown>;
+
   constructor(
     public readonly status: number,
     message: string,
-    public readonly errorCode?: string
+    public readonly errorCode?: string,
+    extras: AgntApiErrorExtras = {}
   ) {
     super(message);
     this.name = 'AgntApiError';
+    this.details = extras.details;
+    this.retryAfter = extras.retryAfter;
+    this.body = extras.body;
   }
+}
+
+/** `Retry-After` as whole seconds: either delta-seconds or an HTTP date. Undefined when absent or unreadable. */
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (/^[0-9]+$/.test(trimmed)) return Number(trimmed);
+  const at = Date.parse(trimmed);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, Math.ceil((at - now) / 1000));
+}
+
+/** An AgntApiError from a non-ok response's status, headers and body text. */
+function errorFromResponse(response: Response, text: string): AgntApiError {
+  let message = text;
+  let errorCode: string | undefined;
+  let body: Record<string, unknown> | undefined;
+  try {
+    const json = JSON.parse(text);
+    if (json && typeof json === 'object' && !Array.isArray(json)) {
+      body = json;
+      message = json.error ?? text;
+      errorCode = json.error_code;
+    }
+  } catch {
+    /* use raw text */
+  }
+  const details = body?.details && typeof body.details === 'object' ? body.details as Record<string, unknown> : undefined;
+  const retryAfter = parseRetryAfter(response.headers?.get?.('retry-after'));
+  return new AgntApiError(response.status, message, errorCode, { details, retryAfter, body });
 }
 
 export interface SseEvent {
@@ -80,17 +127,7 @@ export class HttpClient {
     const response = await fetch(url, init);
 
     if (!response.ok) {
-      const text = await response.text();
-      let message = text;
-      let errorCode: string | undefined;
-      try {
-        const json = JSON.parse(text);
-        message = json.error ?? text;
-        errorCode = json.error_code;
-      } catch {
-        /* use raw text */
-      }
-      throw new AgntApiError(response.status, message, errorCode);
+      throw errorFromResponse(response, await response.text());
     }
 
     if (response.status === 204) return undefined as T;
@@ -113,8 +150,8 @@ export class HttpClient {
     return this.request<T>('PATCH', path, body);
   }
 
-  delete<T>(path: string): Promise<T> {
-    return this.request<T>('DELETE', path);
+  delete<T>(path: string, params?: Record<string, any>): Promise<T> {
+    return this.request<T>('DELETE', path, undefined, params);
   }
 
   /**
@@ -133,17 +170,7 @@ export class HttpClient {
     });
 
     if (!response.ok) {
-      const text = await response.text();
-      let message = text;
-      let errorCode: string | undefined;
-      try {
-        const json = JSON.parse(text);
-        message = json.error ?? text;
-        errorCode = json.error_code;
-      } catch {
-        /* use raw text */
-      }
-      throw new AgntApiError(response.status, message, errorCode);
+      throw errorFromResponse(response, await response.text());
     }
 
     if (!response.body) return;
@@ -179,7 +206,7 @@ export async function publicRequest<T>(apiUrl: string, path: string, body: any):
   }
 
   if (!response.ok) {
-    throw new AgntApiError(response.status, json.error ?? text, json.error_code);
+    throw errorFromResponse(response, text);
   }
 
   return json as T;
