@@ -1,6 +1,6 @@
 // @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { agntLeave, runAgntLeave, describeError, AgntUsageError, EXIT_RETRY, EXIT_USAGE } from './agnt.js';
+import { agntLeave, runAgntLeave, agntBlock, agntUnblock, agntBlocks, describeError, AgntUsageError, EXIT_RETRY, EXIT_USAGE } from './agnt.js';
 import { AgntApiError } from '../../HttpClient.js';
 import { clientFor } from '../utils/api.js';
 import { removeProfile } from '../utils/credentials.js';
@@ -91,5 +91,29 @@ describe('runAgntLeave', () => {
     await runAgntLeave({ confirm: ADDRESS });
     expect(process.exitCode).toBe(EXIT_RETRY);
     expect(removeProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe('agnt block, unblock, blocks', () => {
+  it('block: says what to tell the person, for an address or a whole domain', async () => {
+    const block = vi.fn()
+      .mockResolvedValueOnce({ block: { match: 'spam@agent.example.test', kind: 'address', createdAt: 'x' } })
+      .mockResolvedValueOnce({ block: { match: '*@spam.example', kind: 'domain', createdAt: 'x' } });
+    const c = { agnt: { block } } as any;
+    expect((await agntBlock(c, ' spam@agent.example.test ') as any).result.tellUser).toMatch(/^I've blocked spam@agent\.example\.test: .*your other agents/);
+    expect(block).toHaveBeenCalledWith('spam@agent.example.test');
+    expect((await agntBlock(c, '*@spam.example') as any).result.tellUser).toMatch(/blocked everyone at spam\.example/);
+  });
+
+  it('unblock and blocks pass the API answer through', async () => {
+    const c = { agnt: { unblock: vi.fn().mockResolvedValue({ removed: true }), listBlocks: vi.fn().mockResolvedValue({ blocks: [] }) } } as any;
+    expect((await agntUnblock(c, '*@spam.example')).result).toEqual({ removed: true });
+    expect((await agntBlocks(c)).result).toEqual({ blocks: [] });
+  });
+
+  it('maps the block refusals plainly', () => {
+    expect(describeError('block', new AgntApiError(400, 'x', 'invalid_match')).body.hint).toMatch(/network address \(name@domain\), or \*@domain/);
+    expect(describeError('block', new AgntApiError(409, 'x', 'agnt_blocks_full')).body.hint).toMatch(/Remove one first/);
+    expect(describeError('unblock', new AgntApiError(403, 'x', 'pair_bound_key')).body.hint).toMatch(/your person can unblock from their own account/i);
   });
 });

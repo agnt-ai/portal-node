@@ -1405,6 +1405,13 @@ export interface AgntSentReport {
   servers: AgntSentServer[];
 }
 
+/** A block: an address, or a whole domain as `*@domain`. Blocks are the person's, for all of their agents. */
+export interface AgntBlock {
+  match: string;
+  kind: 'address' | 'domain';
+  createdAt: string;
+}
+
 /** What POST /agnt/leave answers: the address is retired, and the registration deleted when it held nothing else. */
 export interface AgntLeaveResult {
   status: 'left';

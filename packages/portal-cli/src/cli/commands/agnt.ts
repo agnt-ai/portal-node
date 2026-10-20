@@ -73,13 +73,19 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
         ? 'No message with that id among this agent\'s sends: an unknown id, another agent\'s, or past the hold window.'
         : 'Not found. The OpenAssistant Network may not be on for this app.';
     case 'pair_bound_key':
-      return 'This key acts only as the agent it was signed up for. Leave out --assistant.';
+      return verb === 'unblock'
+        ? "Unblocking would reach your person's other agents too, so this key can't. Your person can unblock from their own account."
+        : 'This key acts only as the agent it was signed up for. Leave out --assistant.';
     case 'assistant_not_found':
       return '--assistant names an assistant you cannot use. Leave it out to act as your primary assistant.';
     case 'no_assistant':
       return 'This account has no assistant to send as yet.';
     case 'network_scope':
       return 'This key is an OpenAssistant Network registration: it reaches the agnt commands and your profile only.';
+    case 'invalid_match':
+      return 'Give a network address (name@domain), or *@domain to block a whole domain.';
+    case 'agnt_blocks_full':
+      return 'Your person has the most blocks allowed. Remove one first: agnt blocks, then agnt unblock <address>.';
     case 'confirm_mismatch':
       return '--confirm must be your own OpenAssistant Network ID (see agnt whoami). Nothing was changed.';
     case 'pair_bound_key_required':
@@ -381,6 +387,22 @@ export async function agntAgentEmailRemove(client: PortalClient, email: string) 
   return { result: await client.agnt.removeAgentEmail(email) };
 }
 
+// ── blocks ──────────────────────────────────────────────────────────────────
+
+export async function agntBlock(client: PortalClient, match: string) {
+  const { block } = await client.agnt.block(match.trim());
+  const what = block.kind === 'domain' ? `everyone at ${block.match.slice(2)}` : block.match;
+  return { result: { block, tellUser: `I've blocked ${what}: their messages won't reach me or your other agents.` } };
+}
+
+export async function agntUnblock(client: PortalClient, match: string) {
+  return { result: await client.agnt.unblock(match.trim()) };
+}
+
+export async function agntBlocks(client: PortalClient) {
+  return { result: await client.agnt.listBlocks() };
+}
+
 // ── leave ───────────────────────────────────────────────────────────────────
 
 /** What to ask before leaving the OpenAssistant Network: it cannot be undone. */
@@ -479,6 +501,12 @@ export const runAgntAgentEmailVerify = (email: string, code: string, opts: AgntB
   runAgntVerb('agent-email', withClient(opts.profile, (c) => agntAgentEmailVerify(c, email, code)));
 export const runAgntAgentEmailRemove = (email: string, opts: AgntBaseOptions) =>
   runAgntVerb('agent-email', withClient(opts.profile, (c) => agntAgentEmailRemove(c, email)));
+export const runAgntBlock = (match: string, opts: { profile?: string }) =>
+  runAgntVerb('block', withClient(opts.profile, (c) => agntBlock(c, match)));
+export const runAgntUnblock = (match: string, opts: { profile?: string }) =>
+  runAgntVerb('unblock', withClient(opts.profile, (c) => agntUnblock(c, match)));
+export const runAgntBlocks = (opts: { profile?: string }) =>
+  runAgntVerb('blocks', withClient(opts.profile, (c) => agntBlocks(c)));
 export const runAgntLeave = (opts: AgntLeaveOptions) =>
   runAgntVerb('leave', async () => {
     const profile = await agntProfile(opts.profile);

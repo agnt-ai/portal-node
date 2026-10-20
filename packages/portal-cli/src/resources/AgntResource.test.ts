@@ -56,6 +56,17 @@ describe('AgntResource', () => {
     expect(http.post).toHaveBeenCalledWith('/agnt/verify', { message: entry });
   });
 
+  it('blocks: list, add with {match}, remove with ?match=', async () => {
+    const http = fakeHttp();
+    const agnt = new AgntResource(http);
+    await agnt.listBlocks();
+    await agnt.block('spam@agent.example.test');
+    await agnt.unblock('*@spam.example');
+    expect(http.get).toHaveBeenCalledWith('/agnt/blocks');
+    expect(http.post).toHaveBeenCalledWith('/agnt/blocks', { match: 'spam@agent.example.test' });
+    expect(http.delete).toHaveBeenCalledWith('/agnt/blocks', { match: '*@spam.example' });
+  });
+
   it('leave POSTs only the typed confirmation', async () => {
     const http = fakeHttp();
     await new AgntResource(http).leave('sally@agent.example.test');

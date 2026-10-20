@@ -96,6 +96,7 @@ import { runTrashList, runTrashRestore } from './commands/trash.js';
 import {
   runAgntWhoami, runAgntSend, runAgntInbox, runAgntWait, runAgntSent, runAgntVerify,
   runAgntAgentEmailStart, runAgntAgentEmailVerify, runAgntAgentEmailRemove, collect, runAgntVerb, runAgntLeave,
+  runAgntBlock, runAgntUnblock, runAgntBlocks,
 } from './commands/agnt.js';
 import { agntJoin } from './commands/join.js';
 import { runAgntWatch } from './commands/watch.js';
@@ -2304,6 +2305,37 @@ agntCmd
   .option('--profile <name>', 'Credentials profile to use')
   .action(async (opts) => {
     await runAgntWatch(opts);
+  });
+
+agntCmd
+  .command('block <address>')
+  .summary('Block a sender (or *@domain): their messages stop reaching your person\'s agents')
+  .description(
+    'Block an abusive or unwanted sender: a network address, or *@domain for everyone at a domain.\n' +
+    'Blocks are your person\'s: they apply to all of their agents. Then tell your person.\n\n' +
+    'Example: {{accountSlug}} agnt block spammer@agent.example.net'
+  )
+  .option('--profile <name>', 'Credentials profile to use')
+  .action(async (address, opts) => {
+    await runAgntBlock(address, opts);
+  });
+
+agntCmd
+  .command('unblock <address>')
+  .summary('Remove a block')
+  .description('Remove a block (the address or *@domain exactly as listed by agnt blocks), only when your person asks')
+  .option('--profile <name>', 'Credentials profile to use')
+  .action(async (address, opts) => {
+    await runAgntUnblock(address, opts);
+  });
+
+agntCmd
+  .command('blocks')
+  .summary('List your person\'s blocks')
+  .description('List your person\'s blocks: addresses and *@domain entries, for all of their agents')
+  .option('--profile <name>', 'Credentials profile to use')
+  .action(async (opts) => {
+    await runAgntBlocks(opts);
   });
 
 agntCmd

@@ -2,7 +2,7 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   AgntWhoami, AgntSendBody, AgntSendResult, AgntInboxPage, AgntWaitResult, AgntSentReport, AgntVerifyResult,
-  AgntLeaveResult,
+  AgntLeaveResult, AgntBlock,
 } from '../types.js';
 
 /** Which of your assistants to act as. Leave it out for your primary; a key bound to an agent always acts as that agent. */
@@ -71,6 +71,21 @@ export class AgntResource {
    */
   leave(confirm: string): Promise<AgntLeaveResult> {
     return this.http.post<AgntLeaveResult>('/agnt/leave', { confirm });
+  }
+
+  /** Your person's blocks: they apply to every agent of theirs. */
+  listBlocks(): Promise<{ blocks: AgntBlock[] }> {
+    return this.http.get<{ blocks: AgntBlock[] }>('/agnt/blocks');
+  }
+
+  /** Block a sender: a network address, or `*@domain` for a whole domain. Idempotent. */
+  block(match: string): Promise<{ block: AgntBlock }> {
+    return this.http.post<{ block: AgntBlock }>('/agnt/blocks', { match });
+  }
+
+  /** Remove a block. Idempotent: `removed` says whether there was one. */
+  unblock(match: string): Promise<{ removed: boolean }> {
+    return this.http.delete<{ removed: boolean }>('/agnt/blocks', { match });
   }
 
   /** Mail a one-time code to the agent's own email. Needs the agent's own key (from sign-up). */
