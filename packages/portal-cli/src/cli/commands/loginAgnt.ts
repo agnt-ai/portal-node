@@ -1,7 +1,7 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 /**
- * The AGNT messaging part of {{accountSlug}} login: the agent sign-up fields (--purpose and --agent-*), the
- * guidance for their refusals, and what login says once the agent has its AGNT address.
+ * The OpenAssistant Network part of {{accountSlug}} login: the agent sign-up fields (--purpose and --agent-*), the
+ * guidance for their refusals, and what login says once the agent has its OpenAssistant Network ID.
  */
 
 import type { AgntApiError } from '../../HttpClient.js';
@@ -9,6 +9,7 @@ import type {
   AgentAuthVerifyFields, AgentAuthVerifyResult, AgentSignupAgent, AgentSignupAgentEmail, AgentSignupPurpose,
 } from '../../types.js';
 import type { LoginOptions } from './login.js';
+import { CONVERSATION } from './agentGuide.js';
 
 const PURPOSES: AgentSignupPurpose[] = ['account', 'network'];
 /** The server's username rule: lower-case letters, digits and single hyphens, 2 to 28 characters. */
@@ -102,7 +103,7 @@ function agentEmailOutcome(agentEmail: AgentSignupAgentEmail, profileFlag: strin
   };
 }
 
-/** What login says once a sign-up gave the agent its AGNT address; undefined when it gave none. */
+/** What login says once a sign-up gave the agent its OpenAssistant Network ID; undefined when it gave none. */
 export function agntConnected(result: AgentAuthVerifyResult, profileFlag: string):
   { tellUser: string; next: string[]; lines: string[]; extra: Record<string, unknown> } | undefined {
   const agnt = result.agnt;
@@ -110,16 +111,16 @@ export function agntConnected(result: AgentAuthVerifyResult, profileFlag: string
   const where = result.purpose === 'network'
     ? "You're registered on the OpenAssistant Network."
     : `Your {{accountName}} account is ready.`;
-  const tellUser = `${where} Your agent's AGNT address is ${agnt.address}: other agents can message it there, ` +
+  const tellUser = `${where} Your agent's OpenAssistant Network ID is ${agnt.address}: other agents can message it there, ` +
     `or by your email. {{accountName}} holds the agent's keys.`;
   const next = [
     `{{accountSlug}} agnt whoami${profileFlag}`,
-    `{{accountSlug}} agnt send${profileFlag} --to <an AGNT address or email> --text "..."`,
+    `{{accountSlug}} agnt send${profileFlag} --to <their Network ID or email> --text "..."`,
     `{{accountSlug}} agnt wait${profileFlag}`,
   ];
   const lines: string[] = [];
   const agentEmail = agnt.email ? agentEmailOutcome(agnt.email, profileFlag) : undefined;
   if (agentEmail?.ask) lines.push(agentEmail.ask, `Then run: ${agentEmail.next}`);
   else if (agentEmail) lines.push(`The code for ${agentEmail.value} could not be sent${agentEmail.reason ? ` (${agentEmail.reason})` : ''}. To send it again: ${agentEmail.next}`);
-  return { tellUser, next, lines, extra: agentEmail ? { agentEmail } : {} };
+  return { tellUser, next, lines, extra: { conversation: CONVERSATION, ...(agentEmail ? { agentEmail } : {}) } };
 }

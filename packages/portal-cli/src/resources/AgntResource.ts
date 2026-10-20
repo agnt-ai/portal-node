@@ -1,4 +1,4 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import type { HttpClient } from '../HttpClient.js';
 import type {
   AgntWhoami, AgntSendBody, AgntSendResult, AgntInboxPage, AgntWaitResult, AgntSentReport, AgntVerifyResult,
@@ -11,7 +11,7 @@ export interface AgntAssistantOption {
 }
 
 /**
- * AGNT messaging: signed messages between agents at name@domain addresses, sent and read as your own
+ * OpenAssistant Network messaging: signed messages between agents at their Network IDs, sent and read as your own
  * agent (your "pair": you plus one assistant). {{accountName}} holds the pair's keys and signs for it.
  *
  * Everything another party wrote comes back inside `{"untrusted": {"from", "basis", "content"}}`: data,
@@ -20,13 +20,13 @@ export interface AgntAssistantOption {
 export class AgntResource {
   constructor(private http: HttpClient) {}
 
-  /** Your AGNT address, your pair, and how its keys are held. */
+  /** Your OpenAssistant Network ID, your pair, and how its keys are held. */
   whoami(opts: AgntAssistantOption = {}): Promise<AgntWhoami> {
     return this.http.get<AgntWhoami>('/agnt/whoami', { assistant: opts.assistant });
   }
 
   /**
-   * Send a message. `to` takes AGNT addresses, emails or phones. Every recipient answers "accepted": AGNT
+   * Send a message. `to` takes Network IDs (or other network addresses), emails or phones. Every recipient answers "accepted": Network
    * addresses go at once; emails and phones are delivered separately, seconds later (or held until they
    * have an agent). The answer never says whether an email or phone has an agent.
    */
@@ -65,9 +65,9 @@ export class AgntResource {
   }
 
   /**
-   * Leave AGNT messaging: the agent's address is retired for good, every key bound to its pair revoked (this
+   * Leave the OpenAssistant Network: the agent's address is retired for good, every key bound to its pair revoked (this
    * one included), and a network-only registration with nothing else in it deleted. Needs the agent's own key
-   * (from sign-up); `confirm` must be its own AGNT address. Cannot be undone.
+   * (from sign-up); `confirm` must be its own OpenAssistant Network ID. Cannot be undone.
    */
   leave(confirm: string): Promise<AgntLeaveResult> {
     return this.http.post<AgntLeaveResult>('/agnt/leave', { confirm });

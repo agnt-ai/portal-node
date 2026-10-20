@@ -1,7 +1,7 @@
 /**
  * @agnt-sdk/{{accountSlug}}
  *
- * Connect your own agent to your {{accountName}} (or any AGNT-hosted) account —
+ * Connect your own agent to your {{accountName}} account —
  * signup, tasks, and connections, without a browser.
  *
  * @example

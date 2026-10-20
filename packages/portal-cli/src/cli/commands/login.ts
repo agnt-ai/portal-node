@@ -15,8 +15,8 @@
  *
  * The person's timezone and name may be given too; an app that reads them uses them.
  * @agnt-messaging:begin
- * With AGNT messaging, sign-up also takes a --purpose (a full "account", or the "network" only) and the agent's
- * own identity (--agent-username and friends), and answers with the agent's AGNT address (loginAgnt.ts).
+ * With the OpenAssistant Network, sign-up also takes a --purpose (a full "account", or the "network" only) and the agent's
+ * own identity (--agent-username and friends), and answers with the agent's OpenAssistant Network ID (loginAgnt.ts).
  * @agnt-messaging:end
  */
 

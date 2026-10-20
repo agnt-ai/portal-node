@@ -1,4 +1,4 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect, vi } from 'vitest';
 import { AgntResource } from './AgntResource.js';
 import type { HttpClient } from '../HttpClient.js';

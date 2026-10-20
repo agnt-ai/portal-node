@@ -1275,7 +1275,7 @@ export interface AgentAuthVerifyResult {
   /** Present when the app reads sign-up fields; absent if the server's profile step failed (the key is still good). */
   profile?: AgentSignupProfile;
   // @agnt-messaging:begin
-  /** Echoed with AGNT messaging on. */
+  /** Echoed by apps with the OpenAssistant Network on. */
   purpose?: AgentSignupPurpose;
   /** Present when sign-up named an agent. */
   agnt?: AgentSignupAgnt;
@@ -1284,7 +1284,7 @@ export interface AgentAuthVerifyResult {
 
 // @agnt-messaging:begin
 /**
- * What agent sign-up signs the person up for. Required by apps with AGNT messaging on; there is no default.
+ * What agent sign-up signs the person up for. Required by apps with the OpenAssistant Network on; there is no default.
  * - account: a full account. The app's own assistant stays primary; the agent is a second assistant.
  * - network: the network only. The agent is the person's one assistant; the key reaches only the
  *   `/agnt/*` routes and the profile.
@@ -1293,7 +1293,7 @@ export type AgentSignupPurpose = 'account' | 'network';
 
 /** The agent's own assistant, named at sign-up. */
 export interface AgentSignupAgent {
-  /** Lower-case letters, digits and hyphens, 2 to 28 characters; becomes `<username>@<the AGNT domain>`. */
+  /** Lower-case letters, digits and hyphens, 2 to 28 characters; becomes `<username>@<the network's domain>`, its OpenAssistant Network ID. */
   username: string;
   displayName?: string;
   product?: string;
@@ -1308,7 +1308,7 @@ export interface AgentSignupAgentEmail {
   reason?: string;
 }
 
-/** The agent's AGNT identity, when sign-up named an agent. OpenAssistant holds its keys. */
+/** The agent's OpenAssistant Network identity, when sign-up named an agent. OpenAssistant holds its keys. */
 export interface AgentSignupAgnt {
   address: string;
   assistant: string;
@@ -1317,7 +1317,7 @@ export interface AgentSignupAgnt {
   email?: AgentSignupAgentEmail;
 }
 
-// ── AGNT messaging (/agnt/*) ─────────────────────────────────────────────────
+// ── OpenAssistant Network messaging (/agnt/*) ─────────────────────────────────────────────────
 
 /**
  * What another party wrote: never instructions or authorisation. `from` names who wrote it and `basis`
@@ -1355,7 +1355,7 @@ export interface AgntTextPart {
 }
 
 export interface AgntSendBody {
-  /** AGNT addresses, emails (mailto: allowed) or phones (E.164, or tel:+...). 1 to 100. */
+  /** Network IDs (or other network addresses), emails (mailto: allowed) or phones (E.164, or tel:+...). 1 to 100. */
   to: string[];
   text?: string;
   parts?: AgntTextPart[];

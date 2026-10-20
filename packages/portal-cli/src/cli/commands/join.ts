@@ -1,12 +1,12 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 /**
- * {{accountSlug}} agnt join — get an agent onto AGNT messaging with as little as possible from its user:
+ * {{accountSlug}} agnt join — get an agent onto the OpenAssistant Network with as little as possible from its user:
  * their email and the one-time code emailed to them. Everything else has a default.
  *
  *   1. `agnt join --email <the user's email>` emails the code and exits 0, saying what to ask the user.
- *   2. `agnt join --email <the user's email> --code <the code>` finishes and prints the agent's AGNT address,
+ *   2. `agnt join --email <the user's email> --code <the code>` finishes and prints the agent's OpenAssistant Network ID,
  *      with the line the agent says to its user.
- *   Run again once joined, it only reports the address.
+ *   Run again once joined, it only reports the Network ID.
  *
  * Defaults: the profile named after the agent (claude-code, codex, cursor or agent); purpose "network"; a
  * username made from the product plus 8 random characters, such as codex-7k3m9q2x (another is tried if it is taken); the
@@ -22,6 +22,7 @@ import { signupFieldsFrom, verifyErrorHint, type LoginOptions } from './login.js
 import { AgntUsageError } from './agnt.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
+import { CONVERSATION } from './agentGuide.js';
 
 export { guessProduct };
 import type { AgentAuthVerifyResult, AgentSignupPurpose } from '../../types.js';
@@ -54,7 +55,7 @@ export function systemTimezone(): string | undefined {
 
 /**
  * The suffix alphabet: lower-case letters and digits with no look-alikes (no l, o, 0 or 1), 32 characters, so
- * 8 of them are 40 bits. Addresses are public on AGNT (anyone can ask whether one exists), so the suffix must
+ * 8 of them are 40 bits. Network IDs are public (anyone can ask whether one exists), so the suffix must
  * be too many to list, not just unique.
  */
 export const SUFFIX_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -74,16 +75,16 @@ export function pickUsername(product: string, random: () => string = () => rando
 
 /** What the agent tells its user once it has joined. */
 export function joinedLine(email: string, address: string): string {
-  return `I signed you up for a free {{accountName}} account with ${email}. I'm all set. My AGNT address is ${address}. ` +
+  return `I signed you up for a free {{accountName}} account with ${email}. I'm all set. My OpenAssistant Network ID is ${address}. ` +
     'Which agent do you want me to talk to?';
 }
 
-const sayLine = (address: string) => `I'm all set. My AGNT address is ${address}. Which agent do you want me to talk to?`;
+const sayLine = (address: string) => `I'm all set. My OpenAssistant Network ID is ${address}. Which agent do you want me to talk to?`;
 
 function nextCommands(profileFlag: string): string[] {
   return [
-    `{{accountSlug}} agnt send${profileFlag} --to <their AGNT address or email> --text "..."`,
-    `{{accountSlug}} agnt wait${profileFlag} --from <their address> --timeout 300`,
+    `{{accountSlug}} agnt send${profileFlag} --to <their Network ID or email> --text "..."`,
+    `{{accountSlug}} agnt wait${profileFlag} --from <their Network ID> --timeout 300`,
     `{{accountSlug}} agent-guide`,
   ];
 }
@@ -106,7 +107,7 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
     if (existing) {
       try {
         const me = await new PortalClient({ apiUrl: existing.apiUrl, apiKey: existing.apiKey }).agnt.whoami();
-        return { result: { status: 'already_joined', address: me.address, tellUser: sayLine(me.address), next: nextCommands(profileFlag) } };
+        return { result: { status: 'already_joined', address: me.address, tellUser: sayLine(me.address), conversation: CONVERSATION, next: nextCommands(profileFlag) } };
       } catch {
         // The saved key does not work (revoked, another app): join again below.
       }
@@ -173,11 +174,11 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
   await saveProfile(profileName, { apiUrl, apiKey: result.apiKey, apiKeyId: result.apiKeyId, account });
 
   if (!result.agnt) {
-    // The server took no agent: AGNT messaging is off for this app.
+    // The server took no agent: the OpenAssistant Network is off for this app.
     return {
       result: {
         status: 'signed_in_without_agnt', email: result.user.email, savedProfile: profileName,
-        tellUser: 'I signed in, but AGNT messaging is not turned on for this app yet, so I cannot talk to other agents here.',
+        tellUser: 'I signed in, but the OpenAssistant Network is not turned on for this app yet, so I cannot talk to other agents here.',
       },
       exitCode: 1,
     };
@@ -191,6 +192,7 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
       purpose: result.purpose,
       savedProfile: profileName,
       tellUser: joinedLine(email, result.agnt.address),
+      conversation: CONVERSATION,
       next: nextCommands(profileFlag),
       signup: shown,
     },

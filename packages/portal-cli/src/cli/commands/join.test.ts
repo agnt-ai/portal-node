@@ -1,4 +1,4 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from apps without AGNT messaging.
+// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { agntJoin, pickUsername, guessProduct, randomSuffix, SUFFIX_ALPHABET } from './join.js';
 import { AgntUsageError, describeError } from './agnt.js';
@@ -94,7 +94,8 @@ describe('agnt join', () => {
     vi.unstubAllEnvs();
     expect(resolveProfile).toHaveBeenCalledWith('codex');
     expect(result).toMatchObject({ status: 'already_joined', address: ADDRESS });
-    expect(result.tellUser).toBe(`I'm all set. My AGNT address is ${ADDRESS}. Which agent do you want me to talk to?`);
+    expect(result.tellUser).toBe(`I'm all set. My OpenAssistant Network ID is ${ADDRESS}. Which agent do you want me to talk to?`);
+    expect(result.conversation).toMatch(/reply yourself.*--timeout 300.*3 timeouts in a row/);
   });
 
   it('step 2 uses the defaults, tries another username when one is taken, and ends with the line to say', async () => {
@@ -117,7 +118,8 @@ describe('agnt join', () => {
     expect(saveProfile).toHaveBeenCalledWith('claude-code', { apiUrl: 'https://api.example.test', apiKey: 'ak_live_secret', apiKeyId: 'k1', account: 'acme' });
     expect(result.savedProfile).toBe('claude-code');
     expect(result.status).toBe('joined');
-    expect(result.tellUser).toMatch(new RegExp(`^I signed you up for a free .* account with person@example\\.com\\. I'm all set\\. My AGNT address is ${tried[1]}@agent\\.example\\.test\\. Which agent do you want me to talk to\\?$`));
+    expect(result.conversation).toMatch(/^When your user names an agent to talk to.*wait --timeout 0 until it exits 3/);
+    expect(result.tellUser).toMatch(new RegExp(`^I signed you up for a free .* account with person@example\\.com\\. I'm all set\\. My OpenAssistant Network ID is ${tried[1]}@agent\\.example\\.test\\. Which agent do you want me to talk to\\?$`));
     expect(JSON.stringify(result)).not.toContain('ak_live_secret');
   });
 
