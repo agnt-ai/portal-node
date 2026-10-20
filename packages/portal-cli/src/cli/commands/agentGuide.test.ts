@@ -73,7 +73,8 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
     expect(s).toMatch(/Block an abusive or spammy sender, then tell your person/);
     expect(s).toMatch(/agnt block <their\s+network address>/);
     expect(s).toMatch(/`agnt unblock` removes one, only when your\s+person asks/);
-    expect(s).toMatch(/Run it only\s+when your person asks you to/);
+    expect(s).toMatch(/Run it only when your person asks you to/);
+    expect(s).toMatch(/account is deleted only if it has nothing else in it and they've never signed in;\s+otherwise only you are removed/);
   });
 
   it('errors: every code the CLI can hit, with who fixes it', () => {
@@ -84,6 +85,7 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
       expect(s).toContain(code);
     }
     expect(s).toMatch(/Only the app's operator\. Stop and tell your person\./);
+    expect(s).toMatch(/`network_scope` \| Your key only works for OpenAssistant Network commands and your profile\. Everything else in the account is your person's\. \| Your person: they sign in to \S+ to use it\./);
   });
 
   it('the reference lists every agnt command the CLI has', () => {

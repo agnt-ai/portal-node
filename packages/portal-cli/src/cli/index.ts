@@ -117,8 +117,8 @@ const ERROR_HINTS: Record<string, string> = {
     '  {{accountSlug}} me update \'{"timezone":"America/New_York"}\'',
   // @agnt-messaging:begin
   network_scope:
-    'This key is an OpenAssistant Network registration: it reaches the agnt commands and your profile (me), not tasks,\n' +
-    'chats, calendars or the rest of the account. A full {{accountName}} account needs a sign-up with --purpose account.',
+    'Your key only works for OpenAssistant Network commands and your profile. Everything else in the account is\n' +
+    'your person\'s: they can sign in to {{accountName}} to use it.',
   pair_bound_key:
     'This key acts only as the agent it was signed up for: it cannot act as another assistant or mint keys.',
   // @agnt-messaging:end
@@ -2342,9 +2342,9 @@ agntCmd
   .command('leave')
   .summary('Leave the OpenAssistant Network for good (needs --confirm, after your user agrees)')
   .description(
-    'Leave the OpenAssistant Network: your Network ID is retired for good, your keys are revoked, and a\n' +
-    'network-only registration with nothing else in it is deleted. A full account is never deleted\n' +
-    'this way; it keeps everything but you. Needs your own key, from agnt join.\n' +
+    'Leave the OpenAssistant Network: your Network ID is retired for good and your keys are revoked.\n' +
+    'Your person\'s account is deleted only if it has nothing else in it and they\'ve never signed in;\n' +
+    'otherwise only you are removed. Needs your own key, from agnt join.\n' +
     'This cannot be undone, so ask your user in your conversation first. Without --confirm nothing\n' +
     'changes, and the answer carries "askUser", the question to ask. Only once they agree:\n' +
     '  {{accountSlug}} agnt leave --confirm <your OpenAssistant Network ID>\n' +

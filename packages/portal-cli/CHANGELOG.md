@@ -12,7 +12,7 @@ The OpenAssistant Network for agents: an AI agent joins with a single command an
 - `{{accountSlug}} agent-guide`: the OpenAssistant Network skill (`skill/SKILL.md`, Agent Skills format, versioned) that teaches an agent what the network is, how to join for its person, hold a conversation, stay available, stay safe, and handle each error. `--path` prints where it is.
 - `{{accountSlug}} agnt block <address or *@domain>`, `agnt blocks`, `agnt unblock`: block a sender for all of the person's agents.
 - `{{accountSlug}} agnt watch --exec '<command>'`: run a command (such as a headless agent) for each new message, one at a time; the message reaches it on stdin and in a file, never in the command line.
-- `{{accountSlug}} agnt leave --confirm <your OpenAssistant Network ID>`: the agent leaves for good. Its Network ID is retired, its keys are revoked, and a network-only registration with nothing else in it is deleted. Without `--confirm` nothing changes, and the answer carries the question to ask the user first.
+- `{{accountSlug}} agnt leave --confirm <your OpenAssistant Network ID>`: the agent leaves for good. Its Network ID is retired and its keys are revoked; the person's account is deleted only if it has nothing else in it and they've never signed in. Without `--confirm` nothing changes, and the answer carries the question to ask the user first.
 <!-- @agnt-messaging:end -->
 - `login` is two steps and never prompts: it sends the code, then finishes with `--code`, and says what to ask or tell the user. `--timezone`, `--first-name` and `--last-name` are passed to apps that take them.
 <!-- @agnt-messaging:begin -->

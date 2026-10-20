@@ -81,7 +81,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
     case 'no_assistant':
       return 'This account has no assistant to send as yet.';
     case 'network_scope':
-      return 'This key is an OpenAssistant Network registration: it reaches the agnt commands and your profile only.';
+      return "Your key only works for OpenAssistant Network commands and your profile. Everything else in the account is your person's: they can sign in to {{accountName}} to use it.";
     case 'invalid_match':
       return 'Give a network address (name@domain), or *@domain to block a whole domain.';
     case 'agnt_blocks_full':
@@ -408,7 +408,7 @@ export async function agntBlocks(client: PortalClient) {
 /** What to ask before leaving the OpenAssistant Network: it cannot be undone. */
 export function askToLeave(address: string): string {
   return `Do you want me to leave the OpenAssistant Network? Other agents could no longer reach me at ${address}, ` +
-    `and if your {{accountName}} registration exists only for me, it would be deleted too (a full account stays). ` +
+    `and your {{accountName}} account would be deleted too if it has nothing else in it and you've never signed in. ` +
     "This can't be undone.";
 }
 
@@ -435,7 +435,7 @@ export async function agntLeave(client: PortalClient, opts: AgntLeaveOptions) {
   }
   const left = await client.agnt.leave(me.address);
   const tellUser = left.registration === 'deleted'
-    ? `I've left the OpenAssistant Network. ${left.address} no longer reaches me, and your {{accountName}} registration is deleted.`
+    ? `I've left the OpenAssistant Network. ${left.address} no longer reaches me, and your {{accountName}} account, which had nothing else in it, is deleted.`
     : `I've left the OpenAssistant Network. ${left.address} no longer reaches me. Your {{accountName}} account itself is unchanged.`;
   return { result: { ...left, tellUser } };
 }

@@ -28,6 +28,7 @@ describe('agnt leave', () => {
     expect(exitCode).toBe(EXIT_USAGE);
     expect(body.askUser).toMatch(new RegExp(`^Do you want me to leave the OpenAssistant Network\\? .*${ADDRESS.replace(/\./g, '\\.')}.*can't be undone\\.$`));
     expect(body.message).toContain(`agnt leave --confirm ${ADDRESS}`);
+    expect(body.askUser).toMatch(/account would be deleted too if it has nothing else in it and you've never signed in/);
   });
 
   it('a --confirm that is not the agent\'s own address changes nothing', async () => {
@@ -41,13 +42,18 @@ describe('agnt leave', () => {
     const { result } = await agntLeave(client(leave), { confirm: ADDRESS.toUpperCase() }) as any;
     expect(leave).toHaveBeenCalledWith(ADDRESS);
     expect(result).toMatchObject({ status: 'left', registration: 'deleted', keysRevoked: 2 });
-    expect(result.tellUser).toMatch(/left the OpenAssistant Network.*no longer reaches me.*registration is deleted/);
+    expect(result.tellUser).toMatch(/left the OpenAssistant Network.*no longer reaches me.*account, which had nothing else in it, is deleted/);
   });
 
   it('a kept account is said to be unchanged', async () => {
     const leave = vi.fn().mockResolvedValue({ status: 'left', address: ADDRESS, registration: 'kept', keysRevoked: 1 });
     const { result } = await agntLeave(client(leave), { confirm: ADDRESS }) as any;
     expect(result.tellUser).toMatch(/account itself is unchanged/);
+  });
+
+  it('network_scope says the key is for network commands only, and the rest is the person\'s', () => {
+    expect(describeError('send', new AgntApiError(403, 'x', 'network_scope')).body.hint)
+      .toMatch(/^Your key only works for OpenAssistant Network commands and your profile\. Everything else in the account is your person's: they can sign in to \S+ to use it\.$/);
   });
 
   it('maps the refusals plainly', () => {
