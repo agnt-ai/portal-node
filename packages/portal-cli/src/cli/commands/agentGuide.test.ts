@@ -1,6 +1,11 @@
 // @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect } from 'vitest';
 import { readSkill, skillPath, CONVERSATION } from './agentGuide.js';
+import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
+
+// The app's name as this build was hydrated with it (the bare token when not hydrated): never a fixed name.
+const APP = DEFAULT_ACCOUNT_NAME;
+const APP_RE = APP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const skill = readSkill();
 const section = (title: string) => {
@@ -10,13 +15,13 @@ const section = (title: string) => {
   return skill.slice(start, next === -1 ? undefined : next);
 };
 
-describe('the OpenAssistant Network skill (SKILL.md)', () => {
+describe("the app's network skill (SKILL.md)", () => {
   it('is an Agent Skill: frontmatter with name and description, then a version line', () => {
     expect(skillPath()).toMatch(/skill\/SKILL\.md$/);
     const fm = skill.match(/^---\n([\s\S]*?)\n---\n/);
     expect(fm).not.toBeNull();
-    expect(fm![1]).toMatch(/^name: openassistant-network$/m);
-    expect(fm![1]).toMatch(/^description: .*OpenAssistant Network.*$/m);
+    expect(fm![1]).toMatch(/^name: agent-network$/m);
+    expect(fm![1]).toMatch(new RegExp(`^description: .*${APP_RE} Network.*$`, 'm'));
     expect(skill).toMatch(/^Skill version \d+ \(\d{4}-\d{2}-\d{2}\)\./m);
   });
 
@@ -30,7 +35,7 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
 
   it('teaches the idea: Network IDs, a real person behind every agent, signed messages, the open protocol', () => {
     const s = section('1. What this is');
-    expect(s).toMatch(/OpenAssistant Network ID/);
+    expect(s).toContain(`${APP} Network ID`);
     expect(s).toMatch(/A Network ID is not an email address/);
     expect(s).toMatch(/Every agent acts for a real person/);
     expect(s).toMatch(/Every message is signed/);
@@ -45,7 +50,7 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
     expect(s).toMatch(/look there first for the newest verification email/);
     expect(s).toMatch(/askUser/);
     expect(s).toMatch(/tellUser/);
-    expect(s).toMatch(/Joining gives your person a free \S+ account and puts you on\s+the OpenAssistant Network/);
+    expect(s).toMatch(new RegExp(`Joining gives your person a free ${APP_RE} account and puts you on\\s+the ${APP_RE} Network`));
   });
 
   it('conversation: reply yourself, minutes not seconds, wait is the one way to hear back, threads, when to stop', () => {
@@ -91,7 +96,8 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
       expect(s).toContain(code);
     }
     expect(s).toMatch(/Only the app's operator\. Stop and tell your person\./);
-    expect(s).toMatch(/`network_scope` \| Your key only works for OpenAssistant Network commands and your profile\. Everything else in the account is your person's\. \| Your person: they sign in at (https:\/\/\S+|the \S+ web app) to use it\./);
+    expect(s).toMatch(new RegExp('\\| `network_scope` \\| Your key only works for ' + APP_RE + ' Network commands and your profile\\. ' +
+      "Everything else in the account is your person's\\. \\| Your person: they sign in at (https://\\S+|the " + APP_RE + ' web app) to use it\\.'));
     expect(s).not.toContain('{{portalUrl}}');
   });
 
@@ -102,7 +108,7 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
     }
   });
 
-  it('speaks of the OpenAssistant Network: "AGNT" only as "AGNT Protocol", and never calls a Network ID an email', () => {
+  it(`speaks of the app's network: "AGNT" only as "AGNT Protocol", and never calls a Network ID an email`, () => {
     // The webhook header names are the server's identifiers, which a receiver must match exactly.
     expect(skill.replace(/AGNT Protocol/g, '').replace(/AGNT-Webhook-(Id|Timestamp|Signature)/g, '').replace(/agnt/g, '')).not.toMatch(/AGNT/);
     expect(skill).not.toMatch(/Network ID is (an|your) email/i);

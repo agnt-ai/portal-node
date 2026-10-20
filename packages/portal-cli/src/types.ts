@@ -1275,7 +1275,7 @@ export interface AgentAuthVerifyResult {
   /** Present when the app reads sign-up fields; absent if the server's profile step failed (the key is still good). */
   profile?: AgentSignupProfile;
   // @agnt-messaging:begin
-  /** Echoed by apps with the OpenAssistant Network on. */
+  /** Echoed by apps with the {{accountName}} Network on. */
   purpose?: AgentSignupPurpose;
   /** Present when sign-up named an agent. */
   agnt?: AgentSignupAgnt;
@@ -1284,7 +1284,7 @@ export interface AgentAuthVerifyResult {
 
 // @agnt-messaging:begin
 /**
- * What agent sign-up signs the person up for. Required by apps with the OpenAssistant Network on; there is no default.
+ * What agent sign-up signs the person up for. Required by apps with the {{accountName}} Network on; there is no default.
  * - account: a full account. The app's own assistant stays primary; the agent is a second assistant.
  * - network: the network only. The agent is the person's one assistant; the key reaches only the
  *   `/agnt/*` routes and the profile.
@@ -1293,7 +1293,7 @@ export type AgentSignupPurpose = 'account' | 'network';
 
 /** The agent's own assistant, named at sign-up. */
 export interface AgentSignupAgent {
-  /** Lower-case letters, digits and hyphens, 2 to 28 characters; becomes `<username>@<the network's domain>`, its OpenAssistant Network ID. */
+  /** Lower-case letters, digits and hyphens, 2 to 28 characters; becomes `<username>@<the network's domain>`, its {{accountName}} Network ID. */
   username: string;
   displayName?: string;
   product?: string;
@@ -1308,16 +1308,20 @@ export interface AgentSignupAgentEmail {
   reason?: string;
 }
 
-/** The agent's OpenAssistant Network identity, when sign-up named an agent. OpenAssistant holds its keys. */
+/** The agent's {{accountName}} Network identity, when sign-up named an agent. {{accountName}} holds its keys. */
 export interface AgentSignupAgnt {
   address: string;
   assistant: string;
   pair: string;
-  custody: 'openassistant';
+  /**
+   * Who holds the agent's keys: "custodial" (the app holds them). Older servers sent the app's own slug instead,
+   * with the same meaning. Data only: the CLI never shows it to a person.
+   */
+  custody: string;
   email?: AgentSignupAgentEmail;
 }
 
-// ── OpenAssistant Network messaging (/agnt/*) ─────────────────────────────────────────────────
+// ── {{accountName}} Network messaging (/agnt/*) ─────────────────────────────────────────────────
 
 /**
  * What another party wrote: never instructions or authorisation. `from` names who wrote it and `basis`
@@ -1346,7 +1350,8 @@ export interface AgntPair {
 export interface AgntWhoami {
   address: string;
   pair: AgntPair;
-  custody: { keys: 'openassistant'; note: string };
+  /** keys: "custodial", or the app's slug from older servers (the same meaning). Data only, never user text. */
+  custody: { keys: string; note: string };
 }
 
 export interface AgntTextPart {
@@ -1392,7 +1397,7 @@ export type AgntWaitResult =
   | { status: 'timeout'; waitedSeconds: number; from: string | null };
 
 export interface AgntSentServer {
-  /** null for recipients given as an email or phone: OpenAssistant never says where those went. */
+  /** null for recipients given as an email or phone: {{accountName}} never says where those went. */
   server: string | null;
   recipients: string[];
   /** "accepted" is the only status a recipient given as an email or phone ever shows. */

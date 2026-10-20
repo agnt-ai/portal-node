@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { agntJoin, pickUsername, guessProduct, randomSuffix, SUFFIX_ALPHABET } from './join.js';
 import { AgntUsageError, describeError } from './agnt.js';
 import { saveProfile, resolveProfile } from '../utils/credentials.js';
+import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
+
+// The app's name as this build was hydrated with it (the bare token when not hydrated): never a fixed name.
+const APP = DEFAULT_ACCOUNT_NAME;
+const APP_RE = APP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 vi.mock('../utils/credentials.js', () => ({
   saveProfile: vi.fn().mockResolvedValue(undefined),
@@ -83,18 +88,20 @@ describe('agnt join', () => {
     expect(result.next).toMatch(/agnt join --email person@example.com --code <the code>/);
   });
 
-  it('once joined, only reports the address, read from the agent\'s own profile', async () => {
+  // custody.keys is "custodial", or the app's slug from older servers: the same meaning, and never user text.
+  it.each(['custodial', 'openassistant'])('once joined, only reports the address, read from the agent\'s own profile (custody %s)', async (keys) => {
     vi.mocked(resolveProfile).mockResolvedValue({ apiUrl: 'https://api.example.test', apiKey: 'ak' });
     vi.stubEnv('AGNT_CLI_PROFILE', '');
     vi.stubEnv('CODEX_HOME', '/x');
     vi.stubEnv('CLAUDECODE', '');
     vi.stubEnv('CLAUDE_CODE_ENTRYPOINT', '');
-    global.fetch = vi.fn().mockResolvedValue(answer(200, { address: ADDRESS, pair: {}, custody: { keys: 'openassistant', note: '' } })) as any;
+    global.fetch = vi.fn().mockResolvedValue(answer(200, { address: ADDRESS, pair: {}, custody: { keys, note: '' } })) as any;
     const { result } = await agntJoin({}) as any;
     vi.unstubAllEnvs();
     expect(resolveProfile).toHaveBeenCalledWith('codex');
     expect(result).toMatchObject({ status: 'already_joined', address: ADDRESS });
-    expect(result.tellUser).toBe(`I'm all set. My OpenAssistant Network ID is ${ADDRESS}. Which agent do you want me to talk to?`);
+    expect(result.tellUser).toBe(`I'm all set. My ${APP} Network ID is ${ADDRESS}. Which agent do you want me to talk to?`);
+    expect(result.tellUser).not.toContain(keys);
     expect(result.conversation).toMatch(/reply yourself.*--timeout 300.*3 timeouts in a row/);
   });
 
@@ -119,7 +126,7 @@ describe('agnt join', () => {
     expect(result.savedProfile).toBe('claude-code');
     expect(result.status).toBe('joined');
     expect(result.conversation).toMatch(/^When your person names an agent to talk to.*wait --timeout 0 until it exits 3/);
-    expect(result.tellUser).toMatch(new RegExp(`^I signed you up for a free \\S+ account with person@example\\.com and joined us to the OpenAssistant Network, so other people's agents can reach me for you\\. My OpenAssistant Network ID is ${tried[1]}@agent\\.example\\.test\\. Which agent do you want me to talk to\\?$`));
+    expect(result.tellUser).toMatch(new RegExp(`^I signed you up for a free ${APP_RE} account with person@example\\.com and joined us to the ${APP_RE} Network, so other people's agents can reach me for you\\. My ${APP_RE} Network ID is ${tried[1]}@agent\\.example\\.test\\. Which agent do you want me to talk to\\?$`));
     expect(JSON.stringify(result)).not.toContain('ak_live_secret');
   });
 
@@ -137,12 +144,12 @@ describe('agnt join', () => {
     said.push(JSON.stringify((await agntJoin({ email: 'person@example.com', account: 'acme' }) as any).result));
     said.push(JSON.stringify((await agntJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any).result));
     for (const text of said) expect(text).not.toMatch(/full account/i);
-    expect(said[0]).toMatch(/^I need to sign you up for a free \S+ account\. What's your email address\?/);
-    expect(said[2]).toMatch(/I signed you up for a free \S+ account with person@example\.com and joined us to the OpenAssistant Network/);
+    expect(said[0]).toMatch(new RegExp(`^I need to sign you up for a free ${APP_RE} account\\. What's your email address\\?`));
+    expect(said[2]).toMatch(new RegExp(`I signed you up for a free ${APP_RE} account with person@example\\.com and joined us to the ${APP_RE} Network`));
 
     global.fetch = vi.fn().mockResolvedValue(answer(201, { ...joined('codex-7k3m9q2x'), purpose: 'account' })) as any;
     const { result } = await agntJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x', purpose: 'account' }) as any;
-    expect(result.tellUser).toMatch(/^I signed you up for a free .* account with person@example\.com\. I'm all set\. My OpenAssistant Network ID is /);
+    expect(result.tellUser).toMatch(new RegExp(`^I signed you up for a free ${APP_RE} account with person@example\\.com\\. I'm all set\\. My ${APP_RE} Network ID is `));
     expect(describeError('join', await agntJoin({ purpose: 'account' }).catch((e) => e)).body.askUser).toMatch(/^I need to sign you up for a free .* account\./);
   });
 
@@ -164,7 +171,7 @@ describe('agnt join', () => {
     const { body, exitCode } = describeError('join', err);
     expect(exitCode).toBe(1);
     expect(body.code).toBe('agnt_not_enabled');
-    expect(body.hint).toBe("The OpenAssistant Network isn't turned on for this app yet; only its operator can turn it on. Stop and tell your user; nothing you run can fix it.");
+    expect(body.hint).toBe(`The ${APP} Network isn't turned on for this app yet; only its operator can turn it on. Stop and tell your user; nothing you run can fix it.`);
   });
 
   it('a wrong code is not retried with another name', async () => {

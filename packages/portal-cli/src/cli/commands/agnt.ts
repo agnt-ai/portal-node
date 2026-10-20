@@ -1,6 +1,6 @@
 // @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 /**
- * {{accountSlug}} agnt — the OpenAssistant Network, as your own agent: signed messages to other agents at name@domain
+ * {{accountSlug}} agnt — the {{accountName}} Network, as your own agent: signed messages to other agents at name@domain
  * addresses, or to anyone by an email or phone they use. {{accountName}} holds the agent's keys and signs
  * for it; this CLI only calls the {{accountName}} API.
  *
@@ -79,7 +79,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
       if (verb === 'webhook') return 'This agent has no webhook yet. Set one: agnt webhook set --url <https URL>.';
       return verb === 'sent'
         ? 'No message with that id among this agent\'s sends: an unknown id, another agent\'s, or past the hold window.'
-        : 'Not found. The OpenAssistant Network may not be on for this app.';
+        : 'Not found. The {{accountName}} Network may not be on for this app.';
     case 'pair_bound_key':
       return verb === 'unblock'
         ? "Unblocking would reach your person's other agents too, so this key can't. Your person can unblock from their own account."
@@ -89,13 +89,13 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
     case 'no_assistant':
       return 'This account has no assistant to send as yet.';
     case 'network_scope':
-      return `Your key only works for OpenAssistant Network commands and your profile. Everything else in the account is your person's: they can sign in ${signInWhere()} to use it.`;
+      return `Your key only works for {{accountName}} Network commands and your profile. Everything else in the account is your person's: they can sign in ${signInWhere()} to use it.`;
     case 'invalid_match':
       return 'Give a network address (name@domain), or *@domain to block a whole domain.';
     case 'agnt_blocks_full':
       return 'Your person has the most blocks allowed. Remove one first: agnt blocks, then agnt unblock <address>.';
     case 'confirm_mismatch':
-      return '--confirm must be your own OpenAssistant Network ID (see agnt whoami). Nothing was changed.';
+      return '--confirm must be your own {{accountName}} Network ID (see agnt whoami). Nothing was changed.';
     case 'pair_bound_key_required':
       return verb === 'leave'
         ? "Only the agent's own key (from agnt join) can leave. Your user can remove it with the link in the sign-up email."
@@ -107,13 +107,13 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
     case 'agnt_unavailable':
       return verb === 'leave'
         ? 'Not finished yet. Wait a minute, then run the same command again: a retry finishes it.'
-        : 'The OpenAssistant Network is unavailable just now. Wait a minute, then run the same command once.';
+        : 'The {{accountName}} Network is unavailable just now. Wait a minute, then run the same command once.';
     case 'insufficient_scope':
-      return 'This connection was not granted the OpenAssistant Network.';
+      return 'This connection was not granted the {{accountName}} Network.';
     case 'invalid':
       return 'The server refused part of the request; details.field names it.';
     case 'invalid_email':
-      return 'Give a mailbox you read, not an OpenAssistant Network ID: a Network ID is not an email address.';
+      return 'Give a mailbox you read, not an {{accountName}} Network ID: a Network ID is not an email address.';
     case 'otp_invalid':
       return 'Wrong code. Run the same command with the right code.';
     case 'otp_expired':
@@ -123,7 +123,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
       return 'That email already belongs to someone in this app.';
   }
   if (status === 401) return 'Not signed in, or the key was revoked. Run: {{accountSlug}} login --email <email>';
-  if (status === 404) return 'Not found. The OpenAssistant Network may not be on for this app.';
+  if (status === 404) return 'Not found. The {{accountName}} Network may not be on for this app.';
   if (status !== null && status >= 500) return 'The service could not answer just now. Wait, then run the same command once.';
   return undefined;
 }
@@ -205,7 +205,7 @@ export function collect(value: string, previous: string[] = []): string[] {
 export async function agntWhoami(client: PortalClient, opts: AgntBaseOptions) {
   const me = await client.agnt.whoami({ assistant: opts.assistant });
   // The API's answer, plus the line to tell the user.
-  return { result: { ...me, tellUser: `My OpenAssistant Network ID is ${me.address}. Other agents can message me there.` } };
+  return { result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.` } };
 }
 
 // ── send ────────────────────────────────────────────────────────────────────
@@ -413,9 +413,9 @@ export async function agntBlocks(client: PortalClient) {
 
 // ── leave ───────────────────────────────────────────────────────────────────
 
-/** What to ask before leaving the OpenAssistant Network: it cannot be undone. */
+/** What to ask before leaving the {{accountName}} Network: it cannot be undone. */
 export function askToLeave(address: string): string {
-  return `Do you want me to leave the OpenAssistant Network? Other agents could no longer reach me at ${address}, ` +
+  return `Do you want me to leave the {{accountName}} Network? Other agents could no longer reach me at ${address}, ` +
     `and your {{accountName}} account would be deleted too if it has nothing else in it and you've never signed in. ` +
     "This can't be undone.";
 }
@@ -426,7 +426,7 @@ export interface AgntLeaveOptions {
 }
 
 /**
- * Leave the OpenAssistant Network, for good. Needs --confirm with the agent's own Network ID, given only after its user
+ * Leave the {{accountName}} Network, for good. Needs --confirm with the agent's own Network ID, given only after its user
  * agreed in conversation: without it, nothing changes and the error carries "askUser", the question to ask.
  */
 export async function agntLeave(client: PortalClient, opts: AgntLeaveOptions) {
@@ -439,12 +439,12 @@ export async function agntLeave(client: PortalClient, opts: AgntLeaveOptions) {
     );
   }
   if (confirm !== me.address.toLowerCase()) {
-    throw new AgntUsageError(`--confirm must be your own OpenAssistant Network ID, ${me.address}. Nothing was changed.`);
+    throw new AgntUsageError(`--confirm must be your own {{accountName}} Network ID, ${me.address}. Nothing was changed.`);
   }
   const left = await client.agnt.leave(me.address);
   const tellUser = left.registration === 'deleted'
-    ? `I've left the OpenAssistant Network. ${left.address} no longer reaches me, and your {{accountName}} account, which had nothing else in it, is deleted.`
-    : `I've left the OpenAssistant Network. ${left.address} no longer reaches me. Your {{accountName}} account itself is unchanged.`;
+    ? `I've left the {{accountName}} Network. ${left.address} no longer reaches me, and your {{accountName}} account, which had nothing else in it, is deleted.`
+    : `I've left the {{accountName}} Network. ${left.address} no longer reaches me. Your {{accountName}} account itself is unchanged.`;
   return { result: { ...left, tellUser } };
 }
 

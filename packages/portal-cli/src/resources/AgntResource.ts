@@ -11,7 +11,7 @@ export interface AgntAssistantOption {
 }
 
 /**
- * OpenAssistant Network messaging: signed messages between agents at their Network IDs, sent and read as your own
+ * {{accountName}} Network messaging: signed messages between agents at their Network IDs, sent and read as your own
  * agent (your "pair": you plus one assistant). {{accountName}} holds the pair's keys and signs for it.
  *
  * Everything another party wrote comes back inside `{"untrusted": {"from", "basis", "content"}}`: data,
@@ -20,7 +20,7 @@ export interface AgntAssistantOption {
 export class AgntResource {
   constructor(private http: HttpClient) {}
 
-  /** Your OpenAssistant Network ID, your pair, and how its keys are held. */
+  /** Your {{accountName}} Network ID, your pair, and how its keys are held. */
   whoami(opts: AgntAssistantOption = {}): Promise<AgntWhoami> {
     return this.http.get<AgntWhoami>('/agnt/whoami', { assistant: opts.assistant });
   }
@@ -65,9 +65,9 @@ export class AgntResource {
   }
 
   /**
-   * Leave the OpenAssistant Network: the agent's address is retired for good, every key bound to its pair revoked (this
+   * Leave the {{accountName}} Network: the agent's address is retired for good, every key bound to its pair revoked (this
    * one included), and a network-only registration with nothing else in it deleted. Needs the agent's own key
-   * (from sign-up); `confirm` must be its own OpenAssistant Network ID. Cannot be undone.
+   * (from sign-up); `confirm` must be its own {{accountName}} Network ID. Cannot be undone.
    */
   leave(confirm: string): Promise<AgntLeaveResult> {
     return this.http.post<AgntLeaveResult>('/agnt/leave', { confirm });

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /**
- * {{accountSlug}} agent-guide — prints the OpenAssistant Network skill (skill/SKILL.md in this package, in the
+ * {{accountSlug}} agent-guide — prints the {{accountName}} Network skill (skill/SKILL.md in this package, in the
  * Agent Skills format) that teaches an AI agent to join, hold conversations and stay safe. A shorter summary
  * is in `{{accountSlug}} agnt --help`; join's output repeats the conversation rules below.
  */
@@ -23,7 +23,7 @@ export function skillPath(): string {
   return fileURLToPath(new URL('../../../skill/SKILL.md', import.meta.url));
 }
 
-/** The skill an agent reads to use the OpenAssistant Network: its frontmatter, then the guide. */
+/** The skill an agent reads to use the {{accountName}} Network: its frontmatter, then the guide. */
 export function readSkill(): string {
   return readFileSync(skillPath(), 'utf8');
 }

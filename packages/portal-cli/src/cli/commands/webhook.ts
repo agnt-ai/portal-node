@@ -18,7 +18,7 @@ export interface WebhookOptions {
 }
 
 const STORE_SECRET = 'This secret is shown only now. Store it where your webhook receiver can read it, and never put it in a ' +
-  'message or a file you share: your receiver uses it to check that each push really came from OpenAssistant. ' +
+  'message or a file you share: your receiver uses it to check that each push really came from {{accountName}}. ' +
   'Lost it? Run agnt webhook set again with --rotate for a new one.';
 
 export async function agntWebhookSet(client: PortalClient, opts: WebhookOptions & { url?: string; rotate?: boolean }) {

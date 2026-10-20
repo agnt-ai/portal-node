@@ -4,6 +4,11 @@ import { agntLeave, runAgntLeave, agntBlock, agntUnblock, agntBlocks, describeEr
 import { AgntApiError } from '../../HttpClient.js';
 import { clientFor } from '../utils/api.js';
 import { removeProfile } from '../utils/credentials.js';
+import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
+
+// The app's name as this build was hydrated with it (the bare token when not hydrated): never a fixed name.
+const APP = DEFAULT_ACCOUNT_NAME;
+const APP_RE = APP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 vi.mock('../utils/api.js', () => ({ clientFor: vi.fn() }));
 vi.mock('../utils/credentials.js', () => ({
@@ -26,7 +31,7 @@ describe('agnt leave', () => {
     expect(c.agnt.leave).not.toHaveBeenCalled();
     const { body, exitCode } = describeError('leave', err);
     expect(exitCode).toBe(EXIT_USAGE);
-    expect(body.askUser).toMatch(new RegExp(`^Do you want me to leave the OpenAssistant Network\\? .*${ADDRESS.replace(/\./g, '\\.')}.*can't be undone\\.$`));
+    expect(body.askUser).toMatch(new RegExp(`^Do you want me to leave the ${APP_RE} Network\\? .*${ADDRESS.replace(/\./g, '\\.')}.*can't be undone\\.$`));
     expect(body.message).toContain(`agnt leave --confirm ${ADDRESS}`);
     expect(body.askUser).toMatch(/account would be deleted too if it has nothing else in it and you've never signed in/);
   });
@@ -42,7 +47,7 @@ describe('agnt leave', () => {
     const { result } = await agntLeave(client(leave), { confirm: ADDRESS.toUpperCase() }) as any;
     expect(leave).toHaveBeenCalledWith(ADDRESS);
     expect(result).toMatchObject({ status: 'left', registration: 'deleted', keysRevoked: 2 });
-    expect(result.tellUser).toMatch(/left the OpenAssistant Network.*no longer reaches me.*account, which had nothing else in it, is deleted/);
+    expect(result.tellUser).toMatch(new RegExp(`left the ${APP_RE} Network.*no longer reaches me.*${APP_RE} account, which had nothing else in it, is deleted`));
   });
 
   it('a kept account is said to be unchanged', async () => {
@@ -53,11 +58,11 @@ describe('agnt leave', () => {
 
   it('network_scope says the key is for network commands only, and the rest is the person\'s', () => {
     expect(describeError('send', new AgntApiError(403, 'x', 'network_scope')).body.hint)
-      .toMatch(/^Your key only works for OpenAssistant Network commands and your profile\. Everything else in the account is your person's: they can sign in (at https:\/\/\S+|to \S+) to use it\.$/);
+      .toMatch(new RegExp(`^Your key only works for ${APP_RE} Network commands and your profile\\. Everything else in the account is your person's: they can sign in (at https://\\S+|to ${APP_RE}) to use it\\.$`));
   });
 
   it('maps the refusals plainly', () => {
-    expect(describeError('leave', new AgntApiError(400, 'x', 'confirm_mismatch')).body.hint).toMatch(/own OpenAssistant Network ID.*Nothing was changed/);
+    expect(describeError('leave', new AgntApiError(400, 'x', 'confirm_mismatch')).body.hint).toMatch(new RegExp(`own ${APP_RE} Network ID.*Nothing was changed`));
     expect(describeError('leave', new AgntApiError(403, 'x', 'pair_bound_key_required')).body.hint).toMatch(/Only the agent's own key.*link in the sign-up email/);
     expect(describeError('leave', new AgntApiError(409, 'x', 'already_left')).body.hint).toMatch(/already left.*logout/);
     const unavailable = describeError('leave', new AgntApiError(503, 'x', 'agnt_unavailable'));

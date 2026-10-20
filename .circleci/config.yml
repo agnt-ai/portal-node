@@ -45,6 +45,11 @@ parameters:
   portal_url:
     type: string
     default: ""
+  # Whether the app has AGNT messaging on (its Account.featureFlags.agntMessaging): only then does its CLI keep
+  # the agnt commands, agent-guide and agent sign-up. agnt-backend's trigger sends it, as true, only when on.
+  agnt_messaging:
+    type: boolean
+    default: false
 
 jobs:
   # Runs on every push, every branch. Hydrates with a fixed dummy account
@@ -91,17 +96,18 @@ jobs:
           name: Test
           command: npm test
 
-  # The same suite on a build hydrated as openassistant, the one app whose CLI carries AGNT messaging
-  # (scripts/hydrate.mjs removes it from every other app's build, the dummy one above included). Hydration
-  # only rewrites names in the source: nothing here talks to that account or any API.
+  # The same suite on a build with AGNT messaging on (scripts/hydrate.mjs removes it from every other app's build,
+  # the dummy one above included). The app is made up, with a two-word name, so the suite proves no app's name is
+  # written into the CLI: branding.test.ts fails on any "OpenAssistant" here. Hydration only rewrites names in
+  # the source: nothing here talks to any account or API.
   test_agnt_messaging:
     docker:
       - image: cimg/node:24.20
     steps:
       - checkout
       - run:
-          name: Hydrate as the AGNT messaging app
-          command: node scripts/hydrate.mjs --account-slug openassistant --account-name "OpenAssistant" --portal-url https://app.openassistant.us
+          name: Hydrate as an app with AGNT messaging on
+          command: node scripts/hydrate.mjs --account-slug acme-assist --account-name "Acme Assist" --portal-url https://app.example.com --agnt-messaging
       - run:
           name: Install
           command: npm install
@@ -175,15 +181,19 @@ jobs:
       BUILD_ID: << pipeline.parameters.build_id >>
       WEBHOOK_URL: << pipeline.parameters.webhook_url >>
       PORTAL_URL: << pipeline.parameters.portal_url >>
+      AGNT_MESSAGING: << pipeline.parameters.agnt_messaging >>
     steps:
       - checkout
       - run:
           name: Hydrate with the real account
           command: |
+            AGNT_FLAG=""
+            if [ "$AGNT_MESSAGING" = "true" ]; then AGNT_FLAG="--agnt-messaging"; fi
             node scripts/hydrate.mjs \
               --account-slug "$ACCOUNT_SLUG" \
               --account-name "$ACCOUNT_NAME" \
-              ${PORTAL_URL:+--portal-url "$PORTAL_URL"}
+              ${PORTAL_URL:+--portal-url "$PORTAL_URL"} \
+              $AGNT_FLAG
       - run:
           # See the `test` job's Install step for why this is `npm install`,
           # not `npm ci` — no lockfile can validly exist pre-hydration.

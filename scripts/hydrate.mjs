@@ -12,7 +12,7 @@
  *   - local dev/testing, with any placeholder values you like
  *
  * Usage:
- *   node scripts/hydrate.mjs --account-slug openassistant --account-name "OpenAssistant" [--portal-url https://app.openassistant.us]
+ *   node scripts/hydrate.mjs --account-slug acme --account-name "Acme" [--portal-url https://app.example.com] [--agnt-messaging]
  *
  * Idempotent-ish: re-running with different values re-hydrates a file that
  * still contains the tokens, but does NOT revert a file already hydrated to
@@ -40,13 +40,13 @@ const SELF_PATH = fileURLToPath(import.meta.url);
 // excludes it from the build, and it's not in package.json's "files").
 const TEST_FILE_RE = /\.test\.[cm]?[jt]sx?$/;
 
-// AGNT messaging (the `agnt` commands, agent-guide, agent sign-up) ships only in these apps' CLIs. Every other
-// app's build has it removed before anything is compiled, so its CLI, help and package never carry it:
+// AGNT messaging (the `agnt` commands, agent-guide, agent sign-up) ships only in the CLIs of apps that have it on
+// (--agnt-messaging, which the publish trigger passes from the app's own config). Every other app's build has it
+// removed before anything is compiled, so its CLI, help and package never carry it:
 //   - a file whose first line holds AGNT_ONLY_MARK is deleted, and so is a Markdown file whose frontmatter does
 //     (a skill's first line must be its frontmatter's opening ---);
 //   - in any other file, the lines from one holding AGNT_BEGIN through the next holding AGNT_END are deleted.
-// The markers are plain comments, so in these apps' builds they stay and change nothing.
-const AGNT_MESSAGING_APPS = new Set(['openassistant']);
+// The markers are plain comments, so in those apps' builds they stay and change nothing.
 const AGNT_ONLY_MARK = '@agnt-messaging-only';
 const AGNT_BEGIN = '@agnt-messaging:begin';
 const AGNT_END = '@agnt-messaging:end';
@@ -126,6 +126,7 @@ function parseArgs(argv) {
     if (argv[i] === '--account-slug') out.accountSlug = argv[++i];
     else if (argv[i] === '--account-name') out.accountName = argv[++i];
     else if (argv[i] === '--portal-url') out.portalUrl = argv[++i];
+    else if (argv[i] === '--agnt-messaging') out.agntMessaging = true;
   }
   return out;
 }
@@ -145,10 +146,10 @@ async function collectFiles(dir, root, acc = []) {
 }
 
 async function main() {
-  const { accountSlug, accountName, portalUrl: givenPortalUrl } = parseArgs(process.argv.slice(2));
+  const { accountSlug, accountName, portalUrl: givenPortalUrl, agntMessaging = false } = parseArgs(process.argv.slice(2));
 
   if (!accountSlug || !accountName) {
-    console.error('Usage: node scripts/hydrate.mjs --account-slug <slug> --account-name <name> [--portal-url https://app.example.com]');
+    console.error('Usage: node scripts/hydrate.mjs --account-slug <slug> --account-name <name> [--portal-url https://app.example.com] [--agnt-messaging]');
     process.exit(1);
   }
   if (!ACCOUNT_SLUG_RE.test(accountSlug)) {
@@ -167,7 +168,7 @@ async function main() {
   const root = new URL('..', import.meta.url).pathname;
   let files = await collectFiles(root, root);
 
-  if (!AGNT_MESSAGING_APPS.has(accountSlug)) {
+  if (!agntMessaging) {
     await removeAgntMessaging(files, root);
     files = await collectFiles(root, root);
   } else {
@@ -191,7 +192,7 @@ async function main() {
     console.log(`hydrated: ${relative(root, file)}`);
   }
 
-  console.log(`\n${changed} file(s) hydrated with account=${accountSlug} (${accountName}).`);
+  console.log(`\n${changed} file(s) hydrated with account=${accountSlug} (${accountName}), AGNT messaging ${agntMessaging ? 'on' : 'off'}.`);
 }
 
 // Run as a script, not when imported (a test imports stripAgntMessaging).

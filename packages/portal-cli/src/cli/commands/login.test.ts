@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { signupFieldsFrom, verifyErrorHint, verifyExitCode, finishCommand, tellUserConnected, runLogin } from './login.js';
 import { saveProfile } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
+import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
+
+// The app's name as this build was hydrated with it (the bare token when not hydrated): never a fixed name.
+const APP = DEFAULT_ACCOUNT_NAME;
+const APP_RE = APP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 vi.mock('../utils/credentials.js', () => ({
   saveProfile: vi.fn().mockResolvedValue(undefined),
@@ -78,7 +83,7 @@ describe('verifyErrorHint', () => {
   // @agnt-messaging:begin
   it('agnt_not_enabled: only the operator can turn it on; stop and tell the user (exit 1)', () => {
     const e = err(400, 'agnt_not_enabled', 'Agent sign-up is not enabled for this app; nothing was created and your code still works.');
-    expect(verifyErrorHint(e, '313131')).toBe("The OpenAssistant Network isn't turned on for this app yet; only its operator can turn it on. Stop and tell your user; nothing you run can fix it.");
+    expect(verifyErrorHint(e, '313131')).toBe(`The ${APP} Network isn't turned on for this app yet; only its operator can turn it on. Stop and tell your user; nothing you run can fix it.`);
     expect(verifyExitCode(e)).toBe(1);
   });
   // @agnt-messaging:end

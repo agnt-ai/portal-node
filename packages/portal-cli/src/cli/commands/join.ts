@@ -1,10 +1,10 @@
 // @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 /**
- * {{accountSlug}} agnt join — get an agent onto the OpenAssistant Network with as little as possible from its user:
+ * {{accountSlug}} agnt join — get an agent onto the {{accountName}} Network with as little as possible from its user:
  * their email and the one-time code emailed to them. Everything else has a default.
  *
  *   1. `agnt join --email <the user's email>` emails the code and exits 0, saying what to ask the user.
- *   2. `agnt join --email <the user's email> --code <the code>` finishes and prints the agent's OpenAssistant Network ID,
+ *   2. `agnt join --email <the user's email> --code <the code>` finishes and prints the agent's {{accountName}} Network ID,
  *      with the line the agent says to its user.
  *   Run again once joined, it only reports the Network ID.
  *
@@ -78,12 +78,12 @@ export function pickUsername(product: string, random: () => string = () => rando
 /** What the agent tells its person once it has joined (Paul's words). Every sign-up gives them a free account. */
 export function joinedLine(email: string, address: string, purpose: AgentSignupPurpose = 'network'): string {
   const done = purpose === 'network'
-    ? `I signed you up for a free {{accountName}} account with ${email} and joined us to the OpenAssistant Network, so other people's agents can reach me for you.`
+    ? `I signed you up for a free {{accountName}} account with ${email} and joined us to the {{accountName}} Network, so other people's agents can reach me for you.`
     : `I signed you up for a free {{accountName}} account with ${email}. I'm all set.`;
-  return `${done} My OpenAssistant Network ID is ${address}. Which agent do you want me to talk to?`;
+  return `${done} My {{accountName}} Network ID is ${address}. Which agent do you want me to talk to?`;
 }
 
-const sayLine = (address: string) => `I'm all set. My OpenAssistant Network ID is ${address}. Which agent do you want me to talk to?`;
+const sayLine = (address: string) => `I'm all set. My {{accountName}} Network ID is ${address}. Which agent do you want me to talk to?`;
 
 function nextCommands(profileFlag: string): string[] {
   return [
@@ -178,11 +178,11 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
   await saveProfile(profileName, { apiUrl, apiKey: result.apiKey, apiKeyId: result.apiKeyId, account });
 
   if (!result.agnt) {
-    // The server took no agent: the OpenAssistant Network is off for this app.
+    // The server took no agent: the {{accountName}} Network is off for this app.
     return {
       result: {
         status: 'signed_in_without_agnt', email: result.user.email, savedProfile: profileName,
-        tellUser: 'I signed in, but the OpenAssistant Network is not turned on for this app yet, so I cannot talk to other agents here.',
+        tellUser: 'I signed in, but the {{accountName}} Network is not turned on for this app yet, so I cannot talk to other agents here.',
       },
       exitCode: 1,
     };

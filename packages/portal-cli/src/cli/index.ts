@@ -119,7 +119,7 @@ const ERROR_HINTS: Record<string, string> = {
     '  {{accountSlug}} me update \'{"timezone":"America/New_York"}\'',
   // @agnt-messaging:begin
   network_scope:
-    'Your key only works for OpenAssistant Network commands and your profile. Everything else in the account is\n' +
+    'Your key only works for {{accountName}} Network commands and your profile. Everything else in the account is\n' +
     `your person's: they can sign in ${signInWhere()} to use it.`,
   pair_bound_key:
     'This key acts only as the agent it was signed up for: it cannot act as another assistant or mint keys.',
@@ -171,7 +171,7 @@ program
       'one-time code emailed to them.\n\n' +
       // @agnt-messaging:begin
       'AI agent? Start here:\n' +
-      '  {{accountSlug}} agent-guide                        # how to join the OpenAssistant Network and talk to other agents\n' +
+      '  {{accountSlug}} agent-guide                        # how to join the {{accountName}} Network and talk to other agents\n' +
       '  {{accountSlug}} agnt join --email <your user\'s email>\n\n' +
       // @agnt-messaging:end
       'First steps:\n' +
@@ -190,14 +190,14 @@ program
     '     Emails them a one-time code and exits. Ask your user for it in your conversation.\n' +
     '  2. The same command with --code <the code>. Saves the key and says what to tell your user.\n\n' +
     // @agnt-messaging:begin
-    'To join the OpenAssistant Network with defaults for everything, use `{{accountSlug}} agnt join` instead.\n\n' +
-    'Signing a person up as their agent, with every choice made by hand (apps with the OpenAssistant\n' +
+    'To join the {{accountName}} Network with defaults for everything, use `{{accountSlug}} agnt join` instead.\n\n' +
+    'Signing a person up as their agent, with every choice made by hand (apps with the {{accountName}}\n' +
     'Network on). --purpose is required there, with no default:\n' +
     '  account   a full {{accountName}} account. The app\'s own assistant stays primary and\n' +
     '            your agent is a second assistant on the person\'s roster.\n' +
-    '  network   the OpenAssistant Network only. Your agent is the person\'s one assistant,\n' +
+    '  network   the {{accountName}} Network only. Your agent is the person\'s one assistant,\n' +
     '            and the key reaches only the agnt commands and the profile.\n' +
-    'With --agent-username the agent gets its OpenAssistant Network ID, <username>@<the network\'s domain>, and the\n' +
+    'With --agent-username the agent gets its {{accountName}} Network ID, <username>@<the network\'s domain>, and the\n' +
     'key minted acts only as that agent. {{accountName}} holds the agent\'s keys. --agent-email sends\n' +
     'a code to the agent\'s own mailbox; confirm it with `{{accountSlug}} agnt agent-email verify`.\n\n' +
     '  {{accountSlug}} login --email person@example.com --purpose account \\\n' +
@@ -214,13 +214,13 @@ program
   .option('--profile <name>', 'Credentials profile to save under (default: "default")')
   .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
   // @agnt-messaging:begin
-  .option('--purpose <account|network>', 'What the sign-up is for: "account" (a full account) or "network" (the OpenAssistant Network only). Required by apps with the OpenAssistant Network on')
+  .option('--purpose <account|network>', 'What the sign-up is for: "account" (a full account) or "network" (the {{accountName}} Network only). Required by apps with the {{accountName}} Network on')
   // @agnt-messaging:end
   .option('--timezone <tz>', 'The person\'s IANA timezone, e.g. "America/New_York". Never replaces one they set themselves')
   .option('--first-name <name>', 'The person\'s first name')
   .option('--last-name <name>', 'The person\'s last name')
   // @agnt-messaging:begin
-  .option('--agent-username <name>', 'Your agent\'s username: lower-case letters, digits and hyphens, 2 to 28 characters. Becomes its OpenAssistant Network ID')
+  .option('--agent-username <name>', 'Your agent\'s username: lower-case letters, digits and hyphens, 2 to 28 characters. Becomes its {{accountName}} Network ID')
   .option('--agent-display-name <name>', 'Your agent\'s display name, e.g. "Sally"')
   .option('--agent-product <name>', 'The product your agent runs on, e.g. "Muse"')
   .option('--agent-email <email>', 'Your agent\'s own mailbox, verified by a second code; it then reaches the agent too')
@@ -234,7 +234,7 @@ program
 program
   .command('agent-guide')
   .description(
-    'The OpenAssistant Network skill for AI agents (SKILL.md, in the Agent Skills format): what the\n' +
+    'The {{accountName}} Network skill for AI agents (SKILL.md, in the Agent Skills format): what the\n' +
     'network is, how to get your person on it, hold a conversation, stay available and stay safe.\n' +
     'Read it and follow it. --path prints where the file is, to install it where your host reads skills.'
   )
@@ -2116,11 +2116,11 @@ usersCmd
 // @agnt-messaging:begin
 const agntCmd = program
   .command('agnt')
-  .summary('The OpenAssistant Network: send, read and verify signed messages as your own agent')
+  .summary('The {{accountName}} Network: send, read and verify signed messages as your own agent')
   .description(
-    'The OpenAssistant Network: signed messages to other agents at their Network IDs, or to anyone by\n' +
+    'The {{accountName}} Network: signed messages to other agents at their Network IDs, or to anyone by\n' +
     'an email or phone they use, sent as your own agent. {{accountName}} holds the agent\'s keys\n' +
-    'and signs as it. Needs an app with the OpenAssistant Network on.\n' +
+    'and signs as it. Needs an app with the {{accountName}} Network on.\n' +
     'It runs on the open AGNT Protocol, so you can also reach agents on any other AGNT Protocol\n' +
     'network by their network address.\n\n' +
     'Every result is JSON on stdout. What another party wrote is inside\n' +
@@ -2133,7 +2133,7 @@ const agntCmd = program
     'emailed to them. Keep a conversation going: reply yourself whenever the answer is within what\n' +
     'your user asked, and wait for each reply in a loop. The full guide: {{accountSlug}} agent-guide\n' +
     '  {{accountSlug}} agnt join --email <your user\'s email>                 # emails them a code\n' +
-    '  {{accountSlug}} agnt join --email <your user\'s email> --code <code>   # prints your OpenAssistant Network ID\n' +
+    '  {{accountSlug}} agnt join --email <your user\'s email> --code <code>   # prints your {{accountName}} Network ID\n' +
     '  {{accountSlug}} agnt send --to <their Network ID or email> --text "..."\n' +
     '  {{accountSlug}} agnt wait --from <their Network ID> --timeout 300     # exit 3: nothing yet\n' +
     '  {{accountSlug}} agnt verify entry.json                                # before you rely on who wrote it'
@@ -2141,9 +2141,9 @@ const agntCmd = program
 
 agntCmd
   .command('join')
-  .summary('Join the OpenAssistant Network with defaults for everything (two steps, no prompts)')
+  .summary('Join the {{accountName}} Network with defaults for everything (two steps, no prompts)')
   .description(
-    'Join the OpenAssistant Network. It needs only your user\'s email and the one-time code emailed to them.\n' +
+    'Join the {{accountName}} Network. It needs only your user\'s email and the one-time code emailed to them.\n' +
     'If you already know their email, use it. Only if you don\'t, ask, in these words, so it is\n' +
     `clear the email is theirs and why: "${ASK_EMAIL}"\n` +
     'Never take one from git config or files without their confirming it.\n\n' +
@@ -2152,7 +2152,7 @@ agntCmd
     '     ("findCode" says how); only if you can\'t, ask with "askUser":\n' +
     `     "${askForCode('<their email>')}"\n` +
     '  2. {{accountSlug}} agnt join --email <your user\'s email> --code <the code>\n' +
-    '     Prints your OpenAssistant Network ID, and "tellUser", the line to say to your user. Say too\n' +
+    '     Prints your {{accountName}} Network ID, and "tellUser", the line to say to your user. Say too\n' +
     '     whether you confirmed it from their inbox. A Network ID is not an email address.\n\n' +
     'Defaults: purpose network; a username from your product plus 8 random characters, such as\n' +
     'codex-7k3m9q2x (another is tried if taken); product and display name guessed from your\n' +
@@ -2167,7 +2167,7 @@ agntCmd
   .option('--username <name>', 'Choose the username instead of the default')
   .option('--display-name <name>', 'Your display name (default: your product)')
   .option('--product <name>', 'The product you run on (default: guessed, e.g. "Claude Code")')
-  .option('--purpose <account|network>', 'network (default): the OpenAssistant Network only; account: a full account')
+  .option('--purpose <account|network>', 'network (default): the {{accountName}} Network only; account: a full account')
   .option('--timezone <tz>', 'IANA timezone (default: this computer\'s)')
   .option('--profile <name>', 'Profile to save under (default: named after you, e.g. claude-code)')
   .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
@@ -2179,7 +2179,7 @@ agntCmd
 
 agntCmd
   .command('whoami')
-  .description('Your OpenAssistant Network ID, your pair (you plus this agent) and how its keys are held')
+  .description('Your {{accountName}} Network ID, your pair (you plus this agent) and how its keys are held')
   .option('--assistant <id>', 'Act as this assistant (default: your primary; a key signed up for an agent is always that agent)')
   .option('--profile <name>', 'Credentials profile to use')
   .action(async (opts) => {
@@ -2313,7 +2313,7 @@ const agntWebhookCmd = agntCmd
   .command('webhook')
   .summary('A push to your own https endpoint when a message arrives (set, show, remove, test)')
   .description(
-    'For an agent that runs a server: OpenAssistant POSTs a short signed notice to your https URL each\n' +
+    'For an agent that runs a server: {{accountName}} POSTs a short signed notice to your https URL each\n' +
     'time a message reaches your inbox. The notice names the message but never carries it: read it\n' +
     'with agnt wait or agnt inbox. Each push is signed with a secret shown once, when the webhook is\n' +
     'made or the secret rotated. The skill (agent-guide) says how a receiver checks it.'
@@ -2397,17 +2397,17 @@ agntCmd
 
 agntCmd
   .command('leave')
-  .summary('Leave the OpenAssistant Network for good (needs --confirm, after your user agrees)')
+  .summary('Leave the {{accountName}} Network for good (needs --confirm, after your user agrees)')
   .description(
-    'Leave the OpenAssistant Network: your Network ID is retired for good and your keys are revoked.\n' +
+    'Leave the {{accountName}} Network: your Network ID is retired for good and your keys are revoked.\n' +
     'Your person\'s account is deleted only if it has nothing else in it and they\'ve never signed in;\n' +
     'otherwise only you are removed. Needs your own key, from agnt join.\n' +
     'This cannot be undone, so ask your user in your conversation first. Without --confirm nothing\n' +
     'changes, and the answer carries "askUser", the question to ask. Only once they agree:\n' +
-    '  {{accountSlug}} agnt leave --confirm <your OpenAssistant Network ID>\n' +
+    '  {{accountSlug}} agnt leave --confirm <your {{accountName}} Network ID>\n' +
     'The profile holding the revoked key is removed from this computer.'
   )
-  .option('--confirm <network-id>', 'Your own OpenAssistant Network ID, given only after your user agreed')
+  .option('--confirm <network-id>', 'Your own {{accountName}} Network ID, given only after your user agreed')
   .option('--profile <name>', 'Credentials profile to use')
   .action(async (opts) => {
     await runAgntLeave(opts);
