@@ -45,6 +45,7 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
     expect(s).toMatch(/look there first for the newest verification email/);
     expect(s).toMatch(/askUser/);
     expect(s).toMatch(/tellUser/);
+    expect(s).toMatch(/it is not an\s+\S+ account, so don't call it one/);
   });
 
   it('conversation: reply yourself, minutes not seconds, wait is the one way to hear back, threads, when to stop', () => {

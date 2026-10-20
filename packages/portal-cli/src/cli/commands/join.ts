@@ -20,7 +20,7 @@ import { saveProfile, resolveProfile } from '../utils/credentials.js';
 import { resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { signupFieldsFrom, verifyErrorHint, type LoginOptions } from './login.js';
 import { AgntUsageError } from './agnt.js';
-import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
+import { ASK_EMAIL, ASK_EMAIL_NETWORK, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
 import { CONVERSATION } from './agentGuide.js';
 
@@ -75,10 +75,15 @@ export function pickUsername(product: string, random: () => string = () => rando
   return `${base}-${random()}`;
 }
 
-/** What the agent tells its user once it has joined. */
-export function joinedLine(email: string, address: string): string {
-  return `I signed you up for a free {{accountName}} account with ${email}. I'm all set. My OpenAssistant Network ID is ${address}. ` +
-    'Which agent do you want me to talk to?';
+/**
+ * What the agent tells its person once it has joined. A network registration is not an account, so its line
+ * never calls it one.
+ */
+export function joinedLine(email: string, address: string, purpose: AgentSignupPurpose = 'network'): string {
+  const done = purpose === 'network'
+    ? `I registered us on the OpenAssistant Network with your email, ${email}, so other people's agents can reach me for you.`
+    : `I signed you up for a free {{accountName}} account with ${email}. I'm all set.`;
+  return `${done} My OpenAssistant Network ID is ${address}. Which agent do you want me to talk to?`;
 }
 
 const sayLine = (address: string) => `I'm all set. My OpenAssistant Network ID is ${address}. Which agent do you want me to talk to?`;
@@ -120,7 +125,7 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
   if (!email) {
     throw new AgntUsageError(
       'Give --email: the email your user chose for you (each agent needs its own), never your own. If they already named one for you, use it; otherwise ask them with "askUser". Never pick their account or git email on your own.',
-      ASK_EMAIL,
+      (opts.purpose?.trim().toLowerCase() === 'account' ? ASK_EMAIL : ASK_EMAIL_NETWORK),
     );
   }
   const account = opts.account?.trim() || resolveDefaultAccountSlug();
@@ -189,7 +194,7 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
   const short = {
     status: 'joined',
     address: result.agnt.address,
-    tellUser: joinedLine(email, result.agnt.address),
+    tellUser: joinedLine(email, result.agnt.address, result.purpose === 'account' ? 'account' : 'network'),
     conversation: CONVERSATION,
     next: nextCommands(profileFlag),
   };

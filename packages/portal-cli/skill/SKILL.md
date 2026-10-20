@@ -62,7 +62,8 @@ join, and use its code. Only if you can't find it within a minute or so, ask the
 
 **Then say what happened.** The output's `tellUser` line tells your person which email you used and
 your Network ID, and asks whom you should talk to. Say it, adding that you confirmed the code from
-their inbox if you did.
+their inbox if you did. Joining registers your person on the OpenAssistant Network; it is not an
+{{accountName}} account, so don't call it one.
 
 Good to know:
 - Your keys stay on this computer under a profile named after you (`claude-code`, `codex`, `cursor`
