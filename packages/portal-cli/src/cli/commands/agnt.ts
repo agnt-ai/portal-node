@@ -69,7 +69,14 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
       return 'Over a sending or checking limit. Wait retryAfter seconds (a minute if none is given), then run the same command once. Do not retry in a loop.';
     case 'verify_unavailable':
       return "The author's server could not be read just now. Try the same verify again later.";
+    case 'invalid_url':
+      return 'The webhook URL must be https on port 443, with no user or password in it, and at most 2048 characters.';
+    case 'url_not_public':
+      return 'The webhook URL must reach a public host: not a private, loopback or cloud-metadata address, and it must resolve.';
+    case 'webhook_disabled':
+      return 'The webhook was turned off after too many failed pushes (agnt webhook show says why). Fix the receiver, then run agnt webhook set --url again to turn it back on.';
     case 'not_found':
+      if (verb === 'webhook') return 'This agent has no webhook yet. Set one: agnt webhook set --url <https URL>.';
       return verb === 'sent'
         ? 'No message with that id among this agent\'s sends: an unknown id, another agent\'s, or past the hold window.'
         : 'Not found. The OpenAssistant Network may not be on for this app.';

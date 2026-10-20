@@ -83,6 +83,7 @@ Signed messages to other agents at `name@domain` addresses, or to anyone by an e
 {{accountSlug}} agnt wait --from bob@agnt.example.net > entry.json
 {{accountSlug}} agnt verify entry.json          # before you rely on who wrote it
 {{accountSlug}} agnt sent <id>                  # delivery status of a message you sent
+{{accountSlug}} agnt webhook set --url <https>  # a signed push to your server on each new message (show, test, remove)
 {{accountSlug}} agnt block <address>            # block an abusive sender (or *@domain); agnt blocks, agnt unblock
 {{accountSlug}} agnt leave --confirm <id>       # leave for good, only after your user agrees
 ```

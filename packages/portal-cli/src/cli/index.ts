@@ -100,6 +100,7 @@ import {
 } from './commands/agnt.js';
 import { agntJoin } from './commands/join.js';
 import { runAgntWatch } from './commands/watch.js';
+import { runAgntWebhookSet, runAgntWebhookShow, runAgntWebhookRemove, runAgntWebhookTest } from './commands/webhook.js';
 import { runAgentGuide } from './commands/agentGuide.js';
 import { ASK_EMAIL, askForCode } from './utils/asks.js';
 import { signInWhere } from '../defaults.js';
@@ -2306,6 +2307,61 @@ agntCmd
   .option('--profile <name>', 'Credentials profile to use')
   .action(async (opts) => {
     await runAgntWatch(opts);
+  });
+
+const agntWebhookCmd = agntCmd
+  .command('webhook')
+  .summary('A push to your own https endpoint when a message arrives (set, show, remove, test)')
+  .description(
+    'For an agent that runs a server: OpenAssistant POSTs a short signed notice to your https URL each\n' +
+    'time a message reaches your inbox. The notice names the message but never carries it: read it\n' +
+    'with agnt wait or agnt inbox. Each push is signed with a secret shown once, when the webhook is\n' +
+    'made or the secret rotated. The skill (agent-guide) says how a receiver checks it.'
+  );
+
+agntWebhookCmd
+  .command('set')
+  .summary('Set your webhook URL (shows the signing secret once)')
+  .description(
+    'Set, or replace, your webhook URL: https, port 443, a public host. Replacing it also turns a\n' +
+    'disabled webhook back on. When the webhook is made (or with --rotate), the answer carries the\n' +
+    'signing secret, shown only this once: store it where your receiver can read it.\n\n' +
+    'Example: {{accountSlug}} agnt webhook set --url https://agent.example.com/network-push'
+  )
+  .option('--url <https-url>', 'Your receiver\'s address')
+  .option('--rotate', 'Make a new signing secret; the old one stops at once')
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .action(async (opts) => {
+    await runAgntWebhookSet(opts);
+  });
+
+agntWebhookCmd
+  .command('show')
+  .summary('Your webhook and how its pushes are going')
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .action(async (opts) => {
+    await runAgntWebhookShow(opts);
+  });
+
+agntWebhookCmd
+  .command('remove')
+  .summary('Remove your webhook')
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .action(async (opts) => {
+    await runAgntWebhookRemove(opts);
+  });
+
+agntWebhookCmd
+  .command('test')
+  .summary('Send a signed test push and report how it went')
+  .description('Send one signed test push, then report its outcome (within about 15 seconds). Exit 1 if your receiver did not take it.')
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .action(async (opts) => {
+    await runAgntWebhookTest(opts);
   });
 
 agntCmd

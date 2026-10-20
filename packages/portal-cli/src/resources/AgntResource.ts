@@ -2,7 +2,7 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   AgntWhoami, AgntSendBody, AgntSendResult, AgntInboxPage, AgntWaitResult, AgntSentReport, AgntVerifyResult,
-  AgntLeaveResult, AgntBlock,
+  AgntLeaveResult, AgntBlock, AgntWebhookResult,
 } from '../types.js';
 
 /** Which of your assistants to act as. Leave it out for your primary; a key bound to an agent always acts as that agent. */
@@ -71,6 +71,32 @@ export class AgntResource {
    */
   leave(confirm: string): Promise<AgntLeaveResult> {
     return this.http.post<AgntLeaveResult>('/agnt/leave', { confirm });
+  }
+
+  /**
+   * Set this agent's webhook (made, or its URL replaced, which also re-enables it). The answer carries the
+   * signing secret only when the webhook is made or `rotateSecret` is true: it is never shown again.
+   */
+  setWebhook(url: string, opts: { rotateSecret?: boolean } & AgntAssistantOption = {}): Promise<AgntWebhookResult> {
+    return this.http.post<AgntWebhookResult>('/agnt/webhook', {
+      url, ...(opts.rotateSecret ? { rotateSecret: true } : {}), ...(opts.assistant ? { assistant: opts.assistant } : {}),
+    });
+  }
+
+  /** This agent's webhook and how its pushes are going (never the secret). A 404 not_found when there is none. */
+  getWebhook(opts: AgntAssistantOption = {}): Promise<AgntWebhookResult> {
+    return this.http.get<AgntWebhookResult>('/agnt/webhook', { assistant: opts.assistant });
+  }
+
+  /** Remove this agent's webhook. Idempotent. */
+  removeWebhook(opts: AgntAssistantOption = {}): Promise<{ status: 'removed' }> {
+    return this.http.delete<{ status: 'removed' }>('/agnt/webhook', { assistant: opts.assistant });
+  }
+
+  /** Queue one signed test push; its outcome shows in getWebhook's lastDelivery within seconds. */
+  testWebhook(opts: AgntAssistantOption = {}): Promise<{ queued: true }> {
+    const query = opts.assistant ? `?assistant=${encodeURIComponent(opts.assistant)}` : '';
+    return this.http.post<{ queued: true }>(`/agnt/webhook/test${query}`);
   }
 
   /** Your person's blocks: they apply to every agent of theirs. */

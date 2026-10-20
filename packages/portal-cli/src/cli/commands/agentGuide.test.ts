@@ -61,7 +61,13 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
 
   it('staying available covers each kind of host', () => {
     const s = section('5. Staying available');
-    for (const host of ['Claude Code', 'scheduled tasks', 'agnt watch --exec', 'chat app']) expect(s).toContain(host);
+    for (const host of ['Claude Code', 'scheduled tasks', 'agnt watch --exec', 'agnt webhook set', 'chat app']) expect(s).toContain(host);
+    expect(s).toMatch(/### Receiving a webhook/);
+    expect(s).toMatch(/The secret is shown once/);
+    expect(s).toMatch(/never carries it/);
+    expect(s).toMatch(/HMAC-SHA256.*keyed with your secret, over the `AGNT-Webhook-Timestamp` header, a dot, and the raw\s+body/s);
+    expect(s).toMatch(/compare in constant time\. Reject a timestamp more than 300 seconds from now/);
+    expect(s).toMatch(/Drop repeats\*\* by the `AGNT-Webhook-Id` header/);
     expect(s).toMatch(/never in the command line/);
   });
 
@@ -81,7 +87,7 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
     const s = section('7. When things go wrong');
     for (const code of ['not_joined', 'otp_invalid', 'otp_expired', 'agnt_not_enabled', 'agnt_unavailable', 'rate_limited',
       'verify_unavailable', 'not_found', 'pair_bound_key', 'network_scope', 'confirm_mismatch', 'network_error',
-      'invalid_match', 'agnt_blocks_full']) {
+      'invalid_match', 'agnt_blocks_full', 'invalid_url', 'url_not_public', 'webhook_disabled']) {
       expect(s).toContain(code);
     }
     expect(s).toMatch(/Only the app's operator\. Stop and tell your person\./);
@@ -91,13 +97,14 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
 
   it('the reference lists every agnt command the CLI has', () => {
     const s = section('8. Command reference');
-    for (const c of ['agent-guide', 'agnt join', 'agnt whoami', 'agnt send', 'agnt wait', 'agnt inbox', 'agnt sent', 'agnt verify', 'agnt watch', 'agnt leave', 'agnt block', 'agnt blocks', 'agnt unblock']) {
+    for (const c of ['agent-guide', 'agnt join', 'agnt whoami', 'agnt send', 'agnt wait', 'agnt inbox', 'agnt sent', 'agnt verify', 'agnt watch', 'agnt leave', 'agnt block', 'agnt blocks', 'agnt unblock', 'agnt webhook set', 'agnt webhook show']) {
       expect(s).toContain(c);
     }
   });
 
   it('speaks of the OpenAssistant Network: "AGNT" only as "AGNT Protocol", and never calls a Network ID an email', () => {
-    expect(skill.replace(/AGNT Protocol/g, '').replace(/agnt/g, '')).not.toMatch(/AGNT/);
+    // The webhook header names are the server's identifiers, which a receiver must match exactly.
+    expect(skill.replace(/AGNT Protocol/g, '').replace(/AGNT-Webhook-(Id|Timestamp|Signature)/g, '').replace(/agnt/g, '')).not.toMatch(/AGNT/);
     expect(skill).not.toMatch(/Network ID is (an|your) email/i);
     expect(CONVERSATION).not.toMatch(/AGNT/);
   });

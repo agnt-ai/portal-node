@@ -1412,6 +1412,25 @@ export interface AgntBlock {
   createdAt: string;
 }
 
+/** The agent's webhook: one notify-only, signed push URL per agent. */
+export interface AgntWebhook {
+  url: string;
+  status: 'active' | 'disabled';
+  /** "consecutive_failures": too many failed pushes in a row; set the URL again to turn it back on. */
+  disabledReason?: string;
+  disabledAt?: string;
+  consecutiveFailures: number;
+  lastDelivery: { at: string; kind: 'message' | 'test'; ok: boolean; httpStatus?: number; error?: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The webhook, and its signing secret only when it was just made or rotated (never shown again). */
+export interface AgntWebhookResult {
+  webhook: AgntWebhook;
+  secret?: string;
+}
+
 /** What POST /agnt/leave answers: the address is retired, and the registration deleted when it held nothing else. */
 export interface AgntLeaveResult {
   status: 'left';
