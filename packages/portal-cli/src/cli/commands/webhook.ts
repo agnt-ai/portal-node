@@ -41,9 +41,12 @@ const realClock: WaitClock = {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
 
-/** The test push's own outcome: a test delivery recorded since it was asked for (a little clock skew allowed). */
+/**
+ * The test push's own outcome, recorded since it was asked for (a little clock skew allowed): `lastTest`, which
+ * only test pushes write, or on an older server a test-kind `lastDelivery` (which a message push can overwrite).
+ */
 function testOutcome(webhook: AgntWebhook, askedAt: number) {
-  const d = webhook.lastDelivery;
+  const d = webhook.lastTest !== undefined ? webhook.lastTest : webhook.lastDelivery;
   return d && d.kind === 'test' && Date.parse(d.at) >= askedAt - 5000 ? d : null;
 }
 

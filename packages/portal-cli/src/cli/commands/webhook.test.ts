@@ -70,6 +70,19 @@ describe('agnt webhook', () => {
     expect(out).toEqual({ result: { queued: true, delivery: mine }, exitCode: 0 });
   });
 
+  it('reads lastTest, which message pushes never overwrite, over lastDelivery', async () => {
+    const mine = { at: '2026-10-20T15:00:02.000Z', kind: 'test', ok: true, httpStatus: 200 };
+    const racing = { at: '2026-10-20T15:00:03.000Z', kind: 'message', ok: false, httpStatus: 500, error: 'http_500' };
+    const c = { agnt: { testWebhook: vi.fn().mockResolvedValue({ queued: true }), getWebhook: vi.fn().mockResolvedValue({ webhook: { ...hook(racing), lastTest: mine } }) } } as any;
+    expect(await agntWebhookTest(c, {}, fakeClock())).toEqual({ result: { queued: true, delivery: mine }, exitCode: 0 });
+  });
+
+  it('a lastTest from before this request does not count', async () => {
+    const stale = { at: '2026-10-20T14:00:00.000Z', kind: 'test', ok: true, httpStatus: 200 };
+    const c = { agnt: { testWebhook: vi.fn().mockResolvedValue({ queued: true }), getWebhook: vi.fn().mockResolvedValue({ webhook: { ...hook(null), lastTest: stale } }) } } as any;
+    expect((await agntWebhookTest(c, { waitSeconds: 4 }, fakeClock()) as any).result.delivery).toBeNull();
+  });
+
   it('a test push the receiver refused exits 1 with a hint', async () => {
     const failed = { at: '2026-10-20T15:00:02.000Z', kind: 'test', ok: false, httpStatus: 500, error: 'http_500' };
     const c = { agnt: { testWebhook: vi.fn().mockResolvedValue({ queued: true }), getWebhook: vi.fn().mockResolvedValue({ webhook: hook(failed) }) } } as any;

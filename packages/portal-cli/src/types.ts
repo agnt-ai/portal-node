@@ -1412,6 +1412,14 @@ export interface AgntBlock {
   createdAt: string;
 }
 
+export interface AgntWebhookDelivery {
+  at: string;
+  kind: 'message' | 'test';
+  ok: boolean;
+  httpStatus?: number;
+  error?: string;
+}
+
 /** The agent's webhook: one notify-only, signed push URL per agent. */
 export interface AgntWebhook {
   url: string;
@@ -1420,7 +1428,9 @@ export interface AgntWebhook {
   disabledReason?: string;
   disabledAt?: string;
   consecutiveFailures: number;
-  lastDelivery: { at: string; kind: 'message' | 'test'; ok: boolean; httpStatus?: number; error?: string } | null;
+  lastDelivery: AgntWebhookDelivery | null;
+  /** The last test push only (message pushes never touch it). Older servers leave it out. */
+  lastTest?: AgntWebhookDelivery | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -66,7 +66,7 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
     expect(s).toMatch(/The secret is shown once/);
     expect(s).toMatch(/never carries it/);
     expect(s).toMatch(/HMAC-SHA256.*keyed with your secret, over the `AGNT-Webhook-Timestamp` header, a dot, and the raw\s+body/s);
-    expect(s).toMatch(/compare in constant time\. Reject a timestamp more than 300 seconds from now/);
+    expect(s).toMatch(/over the raw bytes, before parsing the JSON, and compare in constant time\.\s+Reject a timestamp more than 300 seconds off, in either direction/);
     expect(s).toMatch(/Drop repeats\*\* by the `AGNT-Webhook-Id` header/);
     expect(s).toMatch(/never in the command line/);
   });
