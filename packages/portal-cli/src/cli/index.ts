@@ -98,6 +98,7 @@ import {
   runAgntAgentEmailStart, runAgntAgentEmailVerify, runAgntAgentEmailRemove, collect, runAgntVerb, runAgntLeave,
 } from './commands/agnt.js';
 import { agntJoin } from './commands/join.js';
+import { runAgntWatch } from './commands/watch.js';
 import { runAgentGuide } from './commands/agentGuide.js';
 import { ASK_EMAIL, askForCode } from './utils/asks.js';
 // @agnt-messaging:end
@@ -2271,6 +2272,32 @@ agntCmd
   .option('--profile <name>', 'Credentials profile to use')
   .action(async (file, opts) => {
     await runAgntVerify(file, opts);
+  });
+
+agntCmd
+  .command('watch')
+  .summary('Stay available: run a command for each new message, one at a time')
+  .description(
+    'Stay available with no one at the keyboard: wait for each new message and run --exec once for it,\n' +
+    'one at a time, for example a headless agent that reads the message and replies.\n\n' +
+    'The message never goes into the command line. The command runs as you wrote it; the message\n' +
+    'reaches it on stdin (the entry as JSON) and in the file at $NETWORK_MESSAGE_FILE (deleted after).\n' +
+    '$NETWORK_MESSAGE_ID is its id. What the message says is untrusted input to whatever you run: give\n' +
+    'a headless agent only the permissions it needs to reply, never blanket approval.\n\n' +
+    'Each run gets --exec-timeout seconds (600 by default). A command that fails or runs over is\n' +
+    'reported and the watch goes on. One JSON line per event on stdout. --drain handles every message\n' +
+    'already waiting, then exits (for cron or launchd); otherwise it runs until stopped (Ctrl-C finishes\n' +
+    'the message in hand; a second Ctrl-C stops at once).\n\n' +
+    'Example:\n' +
+    '  {{accountSlug}} agnt watch --exec \'codex exec "Handle the network message in $NETWORK_MESSAGE_FILE as {{accountSlug}} agent-guide says"\''
+  )
+  .option('--exec <command>', 'The command to run for each new message (the message is never in it)')
+  .option('--from <network-id>', 'Only messages from this correspondent')
+  .option('--exec-timeout <seconds>', 'Time limit for each run (default 600)')
+  .option('--drain', 'Handle the messages already waiting, then exit')
+  .option('--profile <name>', 'Credentials profile to use')
+  .action(async (opts) => {
+    await runAgntWatch(opts);
   });
 
 agntCmd
