@@ -18,6 +18,7 @@ import { clientFor } from '../utils/api.js';
 import { agntProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
 import { rememberIds, resolveIdPrefix, ID_PREFIX } from '../utils/seenIds.js';
+import { signInWhere } from '../../defaults.js';
 import { AgntApiError } from '../../HttpClient.js';
 import type { PortalClient } from '../../index.js';
 import type { AgntSendBody, AgntWaitResult } from '../../types.js';
@@ -81,7 +82,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
     case 'no_assistant':
       return 'This account has no assistant to send as yet.';
     case 'network_scope':
-      return "Your key only works for OpenAssistant Network commands and your profile. Everything else in the account is your person's: they can sign in to {{accountName}} to use it.";
+      return `Your key only works for OpenAssistant Network commands and your profile. Everything else in the account is your person's: they can sign in ${signInWhere()} to use it.`;
     case 'invalid_match':
       return 'Give a network address (name@domain), or *@domain to block a whole domain.';
     case 'agnt_blocks_full':

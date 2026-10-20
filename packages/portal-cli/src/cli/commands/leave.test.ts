@@ -53,7 +53,7 @@ describe('agnt leave', () => {
 
   it('network_scope says the key is for network commands only, and the rest is the person\'s', () => {
     expect(describeError('send', new AgntApiError(403, 'x', 'network_scope')).body.hint)
-      .toMatch(/^Your key only works for OpenAssistant Network commands and your profile\. Everything else in the account is your person's: they can sign in to \S+ to use it\.$/);
+      .toMatch(/^Your key only works for OpenAssistant Network commands and your profile\. Everything else in the account is your person's: they can sign in (at https:\/\/\S+|to \S+) to use it\.$/);
   });
 
   it('maps the refusals plainly', () => {

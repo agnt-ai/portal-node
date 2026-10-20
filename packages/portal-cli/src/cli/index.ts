@@ -102,6 +102,7 @@ import { agntJoin } from './commands/join.js';
 import { runAgntWatch } from './commands/watch.js';
 import { runAgentGuide } from './commands/agentGuide.js';
 import { ASK_EMAIL, askForCode } from './utils/asks.js';
+import { signInWhere } from '../defaults.js';
 // @agnt-messaging:end
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
 import { AgntApiError } from '../HttpClient.js';
@@ -118,7 +119,7 @@ const ERROR_HINTS: Record<string, string> = {
   // @agnt-messaging:begin
   network_scope:
     'Your key only works for OpenAssistant Network commands and your profile. Everything else in the account is\n' +
-    'your person\'s: they can sign in to {{accountName}} to use it.',
+    `your person's: they can sign in ${signInWhere()} to use it.`,
   pair_bound_key:
     'This key acts only as the agent it was signed up for: it cannot act as another assistant or mint keys.',
   // @agnt-messaging:end

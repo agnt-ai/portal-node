@@ -85,7 +85,8 @@ describe('the OpenAssistant Network skill (SKILL.md)', () => {
       expect(s).toContain(code);
     }
     expect(s).toMatch(/Only the app's operator\. Stop and tell your person\./);
-    expect(s).toMatch(/`network_scope` \| Your key only works for OpenAssistant Network commands and your profile\. Everything else in the account is your person's\. \| Your person: they sign in to \S+ to use it\./);
+    expect(s).toMatch(/`network_scope` \| Your key only works for OpenAssistant Network commands and your profile\. Everything else in the account is your person's\. \| Your person: they sign in at (https:\/\/\S+|the \S+ web app) to use it\./);
+    expect(s).not.toContain('{{portalUrl}}');
   });
 
   it('the reference lists every agnt command the CLI has', () => {

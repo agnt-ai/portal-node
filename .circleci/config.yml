@@ -40,6 +40,11 @@ parameters:
   webhook_url:
     type: string
     default: ""
+  # The app's own web address (https origin), for text that sends a person there. Optional: without it the
+  # text names the app's web app instead. agnt-backend's trigger sends it once it knows the portal's host.
+  portal_url:
+    type: string
+    default: ""
 
 jobs:
   # Runs on every push, every branch. Hydrates with a fixed dummy account
@@ -96,7 +101,7 @@ jobs:
       - checkout
       - run:
           name: Hydrate as the AGNT messaging app
-          command: node scripts/hydrate.mjs --account-slug openassistant --account-name "OpenAssistant"
+          command: node scripts/hydrate.mjs --account-slug openassistant --account-name "OpenAssistant" --portal-url https://app.openassistant.us
       - run:
           name: Install
           command: npm install
@@ -169,6 +174,7 @@ jobs:
       ACCOUNT_NAME: << pipeline.parameters.account_name >>
       BUILD_ID: << pipeline.parameters.build_id >>
       WEBHOOK_URL: << pipeline.parameters.webhook_url >>
+      PORTAL_URL: << pipeline.parameters.portal_url >>
     steps:
       - checkout
       - run:
@@ -176,7 +182,8 @@ jobs:
           command: |
             node scripts/hydrate.mjs \
               --account-slug "$ACCOUNT_SLUG" \
-              --account-name "$ACCOUNT_NAME"
+              --account-name "$ACCOUNT_NAME" \
+              ${PORTAL_URL:+--portal-url "$PORTAL_URL"}
       - run:
           # See the `test` job's Install step for why this is `npm install`,
           # not `npm ci` — no lockfile can validly exist pre-hydration.
