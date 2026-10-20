@@ -200,7 +200,7 @@ program
   .option('--code <code>', 'The one-time code your user got by email (step 2)')
   .option('--label <label>', 'Label for the API key this mints, e.g. the agent/device name (defaults to this machine\'s hostname)')
   .option('--profile <name>', 'Credentials profile to save under (default: "default")')
-  .option('--api-url <url>', 'Override the API base URL')
+  .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
   .option('--purpose <account|network>', 'What the sign-up is for: "account" (a full account) or "network" (the OpenAssistant Network only). Required by apps with AGNT messaging on')
   .option('--timezone <tz>', 'The person\'s IANA timezone, e.g. "America/New_York". Never replaces one they set themselves')
   .option('--first-name <name>', 'The person\'s first name')
@@ -255,7 +255,7 @@ program
   .description('Save an API key you already have to ~/.{{accountSlug}}/credentials (like `aws configure --profile`)')
   .requiredOption('--api-key <key>', 'API key (ak_live_...)')
   .option('--profile <name>', 'Profile name', 'default')
-  .option('--api-url <url>', 'API base URL')
+  .option('--api-url <url>', 'API base URL (default: AGNT_API_URL, else the production API)')
   .option('--account <slug>', 'AGNT account slug')
   .action(async (opts) => {
     await runConfigure(opts);
@@ -2143,7 +2143,7 @@ agntCmd
   .option('--purpose <account|network>', 'network (default): the OpenAssistant Network only; account: a full account')
   .option('--timezone <tz>', 'IANA timezone (default: this computer\'s)')
   .option('--profile <name>', 'Profile to save under (default: named after you, e.g. claude-code)')
-  .option('--api-url <url>', 'Override the API base URL')
+  .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
   .option('--account <slug>', 'AGNT account slug (default: the one this CLI was published for)')
   .action(async (opts) => {
     await runAgntVerb('join', () => agntJoin(opts));

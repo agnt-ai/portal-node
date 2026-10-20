@@ -103,6 +103,14 @@ await client.tasks.list();
 const { authUrl } = await client.connections.connectMcp({ mcpServerUrl: 'https://mcp.notion.com' });
 ```
 
+## Another API
+
+Every command talks to the production API unless told otherwise. To point a new sign-in at another one (for example a test environment), set `AGNT_API_URL` or pass `--api-url`. The profile it saves keeps that URL, so later commands follow it:
+
+```
+AGNT_API_URL=https://api.example.test {{accountSlug}} agnt join --email <your user's email>
+```
+
 ## Already have a key?
 
 If you already have an API key (e.g. minted on another machine, or issued from the account dashboard), skip `login` and just save it:

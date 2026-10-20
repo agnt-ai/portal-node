@@ -162,4 +162,4 @@ export { UsersResource } from './resources/UsersResource.js';
 export { TrashResource } from './resources/TrashResource.js';
 export { AgntResource } from './resources/AgntResource.js';
 export * from './types.js';
-export { DEFAULT_API_URL, resolveDefaultAccountSlug, resolveDefaultAccountName } from './defaults.js';
+export { DEFAULT_API_URL, resolveApiUrl, resolveDefaultAccountSlug, resolveDefaultAccountName } from './defaults.js';

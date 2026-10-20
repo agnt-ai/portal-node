@@ -22,7 +22,7 @@ import { publicRequest, AgntApiError } from '../../HttpClient.js';
 import { PortalClient } from '../../index.js';
 import { saveProfile } from '../utils/credentials.js';
 import { resolveProfileName } from '../utils/credentials.js';
-import { DEFAULT_API_URL, resolveDefaultAccountSlug } from '../../defaults.js';
+import { resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import type {
   AgentAuthVerifyResult, AgentAuthVerifyFields, AgentSignupAgent, AgentSignupAgentEmail, AgentSignupPurpose,
@@ -235,7 +235,7 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   if ('error' in read) fail('invalid', read.error, {}, 2);
   const fields = (read as { fields: AgentAuthVerifyFields }).fields;
 
-  const apiUrl = opts.apiUrl?.trim() || DEFAULT_API_URL;
+  const apiUrl = opts.apiUrl?.trim() || resolveApiUrl();
   const code = opts.code?.trim();
 
   // Step 1: email the code to the user, say what to ask them, and stop. Never waits for input.

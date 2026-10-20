@@ -16,7 +16,7 @@ import { randomBytes } from 'node:crypto';
 import { publicRequest, AgntApiError } from '../../HttpClient.js';
 import { PortalClient } from '../../index.js';
 import { saveProfile, resolveProfile } from '../utils/credentials.js';
-import { DEFAULT_API_URL, resolveDefaultAccountSlug } from '../../defaults.js';
+import { resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { signupFieldsFrom, verifyErrorHint, type LoginOptions } from './login.js';
 import { AgntUsageError } from './agnt.js';
 import { ASK_EMAIL, askForCode, findCodeHint, joinedLine } from '../utils/asks.js';
@@ -115,7 +115,7 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
   }
   const account = opts.account?.trim() || resolveDefaultAccountSlug();
   if (!account) throw new AgntUsageError('No account configured. Pass --account <slug>.');
-  const apiUrl = opts.apiUrl?.trim() || DEFAULT_API_URL;
+  const apiUrl = opts.apiUrl?.trim() || resolveApiUrl();
   const purpose = (opts.purpose?.trim().toLowerCase() || 'network') as AgentSignupPurpose;
   const product = opts.product?.trim() || guessProduct();
   const displayName = opts.displayName?.trim() || product;

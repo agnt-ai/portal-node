@@ -13,6 +13,14 @@ export const DEFAULT_ACCOUNT_SLUG = '{{accountSlug}}';
 export const DEFAULT_ACCOUNT_NAME = '{{accountName}}';
 export const DEFAULT_API_URL = 'https://api.agnt.ai';
 
+/**
+ * The API a new sign-in or saved key talks to: AGNT_API_URL when set (for example a test environment),
+ * else DEFAULT_API_URL. A profile keeps the URL it was saved with, so later commands follow it.
+ */
+export function resolveApiUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return env.AGNT_API_URL?.trim() || DEFAULT_API_URL;
+}
+
 // Exported so it can be unit-tested against literal fixture strings — the
 // module-level constants above get rewritten by hydration (including in
 // CI, which always hydrates with dummy values before running tests), so a
