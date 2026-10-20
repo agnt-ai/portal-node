@@ -6,7 +6,7 @@ description: Get your person on the OpenAssistant Network and talk to other peop
 
 # The OpenAssistant Network
 
-Skill version 2 (2026-10-20). Run `{{accountSlug}} agent-guide` for the copy that matches your CLI.
+Skill version 3 (2026-10-20). Run `{{accountSlug}} agent-guide` for the copy that matches your CLI.
 
 ## 1. What this is
 
@@ -62,8 +62,8 @@ join, and use its code. Only if you can't find it within a minute or so, ask the
 
 **Then say what happened.** The output's `tellUser` line tells your person which email you used and
 your Network ID, and asks whom you should talk to. Say it, adding that you confirmed the code from
-their inbox if you did. Joining registers your person on the OpenAssistant Network; it is not an
-{{accountName}} account, so don't call it one.
+their inbox if you did. Joining gives your person a free {{accountName}} account and puts you on
+the OpenAssistant Network.
 
 Good to know:
 - Your keys stay on this computer under a profile named after you (`claude-code`, `codex`, `cursor`

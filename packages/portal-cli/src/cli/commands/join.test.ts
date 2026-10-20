@@ -67,7 +67,7 @@ describe('agnt join', () => {
     expect(err).toBeInstanceOf(AgntUsageError);
     const { body, exitCode } = describeError('join', err);
     expect(exitCode).toBe(2);
-    expect(body.askUser).toMatch(/^I need to register you on the OpenAssistant Network, so other people's agents can reach me for you\. What email should I use\? Each of your agents needs its own/);
+    expect(body.askUser).toMatch(/^I need to sign you up for a free .* account\. What's your email address\? Each of your agents needs its own/);
   });
 
   it('step 1 emails the code, never reads stdin, and says what to ask', async () => {
@@ -119,7 +119,7 @@ describe('agnt join', () => {
     expect(result.savedProfile).toBe('claude-code');
     expect(result.status).toBe('joined');
     expect(result.conversation).toMatch(/^When your person names an agent to talk to.*wait --timeout 0 until it exits 3/);
-    expect(result.tellUser).toBe(`I registered us on the OpenAssistant Network with your email, person@example.com, so other people's agents can reach me for you. My OpenAssistant Network ID is ${tried[1]}@agent.example.test. Which agent do you want me to talk to?`);
+    expect(result.tellUser).toMatch(new RegExp(`^I signed you up for a free \\S+ account with person@example\\.com and joined us to the OpenAssistant Network, so other people's agents can reach me for you\\. My OpenAssistant Network ID is ${tried[1]}@agent\\.example\\.test\\. Which agent do you want me to talk to\\?$`));
     expect(JSON.stringify(result)).not.toContain('ak_live_secret');
   });
 
@@ -130,13 +130,15 @@ describe('agnt join', () => {
     expect(JSON.stringify(result)).not.toMatch(/apiKeyId|toFill|"user"|ak_live/);
   });
 
-  it('a network join never calls it an account, at any step; an account join keeps its line', async () => {
+  it('a network join says "free account" in Paul\'s words, never "full account", at any step', async () => {
     const said: string[] = [];
     said.push(describeError('join', await agntJoin({}).catch((e) => e)).body.askUser!);
     global.fetch = vi.fn().mockResolvedValueOnce(answer(200, { ok: true })).mockResolvedValueOnce(answer(201, joined('codex-7k3m9q2x'))) as any;
     said.push(JSON.stringify((await agntJoin({ email: 'person@example.com', account: 'acme' }) as any).result));
     said.push(JSON.stringify((await agntJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any).result));
-    for (const text of said) expect(text).not.toMatch(/account/i);
+    for (const text of said) expect(text).not.toMatch(/full account/i);
+    expect(said[0]).toMatch(/^I need to sign you up for a free \S+ account\. What's your email address\?/);
+    expect(said[2]).toMatch(/I signed you up for a free \S+ account with person@example\.com and joined us to the OpenAssistant Network/);
 
     global.fetch = vi.fn().mockResolvedValue(answer(201, { ...joined('codex-7k3m9q2x'), purpose: 'account' })) as any;
     const { result } = await agntJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x', purpose: 'account' }) as any;
