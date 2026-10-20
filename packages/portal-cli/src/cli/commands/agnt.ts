@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs';
 import { clientFor } from '../utils/api.js';
 import { agntProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
+import { rememberIds, resolveIdPrefix, ID_PREFIX } from '../utils/seenIds.js';
 import { AgntApiError } from '../../HttpClient.js';
 import type { PortalClient } from '../../index.js';
 import type { AgntSendBody, AgntWaitResult } from '../../types.js';
@@ -163,9 +164,15 @@ export async function runAgntVerb(verb: string, run: () => Promise<{ result: unk
     if (exitCode) process.exitCode = exitCode;
   } catch (err) {
     const { body, exitCode } = describeError(verb, err);
-    process.stderr.write(`${JSON.stringify({ error: body }, null, 2)}\n`);
+    process.stderr.write(`${plainError(body)}\n${JSON.stringify({ error: body }, null, 2)}\n`);
     process.exitCode = exitCode;
   }
+}
+
+/** One plain line for an error, first on stderr, so it is seen even where the JSON is not read. */
+export function plainError(body: AgntCliErrorBody): string {
+  const field = typeof body.details?.field === 'string' ? ` (field: ${body.details.field})` : '';
+  return `error: ${body.message}${field}${body.hint ? ` ${body.hint}` : ''}`;
 }
 
 function wholeNumber(name: string, value: string | undefined): number | undefined {
@@ -205,8 +212,11 @@ export function sendBodyFrom(opts: AgntSendOptions, readStdin: () => string = ()
   const text = opts.text === '-' ? readStdin() : opts.text;
   const body: AgntSendBody = { to, text };
   if (opts.inReplyTo !== undefined) {
-    if (!HEX64.test(opts.inReplyTo)) throw new AgntUsageError('--in-reply-to takes a message id: 64 lower-case hex digits.');
-    body.inReplyTo = opts.inReplyTo;
+    const id = opts.inReplyTo.trim().toLowerCase();
+    if (!HEX64.test(id) && !ID_PREFIX.test(id)) {
+      throw new AgntUsageError('--in-reply-to takes a message id in full (64 hex characters), or a unique prefix of 12 or more of an id this CLI has shown you.');
+    }
+    body.inReplyTo = id;
   }
   if (opts.header?.length) {
     const headers: Record<string, string> = {};
@@ -319,11 +329,31 @@ export async function agntSent(client: PortalClient, id: string, opts: AgntBaseO
 /** The message or entry to verify, from a file or from stdin for `-`. */
 export function readVerifyInput(file: string, read: (f: string | number) => string = (f) => readFileSync(f, 'utf8')): unknown {
   const text = file === '-' ? read(0) : read(file);
+  let value: unknown;
   try {
-    return JSON.parse(text);
+    value = JSON.parse(text);
   } catch {
-    throw new AgntUsageError(`${file === '-' ? 'stdin' : file} is not JSON: give a message, or an entry as inbox or wait printed it.`);
+    throw new AgntUsageError(`${file === '-' ? 'stdin' : file} is not JSON: give one message, as wait or inbox printed it.`);
   }
+  return oneMessage(value);
+}
+
+/** One message to verify, from wait's output as is, one inbox entry, an inbox page holding one, or a bare message. */
+export function oneMessage(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AgntUsageError('Give one message, as wait or inbox printed it.');
+  }
+  const v = value as Record<string, unknown>;
+  if (v.status === 'timeout') throw new AgntUsageError('That is a wait that timed out: there is no message in it to verify.');
+  if (Array.isArray(v.messages)) {
+    if (v.messages.length === 1) return v.messages[0];
+    throw new AgntUsageError(`That is an inbox page with ${v.messages.length} messages: give one of them (one entry from "messages").`);
+  }
+  if (v.status === 'message') {
+    const { status: _status, rule: _rule, more: _more, ...entry } = v;
+    return entry;
+  }
+  return v;
 }
 
 export async function agntVerify(client: PortalClient, file: string) {
@@ -395,20 +425,47 @@ const withClient = (profile: string | undefined, fn: (client: PortalClient) => P
 
 export const runAgntWhoami = (opts: AgntBaseOptions) =>
   runAgntVerb('whoami', withClient(opts.profile, (c) => agntWhoami(c, opts)));
+/** The profile an agnt command acts as, by name (for the ids this CLI remembers). */
+async function profileNamed(explicit?: string): Promise<{ profile: string | undefined; name: string }> {
+  const profile = await agntProfile(explicit);
+  return { profile, name: profile ?? await resolveProfileName() };
+}
+
 export const runAgntSend = (opts: AgntSendOptions) =>
   runAgntVerb('send', async () => {
     const body = sendBodyFrom(opts); // usage errors before reading credentials
-    const client = await clientFor(await agntProfile(opts.profile));
-    return { result: await client.agnt.send(body) };
+    const { profile, name } = await profileNamed(opts.profile);
+    if (body.inReplyTo && !HEX64.test(body.inReplyTo)) {
+      const found = await resolveIdPrefix(name, body.inReplyTo);
+      if ('error' in found) throw new AgntUsageError(found.error);
+      body.inReplyTo = found.id;
+    }
+    const client = await clientFor(profile);
+    const result = await client.agnt.send(body);
+    await rememberIds(name, [result.id]);
+    return { result };
   });
 export const runAgntInbox = (opts: AgntInboxOptions) =>
-  runAgntVerb('inbox', withClient(opts.profile, (c) => agntInbox(c, opts)));
+  runAgntVerb('inbox', async () => {
+    const { profile, name } = await profileNamed(opts.profile);
+    const out = await agntInbox(await clientFor(profile), opts);
+    await rememberIds(name, out.result.messages.map((m) => m.id));
+    return out;
+  });
 export const runAgntWait = (opts: AgntWaitOptions) =>
-  runAgntVerb('wait', withClient(opts.profile, (c) => agntWait(c, opts)));
+  runAgntVerb('wait', async () => {
+    const { profile, name } = await profileNamed(opts.profile);
+    const out = await agntWait(await clientFor(profile), opts);
+    const got = out.result as { status: string; id?: string };
+    if (got.status === 'message') await rememberIds(name, [got.id]);
+    return out;
+  });
 export const runAgntSent = (id: string, opts: AgntBaseOptions) =>
   runAgntVerb('sent', async () => {
-    if (!HEX64.test(id)) throw new AgntUsageError('sent takes a message id: 64 lower-case hex digits, as send answered it.');
-    return agntSent(await clientFor(await agntProfile(opts.profile)), id, opts);
+    const { profile, name } = await profileNamed(opts.profile);
+    const found = await resolveIdPrefix(name, id);
+    if ('error' in found) throw new AgntUsageError(found.error);
+    return agntSent(await clientFor(profile), found.id, opts);
   });
 export const runAgntVerify = (file: string, opts: AgntBaseOptions) =>
   runAgntVerb('verify', async () => {

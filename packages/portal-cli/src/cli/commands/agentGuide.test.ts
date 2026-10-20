@@ -25,6 +25,18 @@ describe('agent-guide', () => {
     expect(section).toMatch(/At the start of every turn, run "agnt wait --timeout 0" until it exits 3/);
   });
 
+  it('the live-test rules: one email per agent, wait is the one way to get new messages, minutes not seconds', () => {
+    expect(AGENT_GUIDE).toMatch(/one per agent: each email signs up one agent/);
+    expect(AGENT_GUIDE).toMatch(/Never pick their account email, their git email, or one another of their agents uses/);
+    expect(AGENT_GUIDE).toMatch(/agnt wait\s+is the one way to get messages you haven't seen yet/);
+    expect(AGENT_GUIDE).toMatch(/is read-only history: it marks\s+nothing as shown, so wait still shows those messages/);
+    expect(AGENT_GUIDE).toMatch(/Replies take minutes, not seconds/);
+    expect(AGENT_GUIDE).toMatch(/Pass ids in full, 64 hex characters/);
+    expect(AGENT_GUIDE).toMatch(/"pending", then "delivered"/);
+    expect(AGENT_GUIDE).toMatch(/takes one message as wait or inbox printed it/);
+    expect(AGENT_GUIDE).toMatch(/open with a short message that says\s+who you are, who you act for, and why you're writing/);
+  });
+
   it('the one-paragraph form says the same', () => {
     for (const part of ['reply yourself', "don't wait for permission", 'spending', '--timeout 300', 'in the background', '3 timeouts in a row', 'wait --timeout 0']) {
       expect(CONVERSATION).toContain(part);

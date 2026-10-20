@@ -1,7 +1,7 @@
 // @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  agntWait, agntInbox, agntSent, sendBodyFrom, readVerifyInput, describeError, runAgntVerb,
+  agntWait, agntInbox, agntSent, sendBodyFrom, readVerifyInput, oneMessage, describeError, runAgntVerb,
   AgntUsageError, EXIT_RETRY, EXIT_USAGE, EXIT_WAIT_TIMEOUT, WAIT_CALL_SECONDS, type WaitClock,
 } from './agnt.js';
 import { AgntApiError } from '../../HttpClient.js';
@@ -117,6 +117,11 @@ describe('agnt send body', () => {
     expect(() => sendBodyFrom({ to: ['a@b.c'] })).toThrow(AgntUsageError);
   });
 
+  it('accepts a 12+ hex prefix for --in-reply-to (resolved before sending), and refuses shorter ones plainly', () => {
+    expect(sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: 'ABCDEF123456' }).inReplyTo).toBe('abcdef123456');
+    expect(() => sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: 'abcdef12' })).toThrow(/in full \(64 hex characters\), or a unique prefix of 12 or more/);
+  });
+
   it('passes --in-reply-to and --assistant through', () => {
     const body = sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: ID, assistant: 'as1' });
     expect(body).toMatchObject({ inReplyTo: ID, assistant: 'as1' });
@@ -151,6 +156,15 @@ describe('agnt verify input', () => {
   it('reads JSON from a file or from stdin', () => {
     expect(readVerifyInput('entry.json', () => '{"id":"x"}')).toEqual({ id: 'x' });
     expect(readVerifyInput('-', (f) => (f === 0 ? '{"id":"y"}' : ''))).toEqual({ id: 'y' });
+  });
+
+  it("takes wait's output as is, an inbox entry, or a page holding one message", () => {
+    const entry = { cursor: 1, id: ID, receivedAt: 'x', carrier: 'https://a', message: { untrusted: {} }, claims: [] };
+    expect(oneMessage({ status: 'message', rule: 'r', more: false, ...entry })).toEqual(entry);
+    expect(oneMessage(entry)).toEqual(entry);
+    expect(oneMessage({ rule: 'r', cursor: 1, more: false, messages: [entry] })).toEqual(entry);
+    expect(() => oneMessage({ rule: 'r', cursor: 2, more: false, messages: [entry, entry] })).toThrow(/inbox page with 2 messages: give one/);
+    expect(() => oneMessage({ status: 'timeout', waitedSeconds: 5, from: null })).toThrow(/timed out: there is no message/);
   });
 
   it('refuses input that is not JSON as a usage error', () => {
@@ -224,9 +238,16 @@ describe('runAgntVerb', () => {
 
   it('prints an error as JSON on stderr and sets the exit status', async () => {
     await runAgntVerb('send', async () => { throw new AgntApiError(429, 'slow', 'rate_limited', { retryAfter: 5 }); });
-    expect(JSON.parse(err.join('')).error).toMatchObject({ code: 'rate_limited', retryAfter: 5, retryable: true });
+    const text = err.join('');
+    expect(text.split('\n')[0]).toMatch(/^error: slow /);
+    expect(JSON.parse(text.slice(text.indexOf('\n') + 1)).error).toMatchObject({ code: 'rate_limited', retryAfter: 5, retryable: true });
     expect(process.exitCode).toBe(EXIT_RETRY);
     expect(out).toEqual([]);
+  });
+
+  it('a 400 with a field prints it on the plain line too', async () => {
+    await runAgntVerb('send', async () => { throw new AgntApiError(400, 'a message id is 64 lower-case hex digits', 'invalid', { details: { field: 'inReplyTo' } }); });
+    expect(err.join('').split('\n')[0]).toBe('error: a message id is 64 lower-case hex digits (field: inReplyTo) The server refused part of the request; details.field names it.');
   });
 
   it('a wait timeout prints its shape and exits 3', async () => {

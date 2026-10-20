@@ -56,7 +56,7 @@ export function agntVerifyHint(err: AgntApiError, again: string): string | undef
       return `This app needs --purpose: "account" (a full {{accountName}} account) or "network" (the OpenAssistant Network only). Your code is still good: ${again} --purpose <account|network>.`;
     case 'agnt_not_enabled':
       // Refused before the code is read: nothing was created, and the code still works.
-      return `Tell your user: "Agent sign-up isn't on for this app yet; your code still works, and I'll try again once it is." When it is, ${again}.`;
+      return "The OpenAssistant Network isn't turned on for this app yet; only its operator can turn it on. Stop and tell your user; nothing you run can fix it.";
     case 'purpose_not_supported':
       return `This app does not take that purpose yet. Your code is still good: ${again} --purpose account.`;
     case 'agent_required':

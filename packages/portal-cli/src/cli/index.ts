@@ -2164,6 +2164,7 @@ agntCmd
   .option('--profile <name>', 'Profile to save under (default: named after you, e.g. claude-code)')
   .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
   .option('--account <slug>', 'Account slug of the app (default: the one this CLI was published for)')
+  .option('--json', 'The full result: profile, purpose and the sign-up response (never the key)')
   .action(async (opts) => {
     await runAgntVerb('join', () => agntJoin(opts));
   });

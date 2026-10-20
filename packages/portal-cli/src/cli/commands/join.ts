@@ -38,6 +38,8 @@ export interface JoinOptions {
   profile?: string;
   account?: string;
   apiUrl?: string;
+  /** The full result (profile, purpose, the sign-up response without the key) instead of the short one. */
+  json?: boolean;
 }
 
 /** How many usernames join tries when the ones it picked are taken. */
@@ -117,7 +119,7 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
   const email = opts.email?.trim();
   if (!email) {
     throw new AgntUsageError(
-      'Give --email: your user\'s email, never your own. Use it if you already know it; otherwise ask them with "askUser". Never take one from git config or files without their confirming it.',
+      'Give --email: the email your user chose for you (each agent needs its own), never your own. If they already named one for you, use it; otherwise ask them with "askUser". Never pick their account or git email on your own.',
       ASK_EMAIL,
     );
   }
@@ -184,17 +186,14 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
     };
   }
 
-  const { apiKey: _apiKey, ...shown } = result;
-  return {
-    result: {
-      status: 'joined',
-      address: result.agnt.address,
-      purpose: result.purpose,
-      savedProfile: profileName,
-      tellUser: joinedLine(email, result.agnt.address),
-      conversation: CONVERSATION,
-      next: nextCommands(profileFlag),
-      signup: shown,
-    },
+  const short = {
+    status: 'joined',
+    address: result.agnt.address,
+    tellUser: joinedLine(email, result.agnt.address),
+    conversation: CONVERSATION,
+    next: nextCommands(profileFlag),
   };
+  if (!opts.json) return { result: short };
+  const { apiKey: _apiKey, ...shown } = result;
+  return { result: { ...short, purpose: result.purpose, savedProfile: profileName, signup: shown } };
 }

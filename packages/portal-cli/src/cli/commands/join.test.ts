@@ -61,13 +61,13 @@ describe('agnt join', () => {
   });
   afterEach(() => { global.fetch = originalFetch; vi.restoreAllMocks(); });
 
-  it('needs the user\'s email: use a known one, else ask; never one from git config unconfirmed', async () => {
-    await expect(agntJoin({})).rejects.toThrow(/Use it if you already know it.*without their confirming it/);
+  it('needs the email the user chose for this agent: one they named, else ask; never their account or git email', async () => {
+    await expect(agntJoin({})).rejects.toThrow(/each agent needs its own.*If they already named one for you, use it.*Never pick their account or git email on your own/);
     const err = await agntJoin({}).catch((e) => e);
     expect(err).toBeInstanceOf(AgntUsageError);
     const { body, exitCode } = describeError('join', err);
     expect(exitCode).toBe(2);
-    expect(body.askUser).toMatch(/^I need to sign you up for a free .* account\. What's your email address\?$/);
+    expect(body.askUser).toMatch(/^I need to sign you up for a free .* account\. What's your email address\? Each of your agents needs its own/);
   });
 
   it('step 1 emails the code, never reads stdin, and says what to ask', async () => {
@@ -107,7 +107,7 @@ describe('agnt join', () => {
       return answer(201, joined(body.agent.username));
     }) as any;
     vi.stubEnv('CLAUDECODE', '1');
-    const { result } = await agntJoin({ email: 'person@example.com', code: '123456', account: 'acme', apiUrl: 'https://api.example.test', timezone: 'Europe/Paris' }) as any;
+    const { result } = await agntJoin({ email: 'person@example.com', code: '123456', account: 'acme', apiUrl: 'https://api.example.test', timezone: 'Europe/Paris', json: true }) as any;
     vi.unstubAllEnvs();
     expect(tried).toHaveLength(2);
     expect(tried[0]).not.toBe(tried[1]);
@@ -121,6 +121,13 @@ describe('agnt join', () => {
     expect(result.conversation).toMatch(/^When your user names an agent to talk to.*wait --timeout 0 until it exits 3/);
     expect(result.tellUser).toMatch(new RegExp(`^I signed you up for a free .* account with person@example\\.com\\. I'm all set\\. My OpenAssistant Network ID is ${tried[1]}@agent\\.example\\.test\\. Which agent do you want me to talk to\\?$`));
     expect(JSON.stringify(result)).not.toContain('ak_live_secret');
+  });
+
+  it('by default the result is short: status, Network ID, what to tell the user, how to talk, next', async () => {
+    global.fetch = vi.fn().mockResolvedValue(answer(201, joined('codex-7k3m9q2x'))) as any;
+    const { result } = await agntJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
+    expect(Object.keys(result).sort()).toEqual(['address', 'conversation', 'next', 'status', 'tellUser']);
+    expect(JSON.stringify(result)).not.toMatch(/apiKeyId|toFill|"user"|ak_live/);
   });
 
   it('a name lost after the code was used: no retry, and the hint says to get a new code from the user', async () => {
@@ -141,8 +148,7 @@ describe('agnt join', () => {
     const { body, exitCode } = describeError('join', err);
     expect(exitCode).toBe(1);
     expect(body.code).toBe('agnt_not_enabled');
-    expect(body.hint).toMatch(/^Tell your user: "Agent sign-up isn't on for this app yet/);
-    expect(body.hint).toContain('run the same join command with --code 42');
+    expect(body.hint).toBe("The OpenAssistant Network isn't turned on for this app yet; only its operator can turn it on. Stop and tell your user; nothing you run can fix it.");
   });
 
   it('a wrong code is not retried with another name', async () => {

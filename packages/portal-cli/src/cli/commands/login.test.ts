@@ -76,11 +76,9 @@ describe('verifyErrorHint', () => {
   // @agnt-messaging:end
 
   // @agnt-messaging:begin
-  it('agnt_not_enabled: tell the user sign-up is not on yet; the code still works (exit 1)', () => {
+  it('agnt_not_enabled: only the operator can turn it on; stop and tell the user (exit 1)', () => {
     const e = err(400, 'agnt_not_enabled', 'Agent sign-up is not enabled for this app; nothing was created and your code still works.');
-    const hint = verifyErrorHint(e, '313131')!;
-    expect(hint).toMatch(/^Tell your user: "Agent sign-up isn't on for this app yet; your code still works/);
-    expect(hint).toContain('--code 313131');
+    expect(verifyErrorHint(e, '313131')).toBe("The OpenAssistant Network isn't turned on for this app yet; only its operator can turn it on. Stop and tell your user; nothing you run can fix it.");
     expect(verifyExitCode(e)).toBe(1);
   });
   // @agnt-messaging:end
@@ -296,7 +294,7 @@ describe('runLogin against a mocked API', () => {
     const fetchMock = mockFetch(signupResponse);
     const exit = vi.spyOn(process, 'exit').mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as any);
     await expect(runLogin({ email: '' } as any)).rejects.toThrow('exit 2');
-    expect(JSON.parse(stderr.join('')).error.askUser).toMatch(/^I need to sign you up for a free .* account\. What's your email address\?$/);
+    expect(JSON.parse(stderr.join('')).error.askUser).toMatch(/^I need to sign you up for a free .* account\. What's your email address\? Each of your agents needs its own/);
     expect(fetchMock).not.toHaveBeenCalled();
     exit.mockRestore();
   });

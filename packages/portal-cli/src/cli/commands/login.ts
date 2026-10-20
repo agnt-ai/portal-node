@@ -158,7 +158,7 @@ function emit(opts: LoginOptions, result: Record<string, unknown>, lines: string
 
 export async function runLogin(opts: LoginOptions): Promise<void> {
   const email = opts.email?.trim();
-  if (!email) fail('invalid', 'Give --email: your user\'s email address, never your own. Use it if you already know it; otherwise ask them with "askUser".', { askUser: ASK_EMAIL }, 2);
+  if (!email) fail('invalid', 'Give --email: the email your user chose for this sign-up, never your own. If they already named one, use it; otherwise ask them with "askUser".', { askUser: ASK_EMAIL }, 2);
 
   const account = opts.account?.trim() || resolveDefaultAccountSlug();
   if (!account) fail('invalid', 'No account configured. Pass --account <slug> (e.g. --account {{accountSlug}}).', {}, 2);

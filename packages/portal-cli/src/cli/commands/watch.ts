@@ -23,7 +23,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PortalClient } from '../../index.js';
-import { AgntUsageError, describeError, type WaitClock } from './agnt.js';
+import { AgntUsageError, describeError, plainError, type WaitClock } from './agnt.js';
 import { clientFor } from '../utils/api.js';
 import { agntProfile } from '../utils/agentIdentity.js';
 import type { AgntWaitResult } from '../../types.js';
@@ -153,7 +153,7 @@ export async function runAgntWatch(opts: WatchOptions): Promise<void> {
     await watchLoop(client, opts, { stopped: () => stop });
   } catch (err) {
     const { body, exitCode } = describeError('watch', err);
-    process.stderr.write(`${JSON.stringify({ error: body }, null, 2)}\n`);
+    process.stderr.write(`${plainError(body)}\n${JSON.stringify({ error: body }, null, 2)}\n`);
     process.exitCode = exitCode;
   } finally {
     process.off('SIGINT', onSignal);
