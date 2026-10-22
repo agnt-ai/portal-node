@@ -8,22 +8,12 @@ import {
   resolveDefaultAccountName,
   resolveApiUrl,
   apiUrlProblem,
-  apiUrlWarning,
-  resolvePortalUrl,
-  signInWhere
+  apiUrlWarning
 } from './defaults.js';
 
 describe('defaults', () => {
   it('has a fixed default API URL', () => {
     expect(DEFAULT_API_URL).toBe('https://api.agnt.ai');
-  });
-
-  it('the portal URL counts only when hydrated with an https URL; sign-in text follows it', () => {
-    expect(resolvePortalUrl('https://app.example.test')).toBe('https://app.example.test');
-    expect(resolvePortalUrl('{{portalUrl}}')).toBeUndefined();
-    expect(resolvePortalUrl('the Example web app')).toBeUndefined();
-    expect(signInWhere('https://app.example.test')).toBe('at https://app.example.test');
-    expect(signInWhere(null)).toMatch(/^to \S/);
   });
 
   it('an API URL must be https, or plain http on this computer; any but the default gets a warning', () => {

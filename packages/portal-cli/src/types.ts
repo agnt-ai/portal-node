@@ -1241,10 +1241,8 @@ export interface AgentAuthVerifyFields {
   timezone?: string;
   firstName?: string;
   lastName?: string;
-  // @agnt-messaging:begin
   purpose?: AgentSignupPurpose;
   agent?: AgentSignupAgent;
-  // @agnt-messaging:end
 }
 
 export interface AgentSignupTimezone {
@@ -1274,15 +1272,12 @@ export interface AgentAuthVerifyResult {
   apiKeyId: string;
   /** Present when the app reads sign-up fields; absent if the server's profile step failed (the key is still good). */
   profile?: AgentSignupProfile;
-  // @agnt-messaging:begin
   /** Echoed by apps with the {{accountName}} Network on. */
   purpose?: AgentSignupPurpose;
   /** Present when sign-up named an agent. */
   agnt?: AgentSignupAgnt;
-  // @agnt-messaging:end
 }
 
-// @agnt-messaging:begin
 /**
  * What agent sign-up signs the person up for. Required by apps with the {{accountName}} Network on; there is no default.
  * - account: a full account. The app's own assistant stays primary; the agent is a second assistant.
@@ -1457,4 +1452,3 @@ export interface AgntLeaveResult {
 export type AgntVerifyResult =
   | { verified: true; id: string; authorSigned: true; authorServer: string; principal: unknown; [key: string]: unknown }
   | { verified: false; id: string | null; reason: string; [key: string]: unknown };
-// @agnt-messaging:end

@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { agntLeave, runAgntLeave, agntBlock, agntUnblock, agntBlocks, describeError, AgntUsageError, EXIT_RETRY, EXIT_USAGE } from './agnt.js';
 import { AgntApiError } from '../../HttpClient.js';

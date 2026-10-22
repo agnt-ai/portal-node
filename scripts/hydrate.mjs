@@ -12,7 +12,7 @@
  *   - local dev/testing, with any placeholder values you like
  *
  * Usage:
- *   node scripts/hydrate.mjs --account-slug acme --account-name "Acme" [--portal-url https://app.example.com] [--agnt-messaging]
+ *   node scripts/hydrate.mjs --account-slug openassistant --account-name "OpenAssistant"
  *
  * Idempotent-ish: re-running with different values re-hydrates a file that
  * still contains the tokens, but does NOT revert a file already hydrated to
@@ -20,14 +20,12 @@
  * templating engine you round-trip.
  */
 
-import { readdir, readFile, writeFile, unlink } from 'fs/promises';
+import { readdir, readFile, writeFile } from 'fs/promises';
 import { join, relative } from 'path';
-import { realpathSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'coverage']);
 const ACCOUNT_SLUG_RE = /^[a-z0-9-]+$/;
-const PORTAL_URL_RE = /^https:\/\/[a-z0-9.-]+(:[0-9]+)?$/;
 // Never hydrate this script itself — its own source contains the literal
 // token strings as code (the .split() calls below), not just docs. Hydrating
 // them in place would rewrite '{{accountSlug}}' to the real slug and corrupt
@@ -40,93 +38,11 @@ const SELF_PATH = fileURLToPath(import.meta.url);
 // excludes it from the build, and it's not in package.json's "files").
 const TEST_FILE_RE = /\.test\.[cm]?[jt]sx?$/;
 
-// AGNT messaging (the `agnt` commands, agent-guide, agent sign-up) ships only in the CLIs of apps that have it on
-// (--agnt-messaging, which the publish trigger passes from the app's own config). Every other app's build has it
-// removed before anything is compiled, so its CLI, help and package never carry it:
-//   - a file whose first line holds AGNT_ONLY_MARK is deleted, and so is a Markdown file whose frontmatter does
-//     (a skill's first line must be its frontmatter's opening ---);
-//   - in any other file, the lines from one holding AGNT_BEGIN through the next holding AGNT_END are deleted.
-// The markers are plain comments, so in those apps' builds they stay and change nothing.
-const AGNT_ONLY_MARK = '@agnt-messaging-only';
-const AGNT_BEGIN = '@agnt-messaging:begin';
-const AGNT_END = '@agnt-messaging:end';
-
-/** The file is AGNT-only: its first line holds the mark, or its leading frontmatter does. */
-export function isAgntOnly(text) {
-  const lines = text.split('\n');
-  if (lines[0].includes(AGNT_ONLY_MARK)) return true;
-  if (lines[0].trim() !== '---') return false;
-  for (const line of lines.slice(1)) {
-    if (line.trim() === '---') return false;
-    if (line.includes(AGNT_ONLY_MARK)) return true;
-  }
-  return false;
-}
-
-/** The text without its AGNT messaging regions. Throws on a region that is not closed, or an end with no begin. */
-export function stripAgntMessaging(text, file = 'file') {
-  const out = [];
-  let inside = false;
-  for (const line of text.split('\n')) {
-    if (line.includes(AGNT_BEGIN)) {
-      if (inside) throw new Error(`${file}: ${AGNT_BEGIN} inside another region`);
-      inside = true;
-      continue;
-    }
-    if (line.includes(AGNT_END)) {
-      if (!inside) throw new Error(`${file}: ${AGNT_END} with no ${AGNT_BEGIN}`);
-      inside = false;
-      continue;
-    }
-    if (!inside) out.push(line);
-  }
-  if (inside) throw new Error(`${file}: ${AGNT_BEGIN} never closed`);
-  return out.join('\n');
-}
-
-/** Removes AGNT messaging from an app that does not have it. Test files included, so the suite matches the build. */
-async function removeAgntMessaging(files, root) {
-  let removed = 0;
-  let stripped = 0;
-  for (const file of files) {
-    if (file === SELF_PATH) continue;
-    const buf = await readFile(file, 'utf-8').catch(() => null);
-    if (buf === null) continue;
-    if (isAgntOnly(buf)) {
-      await unlink(file);
-      removed++;
-      continue;
-    }
-    if (!buf.includes(AGNT_BEGIN) && !buf.includes(AGNT_END)) continue;
-    await writeFile(file, stripAgntMessaging(buf, relative(root, file)), 'utf-8');
-    stripped++;
-  }
-  console.log(`AGNT messaging not in this app: ${removed} file(s) removed, ${stripped} file(s) stripped.`);
-}
-
-/**
- * In an app that keeps AGNT messaging, a Markdown file's frontmatter mark is only build bookkeeping: drop that
- * line, so the shipped file (a skill an agent reads) carries none of it.
- */
-async function dropFrontmatterMarks(files) {
-  for (const file of files) {
-    if (file === SELF_PATH || !file.endsWith('.md')) continue;
-    const buf = await readFile(file, 'utf-8').catch(() => null);
-    if (buf === null || !buf.startsWith('---') || !isAgntOnly(buf) || buf.split('\n')[0].includes(AGNT_ONLY_MARK)) continue;
-    const lines = buf.split('\n');
-    const end = lines.indexOf('---', 1);
-    const kept = lines.filter((line, i) => !(i > 0 && i < end && line.includes(AGNT_ONLY_MARK)));
-    await writeFile(file, kept.join('\n'), 'utf-8');
-  }
-}
-
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--account-slug') out.accountSlug = argv[++i];
     else if (argv[i] === '--account-name') out.accountName = argv[++i];
-    else if (argv[i] === '--portal-url') out.portalUrl = argv[++i];
-    else if (argv[i] === '--agnt-messaging') out.agntMessaging = true;
   }
   return out;
 }
@@ -146,10 +62,10 @@ async function collectFiles(dir, root, acc = []) {
 }
 
 async function main() {
-  const { accountSlug, accountName, portalUrl: givenPortalUrl, agntMessaging = false } = parseArgs(process.argv.slice(2));
+  const { accountSlug, accountName } = parseArgs(process.argv.slice(2));
 
   if (!accountSlug || !accountName) {
-    console.error('Usage: node scripts/hydrate.mjs --account-slug <slug> --account-name <name> [--portal-url https://app.example.com] [--agnt-messaging]');
+    console.error('Usage: node scripts/hydrate.mjs --account-slug <slug> --account-name <name>');
     process.exit(1);
   }
   if (!ACCOUNT_SLUG_RE.test(accountSlug)) {
@@ -157,52 +73,29 @@ async function main() {
     process.exit(1);
   }
 
-  // The app's own web address (its portal), for text that sends a person there. Optional: without it, the
-  // text names the app's web app instead, and the CLI's runtime check (resolvePortalUrl) finds no URL.
-  if (givenPortalUrl !== undefined && !PORTAL_URL_RE.test(givenPortalUrl)) {
-    console.error(`--portal-url "${givenPortalUrl}" must be an https origin such as https://app.example.com (no path, no trailing slash)`);
-    process.exit(1);
-  }
-  const portalUrl = givenPortalUrl ?? `the ${accountName} web app`;
-
   const root = new URL('..', import.meta.url).pathname;
-  let files = await collectFiles(root, root);
-
-  if (!agntMessaging) {
-    await removeAgntMessaging(files, root);
-    files = await collectFiles(root, root);
-  } else {
-    await dropFrontmatterMarks(files);
-  }
+  const files = await collectFiles(root, root);
 
   let changed = 0;
   for (const file of files) {
     if (file === SELF_PATH || TEST_FILE_RE.test(file)) continue;
     const buf = await readFile(file, 'utf-8').catch(() => null);
     if (buf === null) continue; // binary or unreadable — skip
-    if (!buf.includes('{{accountSlug}}') && !buf.includes('{{accountName}}') && !buf.includes('{{portalUrl}}')) continue;
+    if (!buf.includes('{{accountSlug}}') && !buf.includes('{{accountName}}')) continue;
 
     const hydrated = buf
       .split('{{accountSlug}}').join(accountSlug)
-      .split('{{accountName}}').join(accountName)
-      .split('{{portalUrl}}').join(portalUrl);
+      .split('{{accountName}}').join(accountName);
 
     await writeFile(file, hydrated, 'utf-8');
     changed++;
     console.log(`hydrated: ${relative(root, file)}`);
   }
 
-  console.log(`\n${changed} file(s) hydrated with account=${accountSlug} (${accountName}), AGNT messaging ${agntMessaging ? 'on' : 'off'}.`);
+  console.log(`\n${changed} file(s) hydrated with account=${accountSlug} (${accountName}).`);
 }
 
-// Run as a script, not when imported (a test imports stripAgntMessaging).
-const isMain = (() => {
-  try { return !!process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); }
-  catch { return false; }
-})();
-if (isMain) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
-}
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

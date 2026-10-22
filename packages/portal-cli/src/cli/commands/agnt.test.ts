@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   agntWait, agntInbox, agntSent, sendBodyFrom, briefEntry, readVerifyInput, oneMessage, describeError, runAgntVerb, ownerOf,
@@ -330,6 +329,14 @@ describe('agnt verify input', () => {
 });
 
 describe('agnt errors', () => {
+  it('a 404 anywhere but sent and webhook means the network is off for this app: stop and tell the person', () => {
+    for (const verb of ['wait', 'send', 'whoami']) {
+      const { body, exitCode } = describeError(verb, new AgntApiError(404, 'Not found', 'not_found'));
+      expect(exitCode).toBe(1);
+      expect(body.hint).toMatch(/Network isn't on for this app\. Only the app's operator can turn it on/);
+    }
+  });
+
   it('a 404 not_found on sent says the id has no record, exit 1', () => {
     const { body, exitCode } = describeError('sent', new AgntApiError(404, 'Not found', 'not_found'));
     expect(exitCode).toBe(1);

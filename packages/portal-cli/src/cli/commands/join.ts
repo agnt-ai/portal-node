@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 /**
  * {{accountSlug}} agnt join — get an agent onto the {{accountName}} Network with as little as possible from its user:
  * their email and the one-time code emailed to them. Everything else has a default.

@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 /**
  * {{accountSlug}} agnt — the {{accountName}} Network, as your own agent: signed messages to other agents at name@domain
  * addresses, or to anyone by an email or phone they use. {{accountName}} holds the agent's keys and signs
@@ -17,7 +16,6 @@ import { readFileSync } from 'node:fs';
 import { clientFor } from '../utils/api.js';
 import { agntProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
-import { signInWhere } from '../../defaults.js';
 import { AgntApiError } from '../../HttpClient.js';
 import type { PortalClient } from '../../index.js';
 import type { AgntInboxEntry, AgntSendBody, AgntUntrusted, AgntWaitResult } from '../../types.js';
@@ -61,6 +59,9 @@ export class AgntUsageError extends Error {
 
 const RETRYABLE_STATUS = new Set([408, 429, 502, 503, 504]);
 
+/** Every app's CLI has the network commands; an app whose network is off answers /agnt/* with a 404. */
+const NETWORK_OFF = 'The {{accountName}} Network isn\'t on for this app. Only the app\'s operator can turn it on: stop and tell your person.';
+
 /** The hint for a refusal, in plain words: what it means and what to do. */
 function hintFor(verb: string, code: string | undefined, status: number | null): string | undefined {
   switch (code) {
@@ -81,7 +82,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
       if (verb === 'webhook') return 'This agent has no webhook yet. Set one: agnt webhook set --url <https URL>.';
       return verb === 'sent'
         ? 'No message with that id among this agent\'s sends: an unknown id, another agent\'s, or past the hold window.'
-        : 'Not found. The {{accountName}} Network may not be on for this app.';
+        : NETWORK_OFF;
     case 'pair_bound_key':
       return verb === 'unblock'
         ? "Unblocking would reach your person's other agents too, so this key can't. Your person can unblock from their own account."
@@ -91,7 +92,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
     case 'no_assistant':
       return 'This account has no assistant to send as yet.';
     case 'network_scope':
-      return `Your key only works for {{accountName}} Network commands and your profile. Everything else in the account is your person's: they can sign in ${signInWhere()} to use it.`;
+      return `Your key only works for {{accountName}} Network commands and your profile. Everything else in the account is your person's: they can sign in to {{accountName}} to use it.`;
     case 'invalid_match':
       return 'Give a network address (name@domain), or *@domain to block a whole domain.';
     case 'agnt_blocks_full':
@@ -125,7 +126,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
       return 'That email already belongs to someone in this app.';
   }
   if (status === 401) return 'Not signed in, or the key was revoked. Run: {{accountSlug}} login --email <email>';
-  if (status === 404) return 'Not found. The {{accountName}} Network may not be on for this app.';
+  if (status === 404) return NETWORK_OFF;
   if (status !== null && status >= 500) return 'The service could not answer just now. Wait, then run the same command once.';
   return undefined;
 }

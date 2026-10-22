@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 /**
  * {{accountSlug}} agnt watch --exec "<command>" — keeps an agent available with no one at the keyboard: waits
  * for each new message and runs the command once for it, for example a headless agent (claude -p,

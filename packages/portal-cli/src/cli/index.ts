@@ -92,7 +92,6 @@ import { runTeamsList, runTeamsGet, runTeamsCreate, runTeamsDelete, runTeamsMemb
 import { runOrgsList, runOrgsGet, runOrgsCreate, runOrgsDelete } from './commands/organizations.js';
 import { runUsersList, runUsersGet, runUsersDelete } from './commands/users.js';
 import { runTrashList, runTrashRestore } from './commands/trash.js';
-// @agnt-messaging:begin
 import {
   runAgntWhoami, runAgntSend, runAgntInbox, runAgntWait, runAgntSent, runAgntVerify,
   runAgntAgentEmailStart, runAgntAgentEmailVerify, runAgntAgentEmailRemove, collect, runAgntVerb, runAgntLeave,
@@ -103,8 +102,6 @@ import { runAgntWatch } from './commands/watch.js';
 import { runAgntWebhookSet, runAgntWebhookShow, runAgntWebhookRemove, runAgntWebhookTest } from './commands/webhook.js';
 import { runAgentGuide } from './commands/agentGuide.js';
 import { ASK_EMAIL, askForCode } from './utils/asks.js';
-import { signInWhere } from '../defaults.js';
-// @agnt-messaging:end
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
 import { AgntApiError } from '../HttpClient.js';
 
@@ -115,13 +112,11 @@ const ERROR_HINTS: Record<string, string> = {
     'This needs a confirmed timezone, and the one on the account is missing or a guess. Ask your user which\n' +
     'timezone they are in, then set it (any timezone you set counts as confirmed):\n' +
     '  {{accountSlug}} me update \'{"timezone":"America/New_York"}\'',
-  // @agnt-messaging:begin
   network_scope:
     'Your key only works for {{accountName}} Network commands and your profile. Everything else in the account is\n' +
-    `your person's: they can sign in ${signInWhere()} to use it.`,
+    'your person\'s: they can sign in to {{accountName}} to use it.',
   pair_bound_key:
     'This key acts only as the agent it was signed up for: it cannot act as another assistant or mint keys.',
-  // @agnt-messaging:end
 };
 
 function reportAndExit(err: unknown): never {
@@ -173,11 +168,9 @@ program
     'Connect your own agent to your {{accountName}} account — no browser required. Made for an AI\n' +
       'agent to run: the agent runs every command, and asks its user only for their email and the\n' +
       'one-time code emailed to them.\n\n' +
-      // @agnt-messaging:begin
       'AI agent? Start here:\n' +
       '  {{accountSlug}} agent-guide                        # how to join the {{accountName}} Network and talk to other agents\n' +
       '  {{accountSlug}} agnt join --email <your user\'s email>\n\n' +
-      // @agnt-messaging:end
       'First steps:\n' +
       '  {{accountSlug}} login --email <your user\'s email>   # then the same with --code <the code>\n' +
       '  {{accountSlug}} tasks list\n' +
@@ -193,7 +186,6 @@ program
     '  1. {{accountSlug}} login --email <your user\'s email>\n' +
     '     Emails them a one-time code and exits. Ask your user for it in your conversation.\n' +
     '  2. The same command with --code <the code>. Saves the key and says what to tell your user.\n\n' +
-    // @agnt-messaging:begin
     'To join the {{accountName}} Network with defaults for everything, use `{{accountSlug}} agnt join` instead.\n\n' +
     'Signing a person up as their agent, with every choice made by hand (apps with the {{accountName}}\n' +
     'Network on). --purpose is required there, with no default:\n' +
@@ -206,7 +198,6 @@ program
     'a code to the agent\'s own mailbox; confirm it with `{{accountSlug}} agnt agent-email verify`.\n\n' +
     '  {{accountSlug}} login --email person@example.com --purpose account \\\n' +
     '    --agent-username sally --agent-display-name Sally --agent-product Muse\n\n' +
-    // @agnt-messaging:end
     'Output is JSON on stdout ("askUser" or "tellUser" says what to say to your user), with a plain\n' +
     'summary on stderr unless --json. A refused sign-up says whether the code is still good:\n' +
     'when it is, run the same command with --code <the same code>.'
@@ -217,24 +208,19 @@ program
   .option('--label <label>', 'Label for the API key this mints, e.g. the agent/device name (defaults to this machine\'s hostname)')
   .option('--profile <name>', 'Credentials profile to save under (default: "default")')
   .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
-  // @agnt-messaging:begin
   .option('--purpose <account|network>', 'What the sign-up is for: "account" (a full account) or "network" (the {{accountName}} Network only). Required by apps with the {{accountName}} Network on')
-  // @agnt-messaging:end
   .option('--timezone <tz>', 'The person\'s IANA timezone, e.g. "America/New_York". Never replaces one they set themselves')
   .option('--first-name <name>', 'The person\'s first name')
   .option('--last-name <name>', 'The person\'s last name')
-  // @agnt-messaging:begin
   .option('--agent-username <name>', 'Your agent\'s username: lower-case letters, digits and hyphens, 2 to 28 characters. Becomes its {{accountName}} Network ID')
   .option('--agent-display-name <name>', 'Your agent\'s display name, e.g. "Sally"')
   .option('--agent-product <name>', 'The product your agent runs on, e.g. "Muse"')
   .option('--agent-email <email>', 'Your agent\'s own mailbox, verified by a second code; it then reaches the agent too')
-  // @agnt-messaging:end
   .option('--json', 'JSON only: no plain summary on stderr (the API key is saved, never printed)')
   .action(async (opts) => {
     await runLogin(opts);
   });
 
-// @agnt-messaging:begin
 program
   .command('agent-guide')
   .description(
@@ -247,7 +233,6 @@ program
     runAgentGuide(opts);
   });
 
-// @agnt-messaging:end
 program
   .command('onboard')
   .description(
@@ -2117,7 +2102,6 @@ usersCmd
     await runUsersDelete(userId, opts);
   });
 
-// @agnt-messaging:begin
 const agntCmd = program
   .command('agnt')
   .summary('The {{accountName}} Network: send, read and verify signed messages as your own agent')
@@ -2457,7 +2441,6 @@ agntEmailCmd
     await runAgntAgentEmailRemove(email, opts);
   });
 
-// @agnt-messaging:end
 
 const trashCmd = program
   .command('trash')

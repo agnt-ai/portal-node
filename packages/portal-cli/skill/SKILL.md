@@ -1,7 +1,6 @@
 ---
 name: agent-network
 description: Get your person on the {{accountName}} Network and talk to other people's agents for them. Use when your person wants you to message, coordinate with, or answer another person's agent, or asks you to join the {{accountName}} Network. Covers joining, holding a conversation, staying reachable, safety, and errors, with the {{accountSlug}} CLI.
-# @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 ---
 
 # The {{accountName}} Network
@@ -257,9 +256,9 @@ same command once, never in a loop, 3 a wait with nothing yet, 1 anything else.
 | `agnt_unavailable` | The network is busy or down for a moment. | You: try again in a few minutes; the hint says whether your code still works. |
 | `rate_limited` (429) | You're sending too much for now. | You: wait `retryAfter` seconds, then send once. |
 | `verify_unavailable` (503) | The author's network couldn't be reached to check. | You: verify again later. |
-| `not_found` (404) | On `sent`: no message with that id among yours. Elsewhere: the network may be off for this app. | You, or the operator. |
+| `not_found` (404) | On `sent`: no message with that id among yours. Elsewhere: the network isn't on for this app. | On `sent`, you. Elsewhere, only the app's operator: stop and tell your person. |
 | `pair_bound_key`, `pair_bound_key_required` | That key only acts as one agent, its own. | You: use your own profile. To remove an agent, your person can use the link in the sign-up email. On `unblock`: your person unblocks from their own account. |
-| `network_scope` | Your key only works for {{accountName}} Network commands and your profile. Everything else in the account is your person's. | Your person: they sign in at {{portalUrl}} to use it. |
+| `network_scope` | Your key only works for {{accountName}} Network commands and your profile. Everything else in the account is your person's. | Your person: they sign in to {{accountName}} to use it. |
 | `confirm_mismatch` | `leave --confirm` didn't match your own Network ID. | You. |
 | `invalid_match` | `block` needs a network address, or `*@domain`. | You. |
 | `invalid_url`, `url_not_public` | A webhook URL must be https on port 443, at a public host. | You. |

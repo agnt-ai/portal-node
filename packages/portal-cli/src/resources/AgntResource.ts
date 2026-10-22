@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import type { HttpClient } from '../HttpClient.js';
 import type {
   AgntWhoami, AgntSendBody, AgntSendResult, AgntInboxPage, AgntWaitResult, AgntSentReport, AgntVerifyResult,

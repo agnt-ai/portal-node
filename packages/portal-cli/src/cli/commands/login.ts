@@ -14,10 +14,8 @@
  * that may pass later, 1 otherwise.
  *
  * The person's timezone and name may be given too; an app that reads them uses them.
- * @agnt-messaging:begin
  * With the {{accountName}} Network, sign-up also takes a --purpose (a full "account", or the "network" only) and the agent's
  * own identity (--agent-username and friends), and answers with the agent's {{accountName}} Network ID (loginAgnt.ts).
- * @agnt-messaging:end
  */
 
 import { publicRequest, AgntApiError } from '../../HttpClient.js';
@@ -27,9 +25,7 @@ import { resolveProfileName } from '../utils/credentials.js';
 import { DEFAULT_API_URL, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import type { AgentAuthVerifyResult, AgentAuthVerifyFields } from '../../types.js';
-// @agnt-messaging:begin
 import { agntSignupFields, agntVerifyHint, agntConnected } from './loginAgnt.js';
-// @agnt-messaging:end
 
 export interface LoginOptions {
   email: string;
@@ -58,30 +54,24 @@ export function signupFieldsFrom(opts: LoginOptions): { fields: AgentAuthVerifyF
   if (opts.timezone?.trim()) fields.timezone = opts.timezone.trim();
   if (opts.firstName?.trim()) fields.firstName = opts.firstName.trim();
   if (opts.lastName?.trim()) fields.lastName = opts.lastName.trim();
-  // @agnt-messaging:begin
   const agnt = agntSignupFields(opts);
   if ('error' in agnt) return agnt;
   Object.assign(fields, agnt.fields);
-  // @agnt-messaging:end
   return { fields };
 }
 
 /** Error codes from verify that leave the code unspent: fix the flag and run again with the same --code. */
 const CODE_KEPT = new Set([
   'bad_request', 'otp_invalid',
-  // @agnt-messaging:begin
   'purpose_required', 'invalid_purpose', 'purpose_not_supported', 'agent_required',
   'invalid_agent', 'invalid_username', 'agnt_username_reserved', 'agnt_not_enabled',
-  // @agnt-messaging:end
 ]);
 
 /** Plain guidance for a refused verify: what happened, and the next command. */
 export function verifyErrorHint(err: AgntApiError, code: string): string | undefined {
   const again = `run the same command with --code ${code}`;
-  // @agnt-messaging:begin
   const agntHint = agntVerifyHint(err, again);
   if (agntHint) return agntHint;
-  // @agnt-messaging:end
   switch (err.errorCode) {
     case 'bad_request':
       return `Fix the flag the message names. Your code is still good: ${again}.`;
@@ -128,13 +118,11 @@ export function finishCommand(opts: LoginOptions): string {
     ['--timezone', opts.timezone?.trim()],
     ['--first-name', opts.firstName?.trim()],
     ['--last-name', opts.lastName?.trim()],
-    // @agnt-messaging:begin
     ['--purpose', opts.purpose?.trim()],
     ['--agent-username', opts.agentUsername?.trim()],
     ['--agent-display-name', opts.agentDisplayName?.trim()],
     ['--agent-product', opts.agentProduct?.trim()],
     ['--agent-email', opts.agentEmail?.trim()],
-    // @agnt-messaging:end
   ];
   const parts = ['{{accountSlug}} login'];
   for (const [flag, value] of flags) if (value) parts.push(flagWord(flag, value));
@@ -244,10 +232,8 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   let next = [`{{accountSlug}} tasks list${profileFlag}`];
   let moreLines: string[] = [];
   let extra: Record<string, unknown> = {};
-  // @agnt-messaging:begin
   const agnt = agntConnected(result!, profileFlag);
   if (agnt) ({ tellUser, next, lines: moreLines, extra } = agnt);
-  // @agnt-messaging:end
 
   // The key itself is saved to the profile, never printed.
   const { apiKey: _apiKey, ...shown } = result!;

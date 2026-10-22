@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect } from 'vitest';
 import { readSkill, skillPath, CONVERSATION } from './agentGuide.js';
 import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
@@ -153,8 +152,8 @@ describe("the app's network skill (SKILL.md)", () => {
     }
     expect(s).toMatch(/Only the app's operator\. Stop and tell your person\./);
     expect(s).toMatch(new RegExp('\\| `network_scope` \\| Your key only works for ' + APP_RE + ' Network commands and your profile\\. ' +
-      "Everything else in the account is your person's\\. \\| Your person: they sign in at (https://\\S+|the " + APP_RE + ' web app) to use it\\.'));
-    expect(s).not.toContain('{{portalUrl}}');
+      "Everything else in the account is your person's\\. \\| Your person: they sign in to " + APP_RE + ' to use it\\.'));
+    expect(s).toMatch(/Elsewhere: the network isn't on for this app\. \| On `sent`, you\. Elsewhere, only the app's operator: stop and tell your person\./);
   });
 
   it('the reference lists every agnt command the CLI has', () => {

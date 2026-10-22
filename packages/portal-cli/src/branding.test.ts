@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
@@ -6,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { DEFAULT_ACCOUNT_NAME, DEFAULT_ACCOUNT_SLUG } from './defaults.js';
 
 // No app's name is written into the CLI: every one comes from the app's own config, through hydration. CI runs
-// this on a build hydrated as "Acme Assist" with AGNT messaging on, where any fixed "OpenAssistant" fails it.
+// this on a build hydrated as "Test Account", where any fixed "OpenAssistant" fails it.
 const APP = DEFAULT_ACCOUNT_NAME;
 const PKG = fileURLToPath(new URL('..', import.meta.url));
 

@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect, vi } from 'vitest';
 import { agntWebhookSet, agntWebhookShow, agntWebhookRemove, agntWebhookTest } from './webhook.js';
 import { AgntUsageError, describeError, type WaitClock } from './agnt.js';

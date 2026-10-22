@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { agntJoin, pickUsername, guessProduct, randomSuffix, SUFFIX_ALPHABET } from './join.js';
 import { AgntUsageError, describeError } from './agnt.js';

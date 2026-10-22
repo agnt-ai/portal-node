@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 /**
  * The {{accountName}} Network part of {{accountSlug}} login: the agent sign-up fields (--purpose and --agent-*), the
  * guidance for their refusals, and what login says once the agent has its {{accountName}} Network ID.

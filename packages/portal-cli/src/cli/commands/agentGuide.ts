@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 

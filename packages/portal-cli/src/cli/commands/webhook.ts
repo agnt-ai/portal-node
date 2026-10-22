@@ -1,4 +1,3 @@
-// @agnt-messaging-only: scripts/hydrate.mjs removes this file from other apps' builds.
 /**
  * {{accountSlug}} agnt webhook set|show|remove|test — a push to the agent's own HTTPS endpoint whenever a message
  * reaches its inbox, for agents that run a server. Notify-only: the push names the message, and the agent reads

@@ -23,7 +23,6 @@ describe('signupFieldsFrom', () => {
     expect(signupFieldsFrom({ email: 'p@example.com' })).toEqual({ fields: {} });
   });
 
-  // @agnt-messaging:begin
   it('builds timezone, names, purpose and the agent', () => {
     expect(signupFieldsFrom({
       email: 'p@example.com', timezone: ' America/New_York ', firstName: 'Ada', lastName: 'Lovelace', purpose: 'Account',
@@ -33,9 +32,7 @@ describe('signupFieldsFrom', () => {
       agent: { username: 'sally', displayName: 'Sally', product: 'Muse', email: 'sally@example.org' },
     } });
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('refuses before any code is requested: a bad purpose, an agent with no purpose, network with no agent, a bad username', () => {
     expect(signupFieldsFrom({ email: 'p', purpose: 'both' })).toHaveProperty('error');
     expect(signupFieldsFrom({ email: 'p', agentUsername: 'sally' })).toHaveProperty('error');
@@ -44,51 +41,39 @@ describe('signupFieldsFrom', () => {
     expect(signupFieldsFrom({ email: 'p', purpose: 'account', agentUsername: '-sally' })).toHaveProperty('error');
     expect(signupFieldsFrom({ email: 'p', purpose: 'account', agentProduct: 'Muse' })).toHaveProperty('error');
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('allows purpose account with no agent', () => {
     expect(signupFieldsFrom({ email: 'p', purpose: 'account' })).toEqual({ fields: { purpose: 'account' } });
   });
-  // @agnt-messaging:end
 });
 
 describe('verifyErrorHint', () => {
   const err = (status: number, code: string, message = 'x') => new AgntApiError(status, message, code);
 
-  // @agnt-messaging:begin
   it('a taken username before the code was spent: the same code still works', () => {
     const hint = verifyErrorHint(err(409, 'agnt_username_taken', 'That username is taken; choose another'), '123456')!;
     expect(hint).toMatch(/still good/);
     expect(hint).toContain('--code 123456');
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('a taken username after the code was spent: ask for a new code', () => {
     const hint = verifyErrorHint(err(409, 'agnt_username_taken', 'That username was just taken; choose another and request a new code'), '123456')!;
     expect(hint).toMatch(/without --code/);
     expect(hint).not.toContain('123456');
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('a reserved or malformed username, or a missing purpose, keeps the code', () => {
     for (const code of ['agnt_username_reserved', 'invalid_username', 'purpose_required', 'purpose_not_supported', 'agent_required']) {
       expect(verifyErrorHint(err(400, code), '999')).toContain('--code 999');
     }
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('agnt_not_enabled: only the operator can turn it on; stop and tell the user (exit 1)', () => {
     const e = err(400, 'agnt_not_enabled', 'Agent sign-up is not enabled for this app; nothing was created and your code still works.');
     expect(verifyErrorHint(e, '313131')).toBe(`The ${APP} Network isn't turned on for this app yet; only its operator can turn it on. Stop and tell your user; nothing you run can fix it.`);
     expect(verifyExitCode(e)).toBe(1);
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('a 503 agnt_unavailable_code_kept: retry later with the same code, exit 75', () => {
     const e = err(503, 'agnt_unavailable_code_kept', 'Agent sign-up is temporarily unavailable.');
     const hint = verifyErrorHint(e, '424242')!;
@@ -96,9 +81,7 @@ describe('verifyErrorHint', () => {
     expect(hint).toContain('--code 424242');
     expect(verifyExitCode(e)).toBe(75);
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('a 503 agnt_unavailable_new_code: get a new code, and the command must change (exit 1)', () => {
     const e = err(503, 'agnt_unavailable_new_code', 'Agent sign-up is temporarily unavailable.');
     const hint = verifyErrorHint(e, '424242')!;
@@ -107,7 +90,6 @@ describe('verifyErrorHint', () => {
     expect(hint).not.toContain('424242');
     expect(verifyExitCode(e)).toBe(1);
   });
-  // @agnt-messaging:end
 
   it('a refused flag keeps the code; too many attempts says how long to wait', () => {
     expect(verifyErrorHint(err(400, 'bad_request'), '42')).toMatch(/still good: run the same command with --code 42/);
@@ -122,11 +104,9 @@ describe('verifyErrorHint', () => {
     expect(verifyExitCode(err(429, 'rate_limited'))).toBe(75);
   });
 
-  // @agnt-messaging:begin
   it('a plain agnt_unavailable tries the same code first', () => {
     expect(verifyErrorHint(err(503, 'agnt_unavailable'), '5')).toMatch(/wait a few minutes.*--code 5/i);
   });
-  // @agnt-messaging:end
 });
 
 describe('finishCommand and tellUserConnected', () => {
@@ -140,12 +120,10 @@ describe('finishCommand and tellUserConnected', () => {
     expect(tellUserConnected(base)).toMatch(/^You're signed in to .* as p@example\.com\.$/);
   });
 
-  // @agnt-messaging:begin
   it('repeats the flags as given, ready for --code', () => {
     expect(finishCommand({ email: 'p@example.com', purpose: 'network', agentUsername: 'sally', agentDisplayName: 'Sally Bot', profile: 'a' }))
       .toMatch(/ login --email p@example\.com --profile a --purpose network --agent-username sally --agent-display-name 'Sally Bot' --code <the code>$/);
   });
-  // @agnt-messaging:end
 
 });
 
@@ -207,7 +185,6 @@ describe('runLogin against a mocked API', () => {
     expect(stderr.join('')).not.toMatch(/onboard|working hours/i);
   });
 
-  // @agnt-messaging:begin
   it('step 1 emails the code, never reads stdin, and says what to ask the user', async () => {
     const fetchMock = mockFetch({ ok: true }, 200);
     const stdinRead = vi.spyOn(process.stdin, 'read');
@@ -221,9 +198,7 @@ describe('runLogin against a mocked API', () => {
     expect(out.findCode).toMatch(/inbox.*first/);
     expect(stderr.join('')).toMatch(/Otherwise ask your user, in your conversation/);
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('step 2 sends the fields with the code, saves the key, and says what to tell the user, with no onboarding step', async () => {
     const fetchMock = mockFetch(signupResponse);
     await runLogin({
@@ -247,7 +222,6 @@ describe('runLogin against a mocked API', () => {
     expect(text).toMatch(/Tell your user:/);
     expect(text).not.toMatch(/onboard|working hours|workingHours|Still to fill/i);
   });
-  // @agnt-messaging:end
 
   it('step 2 with sign-up flags: sends them, and an app that reads them needs no second call', async () => {
     const fetchMock = mockFetch(signupResponse);
@@ -344,7 +318,6 @@ describe('runLogin against a mocked API', () => {
       .toMatch(/ --email p@example\.com --first-name=-x --last-name 'O'\\''Neil' --code <the code>$/);
   });
 
-  // @agnt-messaging:begin
   it('a refused username exits with JSON guidance that keeps the code', async () => {
     mockFetch({ status: 409, error_code: 'agnt_username_taken', error: 'That username is taken; choose another' }, 409);
     const exit = vi.spyOn(process, 'exit').mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as any);
@@ -354,9 +327,7 @@ describe('runLogin against a mocked API', () => {
     expect(saveProfile).not.toHaveBeenCalled();
     exit.mockRestore();
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('a 503 that used the code exits 1 and says to drop --code', async () => {
     mockFetch({ status: 503, error_code: 'agnt_unavailable_new_code', error: 'Agent sign-up is temporarily unavailable.' }, 503);
     const exit = vi.spyOn(process, 'exit').mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as any);
@@ -365,9 +336,7 @@ describe('runLogin against a mocked API', () => {
     expect(JSON.parse(stderr.join('')).error.hint).toMatch(/without --code/);
     exit.mockRestore();
   });
-  // @agnt-messaging:end
 
-  // @agnt-messaging:begin
   it('a 503 that kept the code exits 75 and says to reuse it', async () => {
     mockFetch({ status: 503, error_code: 'agnt_unavailable_code_kept', error: 'Agent sign-up is temporarily unavailable.' }, 503);
     const exit = vi.spyOn(process, 'exit').mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as any);
@@ -376,7 +345,6 @@ describe('runLogin against a mocked API', () => {
     expect(JSON.parse(stderr.join('')).error).toMatchObject({ retryable: true, hint: expect.stringMatching(/--code 888888/) });
     exit.mockRestore();
   });
-  // @agnt-messaging:end
 
   it('no --email: exit 2, with the line to ask the user for theirs', async () => {
     const fetchMock = mockFetch(signupResponse);
@@ -387,7 +355,6 @@ describe('runLogin against a mocked API', () => {
     exit.mockRestore();
   });
 
-  // @agnt-messaging:begin
   it('a usage problem exits 2 before any request', async () => {
     const fetchMock = mockFetch(signupResponse);
     const exit = vi.spyOn(process, 'exit').mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as any);
@@ -395,5 +362,4 @@ describe('runLogin against a mocked API', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     exit.mockRestore();
   });
-  // @agnt-messaging:end
 });
