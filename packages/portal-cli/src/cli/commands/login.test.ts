@@ -183,7 +183,24 @@ describe('runLogin against a mocked API', () => {
     } finally {
       vi.unstubAllEnvs();
     }
-    expect(JSON.parse(stdout.join('')).next).toMatch(/--api-url https:\/\/api\.test\.example --code <the code>$/);
+    const out = JSON.parse(stdout.join(''));
+    expect(out.next).toMatch(/--api-url https:\/\/api\.test\.example --code <the code>$/);
+    // The code goes somewhere other than the default API: say so, in the output the agent reads.
+    expect(out).toMatchObject({ apiUrl: 'https://api.test.example', warning: expect.stringMatching(/not the default API/) });
+  });
+
+  it('refuses a plain-http API that is not on this computer, before sending anything (exit 2)', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as any;
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as any);
+    await expect(runLogin({ email: 'p@example.com', account: 'acme', apiUrl: 'http://api.example.test' })).rejects.toThrow('exit 2');
+    expect(fetchMock).not.toHaveBeenCalled();
+    exit.mockRestore();
+  });
+
+  it('the printed step-2 command quotes values, and a value starting with "-" can never read as a flag', () => {
+    expect(finishCommand({ email: 'p@example.com', firstName: '-x', lastName: "O'Neil" }))
+      .toMatch(/ --email p@example\.com --first-name=-x --last-name 'O'\\''Neil' --code <the code>$/);
   });
 
   it('no --email: exit 2, with the line to ask the user for theirs', async () => {

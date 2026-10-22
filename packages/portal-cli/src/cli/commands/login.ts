@@ -20,7 +20,7 @@ import { publicRequest, AgntApiError } from '../../HttpClient.js';
 import { PortalClient } from '../../index.js';
 import { saveProfile } from '../utils/credentials.js';
 import { resolveProfileName } from '../utils/credentials.js';
-import { DEFAULT_API_URL, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
+import { DEFAULT_API_URL, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import type { AgentAuthVerifyResult, AgentAuthVerifyFields } from '../../types.js';
 
@@ -76,8 +76,13 @@ export function verifyExitCode(err: AgntApiError): number {
 }
 
 /** A value as a shell word: bare when safe, else single-quoted. */
-function shellWord(value: string): string {
+export function shellWord(value: string): string {
   return /^[A-Za-z0-9@%_+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** A flag and its value for a printed command: `--flag=value` when the value starts with "-", so it can't read as a flag. */
+export function flagWord(flag: string, value: string): string {
+  return value.startsWith('-') ? `${flag}=${shellWord(value)}` : `${flag} ${shellWord(value)}`;
 }
 
 /** The same login command, as given, ready for `--code` (step 2). */
@@ -93,7 +98,7 @@ export function finishCommand(opts: LoginOptions): string {
     ['--last-name', opts.lastName?.trim()],
   ];
   const parts = ['{{accountSlug}} login'];
-  for (const [flag, value] of flags) if (value) parts.push(`${flag} ${shellWord(value)}`);
+  for (const [flag, value] of flags) if (value) parts.push(flagWord(flag, value));
   if (opts.json) parts.push('--json');
   parts.push('--code <the code>');
   return parts.join(' ');
@@ -131,6 +136,8 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   const fields = (read as { fields: AgentAuthVerifyFields }).fields;
 
   const apiUrl = opts.apiUrl?.trim() || resolveApiUrl();
+  const urlProblem = apiUrlProblem(apiUrl);
+  if (urlProblem) fail('invalid', urlProblem, {}, 2);
   const code = opts.code?.trim();
 
   // Step 1: email the code to the user, say what to ask them, and stop. Never waits for input.
@@ -152,10 +159,12 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
     const next = finishCommand({ ...opts, apiUrl: apiUrl !== DEFAULT_API_URL ? apiUrl : opts.apiUrl });
     const sentAt = new Date().toISOString();
     const findCode = findCodeHint(email, sentAt);
+    const warning = apiUrlWarning(apiUrl);
     emit(opts, {
-      status: 'code_sent', email, sentAt, findCode, askUser, next,
+      status: 'code_sent', email, sentAt, findCode, askUser, next, ...(warning ? { apiUrl, warning } : {}),
       note: 'Check your user\'s inbox for the code if you can; otherwise ask them in your conversation. They never need a terminal.',
     }, [
+      ...(warning ? [`Warning: ${warning}`] : []),
       `A one-time code was emailed to ${email}.`,
       findCode,
       `Otherwise ask your user, in your conversation: "${askUser}"`,
@@ -191,7 +200,7 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
     if (me && !me.timezone) await client.me.update({ timezone: fields.timezone } as any).catch(() => undefined);
   }
 
-  const profileFlag = opts.profile ? ` --profile ${shellWord(opts.profile)}` : '';
+  const profileFlag = opts.profile ? ` ${flagWord('--profile', opts.profile)}` : '';
   let tellUser = tellUserConnected(result!);
   let next = [`{{accountSlug}} tasks list${profileFlag}`];
   let moreLines: string[] = [];

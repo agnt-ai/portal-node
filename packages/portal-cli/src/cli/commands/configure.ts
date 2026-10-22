@@ -8,7 +8,7 @@
  */
 
 import { saveProfile } from '../utils/credentials.js';
-import { resolveDefaultAccountSlug, resolveApiUrl } from '../../defaults.js';
+import { resolveDefaultAccountSlug, resolveApiUrl, apiUrlProblem } from '../../defaults.js';
 
 export interface ConfigureOptions {
   profile: string;
@@ -24,6 +24,11 @@ export async function runConfigure(opts: ConfigureOptions): Promise<void> {
   }
 
   const apiUrl = opts.apiUrl?.trim() || resolveApiUrl();
+  const urlProblem = apiUrlProblem(apiUrl);
+  if (urlProblem) {
+    console.error(urlProblem);
+    process.exit(1);
+  }
   const account = opts.account?.trim() || resolveDefaultAccountSlug();
 
   try {
