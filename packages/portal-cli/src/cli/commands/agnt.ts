@@ -17,7 +17,6 @@ import { readFileSync } from 'node:fs';
 import { clientFor } from '../utils/api.js';
 import { agntProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
-import { rememberIds, resolveIdPrefix, ID_PREFIX } from '../utils/seenIds.js';
 import { signInWhere } from '../../defaults.js';
 import { AgntApiError } from '../../HttpClient.js';
 import type { PortalClient } from '../../index.js';
@@ -230,10 +229,9 @@ export function sendBodyFrom(opts: AgntSendOptions, readStdin: () => string = ()
   const text = opts.text === '-' ? readStdin() : opts.text;
   const body: AgntSendBody = { to, text };
   if (opts.inReplyTo !== undefined) {
+    // Full ids only: a short prefix is cheap to collide with on purpose.
     const id = opts.inReplyTo.trim().toLowerCase();
-    if (!HEX64.test(id) && !ID_PREFIX.test(id)) {
-      throw new AgntUsageError('--in-reply-to takes a message id in full (64 hex characters), or a unique prefix of 12 or more of an id this CLI has shown you.');
-    }
+    if (!HEX64.test(id)) throw new AgntUsageError('--in-reply-to takes the message id in full: 64 hex characters, as wait or inbox printed it.');
     body.inReplyTo = id;
   }
   const headers: Record<string, string> = {};
@@ -251,6 +249,9 @@ export function sendBodyFrom(opts: AgntSendOptions, readStdin: () => string = ()
       if (name === 'subject') throw new AgntUsageError('Set the subject with --subject "...".');
       headers[name] = h.slice(eq + 1);
     }
+  }
+  if (!headers.subject && body.inReplyTo === undefined) {
+    throw new AgntUsageError('A new thread needs --subject "<a few words>": what it is about. A reply (--in-reply-to) keeps its thread\'s subject.');
   }
   if (Object.keys(headers).length) body.headers = headers;
   if (opts.assistant) body.assistant = opts.assistant;
@@ -628,48 +629,18 @@ const withClient = (profile: string | undefined, fn: (client: PortalClient) => P
 
 export const runAgntWhoami = (opts: AgntBaseOptions) =>
   runAgntVerb('whoami', withClient(opts.profile, (c) => agntWhoami(c, opts)));
-/** The profile an agnt command acts as, by name (for the ids this CLI remembers). */
-async function profileNamed(explicit?: string): Promise<{ profile: string | undefined; name: string }> {
-  const profile = await agntProfile(explicit);
-  return { profile, name: profile ?? await resolveProfileName() };
-}
-
 export const runAgntSend = (opts: AgntSendOptions) =>
   runAgntVerb('send', async () => {
     const body = sendBodyFrom(opts); // usage errors before reading credentials
-    const { profile, name } = await profileNamed(opts.profile);
-    if (body.inReplyTo && !HEX64.test(body.inReplyTo)) {
-      const found = await resolveIdPrefix(name, body.inReplyTo);
-      if ('error' in found) throw new AgntUsageError(found.error);
-      body.inReplyTo = found.id;
-    }
-    const client = await clientFor(profile);
-    const result = await client.agnt.send(body);
-    await rememberIds(name, [result.id]);
-    return { result };
+    const client = await clientFor(await agntProfile(opts.profile));
+    return { result: await client.agnt.send(body) };
   });
 export const runAgntInbox = (opts: AgntInboxOptions) =>
-  runAgntVerb('inbox', async () => {
-    const { profile, name } = await profileNamed(opts.profile);
-    const out = await agntInbox(await clientFor(profile), opts);
-    await rememberIds(name, out.result.messages.map((m) => m.id));
-    return out;
-  });
+  runAgntVerb('inbox', withClient(opts.profile, (c) => agntInbox(c, opts)));
 export const runAgntWait = (opts: AgntWaitOptions) =>
-  runAgntVerb('wait', async () => {
-    const { profile, name } = await profileNamed(opts.profile);
-    const out = await agntWait(await clientFor(profile), opts);
-    const got = out.result as { status: string; id?: string };
-    if (got.status === 'message') await rememberIds(name, [got.id]);
-    return out;
-  });
+  runAgntVerb('wait', withClient(opts.profile, (c) => agntWait(c, opts)));
 export const runAgntSent = (id: string, opts: AgntBaseOptions) =>
-  runAgntVerb('sent', async () => {
-    const { profile, name } = await profileNamed(opts.profile);
-    const found = await resolveIdPrefix(name, id);
-    if ('error' in found) throw new AgntUsageError(found.error);
-    return agntSent(await clientFor(profile), found.id, opts);
-  });
+  runAgntVerb('sent', withClient(opts.profile, (c) => agntSent(c, id, opts)));
 export const runAgntVerify = (file: string, opts: AgntBaseOptions) =>
   runAgntVerb('verify', async () => {
     const message = readVerifyInput(file); // usage errors before reading credentials

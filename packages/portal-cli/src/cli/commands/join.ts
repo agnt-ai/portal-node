@@ -17,8 +17,8 @@ import { randomBytes } from 'node:crypto';
 import { publicRequest, AgntApiError } from '../../HttpClient.js';
 import { PortalClient } from '../../index.js';
 import { saveProfile, resolveProfile } from '../utils/credentials.js';
-import { resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
-import { signupFieldsFrom, verifyErrorHint, type LoginOptions } from './login.js';
+import { DEFAULT_API_URL, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
+import { signupFieldsFrom, verifyErrorHint, flagWord, type LoginOptions } from './login.js';
 import { AgntUsageError } from './agnt.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
@@ -85,6 +85,27 @@ export function joinedLine(email: string, address: string, purpose: AgentSignupP
 
 const sayLine = (address: string) => `I'm all set. My {{accountName}} Network ID is ${address}. Which agent do you want me to talk to?`;
 
+/** The same join, as given, ready for `--code` (step 2): every choice repeated, so step 2 signs up what step 1 meant. */
+export function finishJoinCommand(opts: JoinOptions, email: string, apiUrl: string): string {
+  const flags: Array<[string, string | undefined]> = [
+    ['--email', email],
+    ['--username', opts.username?.trim()],
+    ['--display-name', opts.displayName?.trim()],
+    ['--product', opts.product?.trim()],
+    ['--purpose', opts.purpose?.trim()],
+    ['--timezone', opts.timezone?.trim()],
+    ['--profile', opts.profile?.trim()],
+    ['--account', opts.account?.trim()],
+    // The API too when AGNT_API_URL chose it: the printed command can run without that variable.
+    ['--api-url', apiUrl !== DEFAULT_API_URL ? apiUrl : opts.apiUrl?.trim()],
+  ];
+  const parts = ['{{accountSlug}} agnt join'];
+  for (const [flag, value] of flags) if (value) parts.push(flagWord(flag, value));
+  if (opts.json) parts.push('--json');
+  parts.push('--code <the code>');
+  return parts.join(' ');
+}
+
 function nextCommands(profileFlag: string): string[] {
   return [
     `{{accountSlug}} agnt send${profileFlag} --to <their Network ID or email> --subject "..." --text "..."`,
@@ -103,7 +124,7 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
   // The agent's own profile (claude-code, codex, ...), never the shared default: two agents on one computer
   // never share keys, and a profile made earlier by hand is never picked up. --profile wins.
   const profileName = opts.profile?.trim() || process.env.AGNT_CLI_PROFILE || agentProfileName();
-  const profileFlag = opts.profile ? ` --profile ${opts.profile}` : '';
+  const profileFlag = opts.profile ? ` ${flagWord('--profile', opts.profile)}` : '';
 
   // Already joined on this profile: just say where the agent is.
   if (!opts.code) {
@@ -130,6 +151,8 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
   const account = opts.account?.trim() || resolveDefaultAccountSlug();
   if (!account) throw new AgntUsageError('No account configured. Pass --account <slug>.');
   const apiUrl = opts.apiUrl?.trim() || resolveApiUrl();
+  const urlProblem = apiUrlProblem(apiUrl);
+  if (urlProblem) throw new AgntUsageError(urlProblem);
   const purpose = (opts.purpose?.trim().toLowerCase() || 'network') as AgentSignupPurpose;
   const product = opts.product?.trim() || guessProduct();
   const displayName = opts.displayName?.trim() || product;
@@ -139,12 +162,14 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
   if (!opts.code) {
     await publicRequest(apiUrl, '/portal/auth/agent/start', { email, account });
     const sentAt = new Date().toISOString();
+    const warning = apiUrlWarning(apiUrl);
     return {
       result: {
         status: 'code_sent', email, sentAt,
+        ...(warning ? { apiUrl, warning } : {}),
         findCode: findCodeHint(email, sentAt),
         askUser: askForCode(email),
-        next: `{{accountSlug}} agnt join --email ${email}${profileFlag} --code <the code>`,
+        next: finishJoinCommand(opts, email, apiUrl),
         note: 'Check your user\'s inbox for the code if you can; otherwise ask them in your conversation. They never need a terminal.',
       },
     };

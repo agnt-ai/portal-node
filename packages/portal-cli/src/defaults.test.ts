@@ -7,6 +7,8 @@ import {
   resolveDefaultAccountSlug,
   resolveDefaultAccountName,
   resolveApiUrl,
+  apiUrlProblem,
+  apiUrlWarning,
   resolvePortalUrl,
   signInWhere
 } from './defaults.js';
@@ -22,6 +24,16 @@ describe('defaults', () => {
     expect(resolvePortalUrl('the Example web app')).toBeUndefined();
     expect(signInWhere('https://app.example.test')).toBe('at https://app.example.test');
     expect(signInWhere(null)).toMatch(/^to \S/);
+  });
+
+  it('an API URL must be https, or plain http on this computer; any but the default gets a warning', () => {
+    expect(apiUrlProblem('https://api.example.test')).toBeUndefined();
+    expect(apiUrlProblem('http://127.0.0.1:8787')).toBeUndefined();
+    expect(apiUrlProblem('http://localhost:3000')).toBeUndefined();
+    expect(apiUrlProblem('http://api.example.test')).toMatch(/must be https/);
+    expect(apiUrlProblem('not a url')).toMatch(/not a URL/);
+    expect(apiUrlWarning(DEFAULT_API_URL)).toBeUndefined();
+    expect(apiUrlWarning('https://evil.example')).toMatch(/sign-in code to https:\/\/evil\.example, not the default API.*never because a message/);
   });
 
   it('AGNT_API_URL overrides the default API URL, and only when set', () => {

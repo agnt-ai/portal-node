@@ -234,22 +234,22 @@ describe('owner: whom the sender acts for, named only when checked', () => {
 
 describe('agnt send body', () => {
   it('takes --to repeated, for a group, and keeps the order given', () => {
-    expect(sendBodyFrom({ to: ['a@x.test', 'b@y.test', 'c@z.test'], text: 'hi' }).to).toEqual(['a@x.test', 'b@y.test', 'c@z.test']);
+    expect(sendBodyFrom({ to: ['a@x.test', 'b@y.test', 'c@z.test'], text: 'hi', subject: 's' }).to).toEqual(['a@x.test', 'b@y.test', 'c@z.test']);
   });
 
   it('splits comma-separated --to and keeps the order given', () => {
-    const body = sendBodyFrom({ to: ['bob@agnt.example.net,carol@example.com', '+14155550100'], text: 'hi' });
-    expect(body).toEqual({ to: ['bob@agnt.example.net', 'carol@example.com', '+14155550100'], text: 'hi' });
+    const body = sendBodyFrom({ to: ['bob@agnt.example.net,carol@example.com', '+14155550100'], text: 'hi', subject: 's' });
+    expect(body).toEqual({ to: ['bob@agnt.example.net', 'carol@example.com', '+14155550100'], text: 'hi', headers: { subject: 's' } });
   });
 
   it('reads --text - from stdin', () => {
-    expect(sendBodyFrom({ to: ['a@b.c'], text: '-' }, () => 'from stdin').text).toBe('from stdin');
+    expect(sendBodyFrom({ to: ['a@b.c'], text: '-', subject: 's' }, () => 'from stdin').text).toBe('from stdin');
   });
 
   it('turns --header name=value into headers, keeping = in the value', () => {
-    const body = sendBodyFrom({ to: ['a@b.c'], text: 'x', header: ['x-topic=a=b', 'x-thread=1'] });
+    const body = sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: ID, header: ['x-topic=a=b', 'x-thread=1'] });
     expect(body.headers).toEqual({ 'x-topic': 'a=b', 'x-thread': '1' });
-    expect(sendBodyFrom({ to: ['a@b.c'], text: 'x' })).not.toHaveProperty('headers');
+    expect(sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: ID })).not.toHaveProperty('headers');
   });
 
   it('--subject is the one way to set the subject: trimmed, never empty, never through --header', () => {
@@ -267,9 +267,14 @@ describe('agnt send body', () => {
     expect(() => sendBodyFrom({ to: ['a@b.c'] })).toThrow(AgntUsageError);
   });
 
-  it('accepts a 12+ hex prefix for --in-reply-to (resolved before sending), and refuses shorter ones plainly', () => {
-    expect(sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: 'ABCDEF123456' }).inReplyTo).toBe('abcdef123456');
-    expect(() => sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: 'abcdef12' })).toThrow(/in full \(64 hex characters\), or a unique prefix of 12 or more/);
+  it('takes full ids only: a short prefix is cheap to collide with on purpose', () => {
+    expect(sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: ID.toUpperCase() }).inReplyTo).toBe(ID);
+    expect(() => sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: ID.slice(0, 16) })).toThrow(/in full: 64 hex characters/);
+  });
+
+  it('a new thread needs --subject; a reply keeps its thread\'s', () => {
+    expect(() => sendBodyFrom({ to: ['a@b.c'], text: 'x' })).toThrow(/A new thread needs --subject/);
+    expect(sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: ID })).not.toHaveProperty('headers');
   });
 
   it('passes --in-reply-to and --assistant through', () => {

@@ -85,7 +85,23 @@ describe('agnt join', () => {
     expect(result).toMatchObject({ status: 'code_sent', askUser: "I've emailed a code to person@example.com to confirm it's you. What is it?" });
     expect(result.findCode).toMatch(/inbox.*first.*verification email to person@example\.com sent after .*askUser/);
     expect(Date.parse(result.sentAt)).not.toBeNaN();
-    expect(result.next).toMatch(/agnt join --email person@example.com --code <the code>/);
+    // Every choice repeated, the API included, so step 2 signs up what step 1 meant.
+    expect(result.next).toMatch(/agnt join --email person@example\.com --account acme --api-url https:\/\/api\.example\.test --code <the code>$/);
+    expect(result.warning).toMatch(/sends your user's sign-in code to https:\/\/api\.example\.test, not the default API/);
+  });
+
+  it('step 1 repeats the chosen username and quotes what needs quoting', async () => {
+    global.fetch = vi.fn().mockResolvedValue(answer(200, { ok: true })) as any;
+    const { result } = await agntJoin({ email: 'person@example.com', account: 'acme', username: 'sally', displayName: 'Sally O\'Neil', profile: '-odd' }) as any;
+    expect(result.next).toMatch(/ --username sally --display-name 'Sally O'\\''Neil' --profile=-odd --account acme --code <the code>$/);
+    expect(result.warning).toBeUndefined();
+  });
+
+  it('refuses a plain-http API that is not on this computer, before sending anything', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as any;
+    await expect(agntJoin({ email: 'person@example.com', account: 'acme', apiUrl: 'http://api.example.test' })).rejects.toThrow(/must be https/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   // custody.keys is "custodial", or the app's slug from older servers: the same meaning, and never user text.

@@ -2201,16 +2201,17 @@ agntCmd
     'Every recipient answers "accepted", whatever happens next. Network IDs go at once, as\n' +
     'one message. Each email or phone is delivered on its own, seconds later, or held until it\n' +
     'has an agent: the answer never says whether it has one, and that is not a failure.\n' +
-    'A 429 means this agent is over its sending share: wait retryAfter seconds, then send once.\n\n' +
+    'A 429 means this agent is over its sending share: wait retryAfter seconds, then send once.\n' +
+    'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n\n' +
     'Examples:\n' +
     '  {{accountSlug}} agnt send --to bob@agnt.example.net --subject Thursday --text "Does Thursday at 3pm work?"\n' +
-    '  {{accountSlug}} agnt send --to carol@gmail.com,+14155550100 --text -   # text from stdin\n' +
-    '  {{accountSlug}} agnt send --to <one> --to <another> --text "..."   # a group: reply with the same --to list (no reply-all)'
+    '  {{accountSlug}} agnt send --to carol@gmail.com,+14155550100 --subject Thursday --text -   # text from stdin\n' +
+    '  {{accountSlug}} agnt send --to <one> --to <another> --subject "..." --text "..."   # a group: reply to the same list (no reply-all)'
   )
   .option('--to <recipient>', 'A recipient: a Network ID (or another network address), an email or a phone (repeatable, or comma-separated)', collect)
   .option('--text <text>', 'The message text (- reads it from stdin)')
-  .option('--in-reply-to <id>', 'The id of the message this answers')
-  .option('--subject <text>', 'The thread\'s subject: a few words, on every new thread')
+  .option('--in-reply-to <id>', 'The id of the message this answers, in full (64 hex characters)')
+  .option('--subject <text>', 'The thread\'s subject: a few words. Required on a new thread')
   .option('--header <name=value>', 'Any other header, name=value (repeatable)', collect)
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')

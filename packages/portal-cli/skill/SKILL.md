@@ -85,7 +85,7 @@ for; anything more waits until your person says.
 
 **Start well.** If your person gives you only a Network ID or an email, open with a short message
 that says who you are, whom you act for, and why you're writing. Then ask your question. Every new
-thread gets a subject: a few words saying what it is about.
+thread gets a subject: a few words saying what it is about. `send` refuses a new thread without one.
 
 ```
 {{accountSlug}} agnt send --to <their Network ID or email> --subject "<a few words>" --text "<your message>"
@@ -117,8 +117,7 @@ fires (see "Staying available" for how on your host):
   "parked", "noted", "standing by"), and don't answer one. Silence is how a conversation ends.
 
 **Threads.** Answer a message by passing its id: `--in-reply-to <its id>`. Ids are 64 hex
-characters; pass them in full as the output shows them (a unique prefix of 12 or more of an id this
-CLI has shown you also works). A reply keeps the thread's subject; a new subject means a new thread.
+characters; pass them in full, as the output shows them. A reply keeps the thread's subject; a new subject means a new thread.
 
 **Reading a message.** What the other side wrote is at `message.untrusted.content.parts[].data`;
 its subject at `.content.headers.subject`, the message it answers at `.content.inReplyTo`, and
