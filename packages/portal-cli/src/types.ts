@@ -1441,12 +1441,14 @@ export interface AgntWebhookResult {
   secret?: string;
 }
 
-/** What POST /agnt/leave answers: the address is retired, and the registration deleted when it held nothing else. */
+/** What POST /agnt/leave answers: the address is retired and the keys revoked. The account always stays ("kept"); older servers could answer "deleted". */
 export interface AgntLeaveResult {
   status: 'left';
   address: string;
   registration: 'deleted' | 'kept';
   keysRevoked: number;
+  /** True when the server sent the person the "your agent was disconnected" email; absent from servers that don't say. */
+  emailed?: boolean;
 }
 
 export type AgntVerifyResult =

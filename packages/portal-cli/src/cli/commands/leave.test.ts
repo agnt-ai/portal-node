@@ -32,7 +32,8 @@ describe('agnt leave', () => {
     expect(exitCode).toBe(EXIT_USAGE);
     expect(body.askUser).toMatch(new RegExp(`^Do you want me to leave the ${APP_RE} Network\\? .*${ADDRESS.replace(/\./g, '\\.')}.*can't be undone: if I join again later, I'll get a new Network ID\\.$`));
     expect(body.message).toContain(`agnt leave --confirm ${ADDRESS}`);
-    expect(body.askUser).toMatch(/account would be deleted too if it has nothing else in it and you've never signed in/);
+    expect(body.askUser).toMatch(new RegExp(`Your ${APP_RE} account stays as it is: leaving never deletes it\\.`));
+    expect(body.askUser).not.toMatch(/would be deleted|is deleted/);
   });
 
   it('a --confirm that is not the agent\'s own address changes nothing', async () => {
@@ -41,23 +42,35 @@ describe('agnt leave', () => {
     expect(c.agnt.leave).not.toHaveBeenCalled();
   });
 
-  it('with the right address (any case): leaves, and says what to tell the user', async () => {
-    const leave = vi.fn().mockResolvedValue({ status: 'left', address: ADDRESS, registration: 'deleted', keysRevoked: 2 });
+  it('with the right address (any case): leaves, and tells the user the account stays', async () => {
+    const leave = vi.fn().mockResolvedValue({ status: 'left', address: ADDRESS, registration: 'kept', keysRevoked: 2 });
     const { result } = await agntLeave(client(leave), { confirm: ADDRESS.toUpperCase() }) as any;
     expect(leave).toHaveBeenCalledWith(ADDRESS);
-    expect(result).toMatchObject({ status: 'left', registration: 'deleted', keysRevoked: 2 });
-    expect(result.tellUser).toMatch(new RegExp(`left the ${APP_RE} Network.*no longer reaches me.*${APP_RE} account, which had nothing else in it, is deleted`));
+    expect(result).toMatchObject({ status: 'left', registration: 'kept', keysRevoked: 2 });
+    expect(result.tellUser).toMatch(new RegExp(`left the ${APP_RE} Network.*no longer reaches me\\. Your ${APP_RE} account stays as it is\\.$`));
+    expect(result.tellUser).not.toMatch(/delet|email/);
   });
 
-  it('a kept account is said to be unchanged', async () => {
-    const leave = vi.fn().mockResolvedValue({ status: 'left', address: ADDRESS, registration: 'kept', keysRevoked: 1 });
+  it('promises the disconnection email only when the server says it went', async () => {
+    const leave = vi.fn().mockResolvedValue({ status: 'left', address: ADDRESS, registration: 'kept', keysRevoked: 1, emailed: true });
     const { result } = await agntLeave(client(leave), { confirm: ADDRESS }) as any;
-    expect(result.tellUser).toMatch(/account itself is unchanged/);
+    expect(result.tellUser).toMatch(/stays as it is\. An email saying I was disconnected is on its way to you\.$/);
+  });
+
+  it('after leaving, a 401 means the leave went through: logout, never a new sign-up', () => {
+    expect(describeError('leave', new AgntApiError(401, 'x', 'unauthorized')).body.hint).toMatch(/leave already went through.*logout/);
+    expect(describeError('wait', new AgntApiError(401, 'x', 'unauthorized')).body.hint).toMatch(/Join again only if your person wants you on the network/);
+  });
+
+  it('an older server that says it deleted the account is reported plainly', async () => {
+    const leave = vi.fn().mockResolvedValue({ status: 'left', address: ADDRESS, registration: 'deleted', keysRevoked: 1 });
+    const { result } = await agntLeave(client(leave), { confirm: ADDRESS }) as any;
+    expect(result.tellUser).toMatch(new RegExp(`Unlike what I said before, the app's older server also deleted your ${APP_RE} account`));
   });
 
   it('network_scope says the key is for network commands only, and the rest is the person\'s', () => {
     expect(describeError('send', new AgntApiError(403, 'x', 'network_scope')).body.hint)
-      .toMatch(new RegExp(`^Your key only works for ${APP_RE} Network commands and your profile\\. Everything else in the account is your person's: they can sign in (at https://\\S+|to ${APP_RE}) to use it\\.$`));
+      .toMatch(new RegExp(`^Your key only works for ${APP_RE} Network commands and your profile\\. Everything else in the account is your person's: they can sign in to ${APP_RE} to use it\\.$`));
   });
 
   it('maps the refusals plainly', () => {
@@ -84,7 +97,7 @@ describe('runAgntLeave', () => {
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); process.exitCode = undefined; });
 
   it('drops the agent\'s own profile once it has left', async () => {
-    const leave = vi.fn().mockResolvedValue({ status: 'left', address: ADDRESS, registration: 'deleted', keysRevoked: 1 });
+    const leave = vi.fn().mockResolvedValue({ status: 'left', address: ADDRESS, registration: 'kept', keysRevoked: 1 });
     vi.mocked(clientFor).mockResolvedValue(client(leave));
     await runAgntLeave({ confirm: ADDRESS });
     expect(clientFor).toHaveBeenCalledWith('claude-code');

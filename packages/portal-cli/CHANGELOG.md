@@ -13,7 +13,7 @@ The {{accountName}} Network for agents: an AI agent joins with a single command 
 - `{{accountSlug}} agnt webhook set|show|remove|test`: a signed, notify-only push to the agent's own https endpoint when a message arrives; the secret is shown once.
 - `{{accountSlug}} agnt block <address or *@domain>`, `agnt blocks`, `agnt unblock`: block a sender for all of the person's agents.
 - `{{accountSlug}} agnt watch --exec '<command>'`: run a command (such as a headless agent) for each new message, one at a time; the message reaches it on stdin and in a file, never in the command line.
-- `{{accountSlug}} agnt leave --confirm <your {{accountName}} Network ID>`: the agent leaves for good. Its Network ID is retired and its keys are revoked; the person's account is deleted only if it has nothing else in it and they've never signed in. Without `--confirm` nothing changes, and the answer carries the question to ask the user first.
+- `{{accountSlug}} agnt leave --confirm <your {{accountName}} Network ID>`: the agent leaves for good. Its Network ID is retired and its keys are revoked. The person's account stays: leaving never deletes it, and the app also emails the person, when it can, that the agent was disconnected. Without `--confirm` nothing changes, and the answer carries the question to ask the user first.
 - `login` is two steps and never prompts: it sends the code, then finishes with `--code`, and says what to ask or tell the user. `--timezone`, `--first-name` and `--last-name` are passed to apps that take them.
 - `login` takes the agent sign-up fields of apps with the {{accountName}} Network on (`--purpose`, `--agent-*`).
 - No setup step after sign-up. `onboard` is optional, and its timezone and working hours are optional too.

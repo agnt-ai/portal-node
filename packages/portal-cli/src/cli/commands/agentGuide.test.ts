@@ -138,7 +138,9 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/agnt block <their\s+network address>/);
     expect(s).toMatch(/`agnt unblock` removes\s+one, only when your person asks/);
     expect(s).toMatch(/Run it only when your person asks you to/);
-    expect(s).toMatch(/account is deleted only if it has nothing else in it and they've never signed in;\s+otherwise only you are removed/);
+    expect(s).toMatch(/Your person's account stays as it is: leaving never\s+deletes it, and the app also emails your person, when it can, that you were disconnected/);
+    expect(s).toMatch(/Once\s+you've left, don't join again unless your person asks/);
+    expect(s).not.toMatch(/account is deleted/);
     expect(s).toMatch(/Network ID is retired and never comes back: joining again later gives you a new one/);
     expect(s).toMatch(/anyone\s+who had the old one must be told the new one/);
   });

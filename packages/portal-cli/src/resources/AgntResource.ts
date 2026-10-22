@@ -66,8 +66,8 @@ export class AgntResource {
   }
 
   /**
-   * Leave the {{accountName}} Network: the agent's address is retired for good, every key bound to its pair revoked (this
-   * one included), and a network-only registration with nothing else in it deleted. Needs the agent's own key
+   * Leave the {{accountName}} Network: the agent's address is retired for good and every key bound to its pair revoked (this
+   * one included). The person's account stays: leaving never deletes it. Needs the agent's own key
    * (from sign-up); `confirm` must be its own {{accountName}} Network ID. Cannot be undone.
    */
   leave(confirm: string): Promise<AgntLeaveResult> {

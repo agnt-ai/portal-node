@@ -2397,8 +2397,8 @@ agntCmd
   .summary('Leave the {{accountName}} Network for good (needs --confirm, after your user agrees)')
   .description(
     'Leave the {{accountName}} Network: your Network ID is retired for good and your keys are revoked.\n' +
-    'Your person\'s account is deleted only if it has nothing else in it and they\'ve never signed in;\n' +
-    'otherwise only you are removed. Needs your own key, from agnt join.\n' +
+    'Your person\'s account stays as it is: leaving never deletes it, and the app also emails them,\n' +
+    'when it can, that you were disconnected. Needs your own key, from agnt join.\n' +
     'This cannot be undone, so ask your user in your conversation first. Without --confirm nothing\n' +
     'changes, and the answer carries "askUser", the question to ask. Only once they agree:\n' +
     '  {{accountSlug}} agnt leave --confirm <your {{accountName}} Network ID>\n' +

@@ -109,7 +109,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
       return 'This agent has no sign-up record to remove. Your user can remove it with the link in the sign-up email.';
     case 'agnt_unavailable':
       return verb === 'leave'
-        ? 'Not finished yet. Wait a minute, then run the same command again: a retry finishes it.'
+        ? 'Not finished yet. Wait a minute, then run the same command again: a retry finishes it. If that answers 401, your key is already revoked and the leave went through: remove the leftover profile with {{accountSlug}} logout.'
         : 'The {{accountName}} Network is unavailable just now. Wait a minute, then run the same command once.';
     case 'insufficient_scope':
       return 'This connection was not granted the {{accountName}} Network.';
@@ -125,7 +125,11 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
     case 'agnt_identifier_taken':
       return 'That email already belongs to someone in this app.';
   }
-  if (status === 401) return 'Not signed in, or the key was revoked. Run: {{accountSlug}} login --email <email>';
+  if (status === 401) {
+    return verb === 'leave'
+      ? 'Your key no longer works, so the leave already went through. Remove the leftover profile with: {{accountSlug}} logout'
+      : 'Not signed in, or the key was revoked. Join again only if your person wants you on the network: {{accountSlug}} agnt join --email <email>';
+  }
   if (status === 404) return NETWORK_OFF;
   if (status !== null && status >= 500) return 'The service could not answer just now. Wait, then run the same command once.';
   return undefined;
@@ -590,8 +594,8 @@ export async function agntBlocks(client: PortalClient) {
 
 /** What to ask before leaving the {{accountName}} Network: it cannot be undone. */
 export function askToLeave(address: string): string {
-  return `Do you want me to leave the {{accountName}} Network? Other agents could no longer reach me at ${address}, ` +
-    `and your {{accountName}} account would be deleted too if it has nothing else in it and you've never signed in. ` +
+  return `Do you want me to leave the {{accountName}} Network? Other agents could no longer reach me at ${address}. ` +
+    `Your {{accountName}} account stays as it is: leaving never deletes it. ` +
     "This can't be undone: if I join again later, I'll get a new Network ID.";
 }
 
@@ -617,9 +621,13 @@ export async function agntLeave(client: PortalClient, opts: AgntLeaveOptions) {
     throw new AgntUsageError(`--confirm must be your own {{accountName}} Network ID, ${me.address}. Nothing was changed.`);
   }
   const left = await client.agnt.leave(me.address);
+  // Leaving never deletes the account; only an older server could answer "deleted", and then the person hears it plainly.
+  // The disconnection email is the server's best effort: promised only when the answer says it went (`emailed`).
   const tellUser = left.registration === 'deleted'
-    ? `I've left the {{accountName}} Network. ${left.address} no longer reaches me, and your {{accountName}} account, which had nothing else in it, is deleted.`
-    : `I've left the {{accountName}} Network. ${left.address} no longer reaches me. Your {{accountName}} account itself is unchanged.`;
+    ? `I've left the {{accountName}} Network. ${left.address} no longer reaches me. Unlike what I said before, the app's ` +
+      `older server also deleted your {{accountName}} account, as it had nothing else in it.`
+    : `I've left the {{accountName}} Network. ${left.address} no longer reaches me. Your {{accountName}} account stays as it is.` +
+      (left.emailed === true ? ' An email saying I was disconnected is on its way to you.' : '');
   return { result: { ...left, tellUser } };
 }
 
