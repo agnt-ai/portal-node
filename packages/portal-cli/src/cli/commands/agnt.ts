@@ -65,6 +65,9 @@ const RETRYABLE_STATUS = new Set([408, 429, 502, 503, 504]);
 /** The hint for a refusal, in plain words: what it means and what to do. */
 function hintFor(verb: string, code: string | undefined, status: number | null): string | undefined {
   switch (code) {
+    case 'rate_limit':
+      // Sign-up codes are limited per network address, which many people can share: never about this person.
+      return 'Too many codes have been asked for just now. Wait a while (retryAfter seconds when given), then run the same command once.';
     case 'rate_limited':
       return 'Over a sending or checking limit. Wait retryAfter seconds (a minute if none is given), then run the same command once. Do not retry in a loop.';
     case 'verify_unavailable':

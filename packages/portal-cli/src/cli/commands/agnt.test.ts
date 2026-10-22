@@ -345,6 +345,12 @@ describe('agnt errors', () => {
     expect(body.hint).toMatch(/do not retry in a loop/i);
   });
 
+  it('a 429 rate_limit on asking for a code says to try later, nothing about the person', () => {
+    const { body, exitCode } = describeError('join', new AgntApiError(429, 'Too many requests', 'rate_limit', { retryAfter: 600 }));
+    expect(exitCode).toBe(EXIT_RETRY);
+    expect(body).toMatchObject({ retryable: true, retryAfter: 600, hint: expect.stringMatching(/^Too many codes have been asked for just now\. Wait a while/) });
+  });
+
   it('a 400 invalid keeps its details, exit 1', () => {
     const { body, exitCode } = describeError('send', new AgntApiError(400, 'bad', 'invalid', { details: { field: 'to[0]' } }));
     expect(exitCode).toBe(1);
