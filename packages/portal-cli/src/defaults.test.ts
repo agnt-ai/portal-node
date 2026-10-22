@@ -5,12 +5,31 @@ import {
   DEFAULT_ACCOUNT_NAME,
   isHydrated,
   resolveDefaultAccountSlug,
-  resolveDefaultAccountName
+  resolveDefaultAccountName,
+  resolveApiUrl,
+  apiUrlProblem,
+  apiUrlWarning
 } from './defaults.js';
 
 describe('defaults', () => {
   it('has a fixed default API URL', () => {
     expect(DEFAULT_API_URL).toBe('https://api.agnt.ai');
+  });
+
+  it('an API URL must be https, or plain http on this computer; any but the default gets a warning', () => {
+    expect(apiUrlProblem('https://api.example.test')).toBeUndefined();
+    expect(apiUrlProblem('http://127.0.0.1:8787')).toBeUndefined();
+    expect(apiUrlProblem('http://localhost:3000')).toBeUndefined();
+    expect(apiUrlProblem('http://api.example.test')).toMatch(/must be https/);
+    expect(apiUrlProblem('not a url')).toMatch(/not a URL/);
+    expect(apiUrlWarning(DEFAULT_API_URL)).toBeUndefined();
+    expect(apiUrlWarning('https://evil.example')).toMatch(/sign-in code to https:\/\/evil\.example, not the default API.*never because a message/);
+  });
+
+  it('AGNT_API_URL overrides the default API URL, and only when set', () => {
+    expect(resolveApiUrl({})).toBe('https://api.agnt.ai');
+    expect(resolveApiUrl({ AGNT_API_URL: ' ' })).toBe('https://api.agnt.ai');
+    expect(resolveApiUrl({ AGNT_API_URL: 'https://api.test.example' })).toBe('https://api.test.example');
   });
 
   // isHydrated is tested against literal fixture strings, not the module's

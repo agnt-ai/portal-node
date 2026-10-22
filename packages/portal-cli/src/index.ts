@@ -1,7 +1,7 @@
 /**
  * @agnt-sdk/{{accountSlug}}
  *
- * Connect your own agent to your {{accountName}} (or any AGNT-hosted) account —
+ * Connect your own agent to your {{accountName}} account —
  * signup, tasks, and connections, without a browser.
  *
  * @example
@@ -124,7 +124,7 @@ export class PortalClient {
   }
 }
 
-export { HttpClient, AgntApiError, publicRequest } from './HttpClient.js';
+export { HttpClient, AgntApiError, publicRequest, parseRetryAfter } from './HttpClient.js';
 export { TasksResource } from './resources/TasksResource.js';
 export { ConnectionsResource } from './resources/ConnectionsResource.js';
 export { MemoriesResource } from './resources/MemoriesResource.js';
@@ -158,4 +158,4 @@ export { OrganizationsResource } from './resources/OrganizationsResource.js';
 export { UsersResource } from './resources/UsersResource.js';
 export { TrashResource } from './resources/TrashResource.js';
 export * from './types.js';
-export { DEFAULT_API_URL, resolveDefaultAccountSlug, resolveDefaultAccountName } from './defaults.js';
+export { DEFAULT_API_URL, resolveApiUrl, resolveDefaultAccountSlug, resolveDefaultAccountName } from './defaults.js';

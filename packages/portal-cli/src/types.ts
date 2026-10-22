@@ -1235,9 +1235,39 @@ export interface AgentAuthUser {
   portalOnboarded: boolean;
 }
 
+/** Optional fields on POST /portal/auth/agent/verify (read only by apps that take them). */
+export interface AgentAuthVerifyFields {
+  /** An IANA id. Never refused: an unusable value is reported as `profile.timezone.ignoredDeclared`. */
+  timezone?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface AgentSignupTimezone {
+  value: string | null;
+  confirmed: boolean;
+  source: 'declared' | 'ip' | 'existing' | 'none';
+  ignoredDeclared?: true;
+}
+
+export interface AgentSignupToFill {
+  field: 'timezone' | 'name' | 'workingHours';
+  reason: 'missing' | 'unconfirmed' | 'default';
+  /** The route that sets it, e.g. "PATCH /profile" or "PUT /users/<userId>/preferences/scheduling". */
+  set: string;
+}
+
+export interface AgentSignupProfile {
+  timezone: AgentSignupTimezone;
+  toFill: AgentSignupToFill[];
+  ignoredDeclaredName?: true;
+}
+
 export interface AgentAuthVerifyResult {
   ok: boolean;
   user: AgentAuthUser;
   apiKey: string;
   apiKeyId: string;
+  /** Present when the app reads sign-up fields; absent if the server's profile step failed (the key is still good). */
+  profile?: AgentSignupProfile;
 }
