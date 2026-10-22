@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { Command, Option } from 'commander';
+import { Command } from 'commander';
 import { runLogin } from './commands/login.js';
 import { runLogout } from './commands/logout.js';
 import { runConfigure } from './commands/configure.js';
@@ -108,8 +108,6 @@ import { signInWhere } from '../defaults.js';
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
 import { AgntApiError } from '../HttpClient.js';
 
-const ONBOARDING_ERROR_CODES = new Set(['onboarding_required', 'onboarding_incomplete']);
-
 /** Plain guidance for refusals any command can meet, printed under the error. */
 const ERROR_HINTS: Record<string, string> = {
   // Booking and scheduling wait for a timezone the person confirmed, not an IP guess.
@@ -133,12 +131,18 @@ function reportAndExit(err: unknown): never {
     // the one place that reliably catches an agent that skipped (or never
     // saw) login's own onboarding hint and hit the server-side gate later on
     // some other command instead.
-    if (err.errorCode && ONBOARDING_ERROR_CODES.has(err.errorCode)) {
-      // Only an older server still asks for this. Nothing about the account is wrong, and it needs nothing from the user.
+    // Only an older server still asks for this. Nothing about the account is wrong.
+    if (err.errorCode === 'onboarding_required') {
       console.error('');
-      console.error('The account is fine: this server still asks for a one-time setup step. Run it yourself, no input needed:');
+      console.error('The account is fine: this server still asks for a one-time setup step. Run it yourself:');
       console.error('  {{accountSlug}} onboard');
       console.error('(add --timezone <IANA zone> if you know it; it is optional)');
+    }
+    if (err.errorCode === 'onboarding_incomplete') {
+      console.error('');
+      console.error('This server needs a timezone and working hours before the account can be used. Ask your user for');
+      console.error('them, then run:');
+      console.error('  {{accountSlug}} onboard --timezone "America/New_York" --working-hours \'{"MO":[{"start":"09:00","end":"17:00"}]}\'');
     }
     const hint = err.errorCode ? ERROR_HINTS[err.errorCode] : undefined;
     if (hint) {
@@ -207,7 +211,7 @@ program
     'summary on stderr unless --json. A refused sign-up says whether the code is still good:\n' +
     'when it is, run the same command with --code <the same code>.'
   )
-  .requiredOption('--email <email>', 'Your email address (when signing a person up, theirs)')
+  .option('--email <email>', 'Your user\'s email address (required; without it you get the line to ask them)')
   .option('--account <slug>', 'Account slug of the app to sign up/log in under (defaults to the app this CLI was published for)')
   .option('--code <code>', 'The one-time code your user got by email (step 2)')
   .option('--label <label>', 'Label for the API key this mints, e.g. the agent/device name (defaults to this machine\'s hostname)')
@@ -247,12 +251,12 @@ program
 program
   .command('onboard')
   .description(
-    'Optional. Marks the account set up, and sets a timezone if you give one. Only an older server\n' +
-    'ever asks for this; nothing else needs it.\n\n' +
+    'Optional. Marks the account set up, and sets a timezone or working hours when given.\n' +
+    'Only an older server asks for this. If it answers onboarding_incomplete, it needs both.\n\n' +
     'Example: {{accountSlug}} onboard --timezone "America/New_York"'
   )
   .option('--timezone <tz>', 'IANA timezone, e.g. "America/New_York" (optional)')
-  .addOption(new Option('--working-hours <json>', 'Day-keyed JSON of {start,end} ranges').hideHelp())
+  .option('--working-hours <json>', 'Day-keyed JSON of {start,end} ranges, keys MO..SU (optional)')
   .option('--profile <name>', 'Credentials profile to use')
   .option('--json', 'Print raw JSON')
   .action(async (opts) => {

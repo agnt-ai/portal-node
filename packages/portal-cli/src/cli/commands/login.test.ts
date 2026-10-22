@@ -274,14 +274,18 @@ describe('runLogin against a mocked API', () => {
     expect(JSON.parse(stdout.join('')).status).toBe('connected');
   });
 
-  it('an app that does not read sign-up fields: signed in, no onboarding step, the timezone set quietly', async () => {
+  const verified = { ok: true, status: 201, headers: new Headers(), text: async () => JSON.stringify({ ok: true, user: { id: 'u1', email: 'p@example.com', portalOnboarded: false }, apiKey: 'ak', apiKeyId: 'k' }) };
+
+  it('an app that does not read sign-up fields: signed in, no onboarding step, the timezone set quietly when the account has none', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, status: 201, headers: new Headers(), text: async () => JSON.stringify({ ok: true, user: { id: 'u1', email: 'p@example.com', portalOnboarded: false }, apiKey: 'ak', apiKeyId: 'k' }) })
+      .mockResolvedValueOnce(verified)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ user: { id: 'u1', timezone: null } }) })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ user: { id: 'u1' } }) });
     global.fetch = fetchMock as any;
     await runLogin({ email: 'p@example.com', account: 'acme', code: '1', label: 't', apiUrl: 'https://api.example.test', timezone: 'Europe/Paris' });
-    expect(fetchMock.mock.calls[1][0]).toBe('https://api.example.test/profile');
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ timezone: 'Europe/Paris' });
+    expect(fetchMock.mock.calls[2][0]).toBe('https://api.example.test/profile');
+    expect(fetchMock.mock.calls[2][1].method).toBe('PATCH');
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ timezone: 'Europe/Paris' });
     expect(stderr.join('')).not.toMatch(/onboard/i);
     expect(JSON.parse(stdout.join('')).tellUser).toMatch(/signed in/);
   });
