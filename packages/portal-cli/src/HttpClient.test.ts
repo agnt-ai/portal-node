@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { HttpClient, AgntApiError, publicRequest } from './HttpClient.js';
+import { HttpClient, AgntApiError, publicRequest, parseRetryAfter } from './HttpClient.js';
 
 describe('HttpClient', () => {
   const originalFetch = global.fetch;
@@ -206,5 +206,42 @@ describe('publicRequest', () => {
       message: 'Too many requests',
       errorCode: 'rate_limit'
     });
+  });
+});
+
+describe('error details and Retry-After', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { global.fetch = originalFetch; });
+
+  it('keeps details, Retry-After and the whole body on an AgntApiError', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: new Headers({ 'Retry-After': '30' }),
+      text: async () => JSON.stringify({ status: 429, error_code: 'rate_limited', error: 'Slow down', details: { scope: 'hourly' } })
+    }) as any;
+
+    const err = await new HttpClient('https://api.example.com', 'ak').post('/tasks', {}).catch((e) => e);
+    expect(err).toBeInstanceOf(AgntApiError);
+    expect(err).toMatchObject({ status: 429, errorCode: 'rate_limited', retryAfter: 30, details: { scope: 'hourly' } });
+  });
+
+  it('keeps extra body fields such as 428 confirm', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 428,
+      text: async () => JSON.stringify({ status: 428, error_code: 'timezone_unconfirmed', error: 'Confirm your timezone', confirm: 'PATCH /profile' })
+    }) as any;
+
+    const err = await new HttpClient('https://api.example.com', 'ak').post('/calendars/events', {}).catch((e) => e);
+    expect(err.body.confirm).toBe('PATCH /profile');
+    expect(err.retryAfter).toBeUndefined();
+  });
+
+  it('parseRetryAfter reads seconds and HTTP dates, and ignores junk', () => {
+    expect(parseRetryAfter('12')).toBe(12);
+    expect(parseRetryAfter(new Date(10_000 + 5_000).toUTCString(), 10_000)).toBe(5);
+    expect(parseRetryAfter('soon')).toBeUndefined();
+    expect(parseRetryAfter(null)).toBeUndefined();
   });
 });

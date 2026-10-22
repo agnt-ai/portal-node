@@ -5,12 +5,19 @@ import {
   DEFAULT_ACCOUNT_NAME,
   isHydrated,
   resolveDefaultAccountSlug,
-  resolveDefaultAccountName
+  resolveDefaultAccountName,
+  resolveApiUrl
 } from './defaults.js';
 
 describe('defaults', () => {
   it('has a fixed default API URL', () => {
     expect(DEFAULT_API_URL).toBe('https://api.agnt.ai');
+  });
+
+  it('AGNT_API_URL overrides the default API URL, and only when set', () => {
+    expect(resolveApiUrl({})).toBe('https://api.agnt.ai');
+    expect(resolveApiUrl({ AGNT_API_URL: ' ' })).toBe('https://api.agnt.ai');
+    expect(resolveApiUrl({ AGNT_API_URL: 'https://api.test.example' })).toBe('https://api.test.example');
   });
 
   // isHydrated is tested against literal fixture strings, not the module's
