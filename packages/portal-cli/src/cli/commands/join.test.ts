@@ -105,6 +105,17 @@ describe('agnt join', () => {
     expect(result.conversation).toMatch(/reply yourself.*--timeout 300.*3 timeouts in a row/);
   });
 
+  it('a joined agent whose server is down is told so, never signed up again (that would orphan its Network ID)', async () => {
+    vi.mocked(resolveProfile).mockResolvedValue({ apiUrl: 'https://api.example.test', apiKey: 'ak' });
+    vi.stubEnv('AGNT_CLI_PROFILE', 'codex');
+    const fetchMock = vi.fn().mockResolvedValue(answer(503, { status: 503, error_code: 'agnt_unavailable', error: 'busy' }));
+    global.fetch = fetchMock as any;
+    await expect(agntJoin({ email: 'person@example.com' })).rejects.toMatchObject({ status: 503 });
+    vi.unstubAllEnvs();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/agnt\/whoami\??$/);
+  });
+
   it('step 2 uses the defaults, tries another username when one is taken, and ends with the line to say', async () => {
     let tried: string[] = [];
     global.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {

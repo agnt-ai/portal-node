@@ -290,6 +290,43 @@ describe('runLogin against a mocked API', () => {
     expect(JSON.parse(stdout.join('')).tellUser).toMatch(/signed in/);
   });
 
+  it('never replaces a timezone the account already has', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(verified)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ user: { id: 'u1', timezone: 'Europe/Paris' } }) });
+    global.fetch = fetchMock as any;
+    await runLogin({ email: 'p@example.com', account: 'acme', code: '1', label: 't', apiUrl: 'https://api.example.test', timezone: 'America/New_York' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.some((c: any[]) => c[1]?.method === 'PATCH')).toBe(false);
+  });
+
+  it('a spent code (otp_max_attempts, a 429) is final: exit 1, ask for a new code', async () => {
+    mockFetch({ status: 429, error_code: 'otp_max_attempts', error: 'Too many incorrect attempts' }, 429);
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as any);
+    await expect(runLogin({ email: 'p@example.com', account: 'acme', code: '9', label: 't' })).rejects.toThrow('exit 1');
+    expect(JSON.parse(stderr.join('')).error).toMatchObject({ code: 'otp_max_attempts', retryable: false, hint: expect.stringMatching(/without --code/) });
+    exit.mockRestore();
+  });
+
+  it('step 1 with no answer from the API may pass later: exit 75', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError('fetch failed')) as any;
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code: number) => { throw new Error(`exit ${code}`); }) as any);
+    await expect(runLogin({ email: 'p@example.com', account: 'acme' })).rejects.toThrow('exit 75');
+    expect(JSON.parse(stderr.join('')).error).toMatchObject({ retryable: true, hint: expect.stringMatching(/No answer/) });
+    exit.mockRestore();
+  });
+
+  it('step 1 carries an API chosen by AGNT_API_URL into the step-2 command', async () => {
+    mockFetch({ ok: true }, 200);
+    vi.stubEnv('AGNT_API_URL', 'https://api.test.example');
+    try {
+      await runLogin({ email: 'p@example.com', account: 'acme' });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(JSON.parse(stdout.join('')).next).toMatch(/--api-url https:\/\/api\.test\.example --code <the code>$/);
+  });
+
   // @agnt-messaging:begin
   it('a refused username exits with JSON guidance that keeps the code', async () => {
     mockFetch({ status: 409, error_code: 'agnt_username_taken', error: 'That username is taken; choose another' }, 409);

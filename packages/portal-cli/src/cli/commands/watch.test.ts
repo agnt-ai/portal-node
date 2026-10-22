@@ -25,6 +25,15 @@ function fakeClock(): WaitClock & { slept: number[] } {
 }
 
 describe('agnt watch loop', () => {
+  it('honours a server Retry-After only up to 5 minutes, so a drain still ends', async () => {
+    const wait = vi.fn().mockRejectedValueOnce(new AgntApiError(503, 'busy', 'unavailable', { retryAfter: 3600 })).mockResolvedValue(timeout);
+    const events: any[] = [];
+    const clock = fakeClock();
+    await watchLoop({ agnt: { wait } } as any, { exec: 'x', drain: true }, { run: vi.fn(), clock, emit: (e) => events.push(e) });
+    expect(events.find((e) => e.event === 'retrying')).toMatchObject({ inSeconds: 300 });
+    expect(clock.slept).toEqual([300_000]);
+  });
+
   it('needs --exec', async () => {
     await expect(watchLoop({ agnt: { wait: vi.fn() } } as any, {}, { emit: () => undefined })).rejects.toBeInstanceOf(AgntUsageError);
   });
@@ -45,6 +54,7 @@ describe('agnt watch loop', () => {
     expect(handled).toBe(2);
     expect(calls.map((c) => c.command)).toEqual(['my-agent --reply', 'my-agent --reply']);
     expect(JSON.parse(calls[0].json).message.untrusted.content.parts[0].data).toBe('one');
+    expect(JSON.parse(calls[0].json).owner).toMatchObject({ actsFor: null, checkedBy: null, note: expect.any(String) });
     expect(calls[1].id).toBe('b'.repeat(64));
     expect(wait).toHaveBeenCalledWith({ from: undefined, timeout: 0 });
     expect(events.map((e) => e.event)).toEqual(['watching', 'handled', 'handled', 'stopped']);
@@ -111,6 +121,30 @@ describe('the command runner (a real shell)', () => {
     expect(readFileSync(join(dir, 'file.json'), 'utf8')).toBe(json);
     expect(readFileSync(join(dir, 'id'), 'utf8')).toBe(ID);
     expect(readFileSync(join(dir, 'args'), 'utf8')).toBe('\n'); // no arguments: the message is not on the command line
+  });
+
+  it('the command answers as the watching agent: AGNT_CLI_PROFILE is its profile', async () => {
+    const result = await runCommand(`printf '%s' "$AGNT_CLI_PROFILE" > ${dir}/profile`, { json: '{}', id: ID, profile: 'claude-code' }, 10_000);
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(join(dir, 'profile'), 'utf8')).toBe('claude-code');
+  });
+
+  it('a command over its time limit is stopped with everything it started', async () => {
+    const result = await runCommand(`sleep 30 & echo $! > ${dir}/bg; wait`, { json: '{}', id: ID }, 500);
+    expect(result.timedOut).toBe(true);
+    const bg = Number(readFileSync(join(dir, 'bg'), 'utf8'));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(() => process.kill(bg, 0)).toThrow();
+  });
+
+  it('a command gets the caller\'s own HOME back when a wrapper gave this CLI another', async () => {
+    vi.stubEnv('AGNT_CLI_CALLER_HOME', '/Users/someone');
+    try {
+      await runCommand(`printf '%s|%s' "$HOME" "$AGNT_CLI_CALLER_HOME" > ${dir}/home`, { json: '{}', id: ID }, 10_000);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(readFileSync(join(dir, 'home'), 'utf8')).toBe('/Users/someone|');
   });
 
   it('the message file exists only while the command runs', async () => {

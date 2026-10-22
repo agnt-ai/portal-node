@@ -87,8 +87,8 @@ const sayLine = (address: string) => `I'm all set. My {{accountName}} Network ID
 
 function nextCommands(profileFlag: string): string[] {
   return [
-    `{{accountSlug}} agnt send${profileFlag} --to <their Network ID or email> --text "..."`,
-    `{{accountSlug}} agnt wait${profileFlag} --from <their Network ID> --timeout 300`,
+    `{{accountSlug}} agnt send${profileFlag} --to <their Network ID or email> --subject "..." --text "..."`,
+    `{{accountSlug}} agnt wait${profileFlag} --timeout 300`,
     `{{accountSlug}} agent-guide`,
   ];
 }
@@ -112,8 +112,10 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
       try {
         const me = await new PortalClient({ apiUrl: existing.apiUrl, apiKey: existing.apiKey }).agnt.whoami();
         return { result: { status: 'already_joined', address: me.address, tellUser: sayLine(me.address), conversation: CONVERSATION, next: nextCommands(profileFlag) } };
-      } catch {
-        // The saved key does not work (revoked, another app): join again below.
+      } catch (err) {
+        // Only a key the server refuses (revoked) means joining again. Anything else (a 503, no network) is
+        // reported: a new sign-up would orphan this agent's Network ID.
+        if (!(err instanceof AgntApiError && err.status === 401)) throw err;
       }
     }
   }

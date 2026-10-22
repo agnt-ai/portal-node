@@ -40,7 +40,8 @@ describe('AgntResource', () => {
   it('wait passes from and timeout as query', async () => {
     const http = fakeHttp();
     await new AgntResource(http).wait({ from: 'bob@agnt.example.net', timeout: 20 });
-    expect(http.get).toHaveBeenCalledWith('/agnt/wait', { from: 'bob@agnt.example.net', timeout: 20, assistant: undefined });
+    // The call gives up 15 seconds past the server's own deadline, so a dead connection never hangs.
+    expect(http.get).toHaveBeenCalledWith('/agnt/wait', { from: 'bob@agnt.example.net', timeout: 20, assistant: undefined }, { timeoutMs: 35_000 });
   });
 
   it('sent GETs /agnt/sent/:id', async () => {

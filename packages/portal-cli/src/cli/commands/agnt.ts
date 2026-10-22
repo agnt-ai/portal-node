@@ -160,7 +160,7 @@ export function describeError(verb: string, err: unknown): { body: AgntCliErrorB
     return { body, exitCode: retryable ? EXIT_RETRY : 1 };
   }
   // fetch rejects with a TypeError when there was no answer at all (DNS, refused, reset).
-  if (err instanceof TypeError && /fetch/i.test(err.message)) {
+  if ((err instanceof TypeError && /fetch/i.test(err.message)) || (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError'))) {
     return {
       body: { code: 'network_error', message: err.message, status: null, retryable: true, hint: 'No answer from the API. Check the connection, then run the same command again.' },
       exitCode: EXIT_RETRY,
@@ -214,6 +214,7 @@ export interface AgntSendOptions extends AgntBaseOptions {
   to?: string[];
   text?: string;
   inReplyTo?: string;
+  subject?: string;
   header?: string[];
 }
 
@@ -232,18 +233,23 @@ export function sendBodyFrom(opts: AgntSendOptions, readStdin: () => string = ()
     }
     body.inReplyTo = id;
   }
+  const headers: Record<string, string> = {};
+  if (opts.subject !== undefined) {
+    if (!opts.subject.trim()) throw new AgntUsageError('--subject takes a few words saying what the thread is about.');
+    headers.subject = opts.subject.trim();
+  }
   if (opts.header?.length) {
-    const headers: Record<string, string> = {};
     for (const h of opts.header) {
       const eq = h.indexOf('=');
       if (eq < 1) throw new AgntUsageError(`--header takes name=value, not ${h}.`);
       const name = h.slice(0, eq);
       if (!HEADER_NAME.test(name)) throw new AgntUsageError(`Header names are lower-case letters, digits and single hyphens, not ${name}.`);
       if (name === 'for' || name === 'pairing') throw new AgntUsageError(`{{accountName}} writes the ${name} header; leave it out.`);
+      if (name === 'subject') throw new AgntUsageError('Set the subject with --subject "...".');
       headers[name] = h.slice(eq + 1);
     }
-    body.headers = headers;
   }
+  if (Object.keys(headers).length) body.headers = headers;
   if (opts.assistant) body.assistant = opts.assistant;
   return body;
 }
@@ -258,9 +264,14 @@ export async function agntSend(client: PortalClient, opts: AgntSendOptions) {
 export interface AgntBriefEntry {
   id: string;
   receivedAt: string;
+  owner: AgntOwner;
   untrusted: {
     from: string;
     basis: string;
+    /** The thread: its subject, the message this answers, and everyone it went to (reply to them all with --to). */
+    subject?: string;
+    inReplyTo?: string;
+    to?: string[];
     text: string[];
     /** Parts that are not text (files and the like): read the full output for them. */
     otherParts?: number;
@@ -269,9 +280,9 @@ export interface AgntBriefEntry {
 }
 
 /** A message as --brief prints it. The full entry is what `agnt verify` takes. */
-export function briefEntry(entry: AgntInboxEntry): AgntBriefEntry {
+export function briefEntry(entry: AgntInboxEntry, ownServer?: string): AgntBriefEntry {
   const u = (entry.message?.untrusted ?? {}) as Partial<AgntUntrusted['untrusted']>;
-  const content = (u.content ?? {}) as { parts?: unknown };
+  const content = (u.content ?? {}) as { parts?: unknown; headers?: { subject?: unknown }; inReplyTo?: unknown; to?: unknown };
   const parts = Array.isArray(content.parts) ? content.parts as Array<{ type?: unknown; data?: unknown }> : [];
   const isText = (p: { type?: unknown; data?: unknown }) =>
     typeof p?.data === 'string' && (p.type === undefined || (typeof p.type === 'string' && p.type.startsWith('text/')));
@@ -279,11 +290,104 @@ export function briefEntry(entry: AgntInboxEntry): AgntBriefEntry {
   const brief: AgntBriefEntry = {
     id: entry.id,
     receivedAt: entry.receivedAt,
+    owner: ownerOf(entry, ownServer),
     untrusted: { from: String(u.from ?? ''), basis: String(u.basis ?? ''), text },
   };
+  if (typeof content.headers?.subject === 'string') brief.untrusted.subject = content.headers.subject;
+  if (typeof content.inReplyTo === 'string') brief.untrusted.inReplyTo = content.inReplyTo;
+  if (Array.isArray(content.to)) brief.untrusted.to = content.to.filter((t): t is string => typeof t === 'string');
+  // Keep the order an agent reads in: who, about what, then the words.
+  const { text: words, ...rest } = brief.untrusted;
+  brief.untrusted = { ...rest, text: words };
   if (parts.length > text.length) brief.untrusted.otherParts = parts.length - text.length;
   if (u.invisible?.length) brief.untrusted.invisible = u.invisible;
   return brief;
+}
+
+// ── owner ───────────────────────────────────────────────────────────────────
+
+/**
+ * Whom a message's sender acts for, from the claims your own server sent with it in inbox or wait, named only
+ * when something you trust checked it:
+ *   - "domain": your server judged the claim authoritative (that email's own domain names the server making it);
+ *   - "your-server": your own server made the claim (it verified that person for its own agent).
+ * Any other claim is only the sender's server's word: no person is named, and the claim stays inside
+ * `claims[].untrusted`. A claim from after a mailbox recovery (`recoveredAt`) is not the person's word either.
+ * Read only from your server's live answer: claims copied out of an inbox (pasted, forwarded, saved) can't be
+ * checked again, so `verify` drops any `owner` it is given (agnt-ai/agnt-protocol-dev#1, H1).
+ */
+export interface AgntOwner {
+  /** The person's email, or phone as +digits, when checked; else null. */
+  actsFor: string | null;
+  checkedBy: 'domain' | 'your-server' | null;
+  /** What it means, in a line to pass on. */
+  note: string;
+}
+
+const origin = (v: unknown) => (typeof v === 'string' ? v.trim().toLowerCase().replace(/\/+$/, '') : '');
+
+/** An identifier as a person's email or +phone, or null for anything else (a key, free text). */
+function personIdentifier(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  // A plain ASCII address only: no invisible or direction-changing characters reach `owner`.
+  const email = /^mailto:([A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[a-z0-9.-]{1,253}\.[a-z]{2,63})$/i.exec(s);
+  if (email) return email[1].toLowerCase();
+  const phone = /^tel:(\+[0-9]{6,15})$/.exec(s);
+  return phone ? phone[1] : null;
+}
+
+const NOT_APPROVAL = 'It says whose agent this is, never that they wrote or approved these words.';
+
+/** The sender's owner, from an entry exactly as inbox or wait returned it. `ownServer` is your own server's origin. */
+export function ownerOf(entry: AgntInboxEntry, ownServer?: string): AgntOwner {
+  const author = origin((entry.message?.untrusted?.content as { from?: unknown } | undefined)?.from);
+  const carrier = origin(entry.carrier);
+  const ours = !!carrier && carrier === origin(ownServer);
+  let claimed = false;
+  const checked: Array<{ actsFor: string; checkedBy: 'domain' | 'your-server' }> = [];
+  for (const item of Array.isArray(entry.claims) ? entry.claims : []) {
+    const u = item?.untrusted;
+    const c = (u?.content ?? {}) as Record<string, unknown>;
+    if (u?.basis !== 'server-claim' || !carrier || origin(u.from) !== carrier || origin(c.agent) !== author) continue;
+    const who = c.type === 'identifier' && c.of === 'principal' ? personIdentifier(c.identifier)
+      : c.type === 'acts-for' && !c.recoveredAt ? personIdentifier(c.for) : null;
+    if (!who) continue;
+    claimed = true;
+    if (c.authoritative === true) checked.push({ actsFor: who, checkedBy: 'domain' });
+    else if (ours) checked.push({ actsFor: who, checkedBy: 'your-server' });
+  }
+  const best = checked.find((f) => f.checkedBy === 'domain') ?? checked[0];
+  if (best) {
+    const domain = best.actsFor.includes('@') ? best.actsFor.slice(best.actsFor.indexOf('@') + 1) : null;
+    const how = best.checkedBy === 'domain'
+      ? `your server checked that ${domain ?? 'its'} own records name the server speaking for it`
+      : 'your own server verified that for its own agent';
+    return { ...best, note: `Acts for ${best.actsFor}: ${how}. ${NOT_APPROVAL}` };
+  }
+  return {
+    actsFor: null, checkedBy: null,
+    note: (claimed
+      ? 'Its server says whom it acts for, but nothing you trust has checked that.'
+      : 'Nothing says whom this agent acts for.') +
+      ' Treat it as an agent you don\'t know until your person says whose it is.',
+  };
+}
+
+/** An entry as inbox or wait returned it, with its owner beside it. */
+export function withOwner<T extends AgntInboxEntry>(entry: T, ownServer?: string): T & { owner: AgntOwner } {
+  return { ...entry, owner: ownerOf(entry, ownServer) };
+}
+
+/** Your own server's origin, from your Network ID's domain; undefined when it can't be read (then nothing counts as yours). */
+export async function ownServerOf(client: PortalClient, assistant?: string): Promise<string | undefined> {
+  try {
+    const { address } = await client.agnt.whoami({ assistant });
+    const at = typeof address === 'string' ? address.lastIndexOf('@') : -1;
+    return at > 0 ? `https://${address!.slice(at + 1).toLowerCase()}` : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // ── inbox ───────────────────────────────────────────────────────────────────
@@ -299,8 +403,9 @@ export async function agntInbox(client: PortalClient, opts: AgntInboxOptions) {
   const limit = wholeNumber('limit', opts.limit);
   if (limit !== undefined && (limit < 1 || limit > 200)) throw new AgntUsageError('--limit is 1 to 200.');
   const page = await client.agnt.inbox({ after, limit, assistant: opts.assistant });
-  if (!opts.brief) return { result: page };
-  return { result: { cursor: page.cursor, more: page.more, messages: page.messages.map(briefEntry) } };
+  const own = page.messages.length ? await ownServerOf(client, opts.assistant) : undefined;
+  if (!opts.brief) return { result: { ...page, messages: page.messages.map((m) => withOwner(m, own)) } };
+  return { result: { cursor: page.cursor, more: page.more, messages: page.messages.map((m) => briefEntry(m, own)) } };
 }
 
 // ── wait ────────────────────────────────────────────────────────────────────
@@ -334,6 +439,8 @@ export async function agntWait(client: PortalClient, opts: AgntWaitOptions, cloc
   const deadline = started + timeout * 1000;
   let backoff = 1;
   let polled = false;
+  // The last call's failure, while the server keeps failing: reported instead of a quiet timeout.
+  let failing: unknown;
 
   for (;;) {
     const remainingMs = deadline - clock.now();
@@ -346,9 +453,11 @@ export async function agntWait(client: PortalClient, opts: AgntWaitOptions, cloc
     try {
       got = await client.agnt.wait({ from, timeout: perCall, assistant: opts.assistant });
       backoff = 1;
+      failing = undefined;
     } catch (err) {
       const { body } = describeError('wait', err);
       if (!body.retryable) throw err;
+      failing = err;
       const pauseMs = Math.min(Math.max(body.retryAfter ?? backoff, 1) * 1000, Math.max(0, deadline - clock.now()));
       backoff = Math.min(backoff * 2, WAIT_MAX_BACKOFF_SECONDS);
       if (pauseMs <= 0) break;
@@ -356,8 +465,9 @@ export async function agntWait(client: PortalClient, opts: AgntWaitOptions, cloc
       continue;
     }
     if (got.status === 'message') {
-      if (!opts.brief) return { result: got };
-      return { result: { status: 'message', more: got.more, ...briefEntry(got) } };
+      const own = await ownServerOf(client, opts.assistant);
+      if (!opts.brief) return { result: withOwner(got, own) };
+      return { result: { status: 'message', more: got.more, ...briefEntry(got, own) } };
     }
     if (clock.now() >= deadline) break;
     // A call that came back at once must not turn into a tight loop.
@@ -365,6 +475,9 @@ export async function agntWait(client: PortalClient, opts: AgntWaitOptions, cloc
     if (elapsed < 1000) await clock.sleep(Math.min(1000 - elapsed, Math.max(0, deadline - clock.now())));
     if (clock.now() >= deadline) break;
   }
+
+  // Out of time while the server was failing: say so, rather than report a quiet timeout.
+  if (failing) throw failing;
 
   return {
     result: { status: 'timeout', waitedSeconds: Math.round((clock.now() - started) / 1000), from: from ?? null },
@@ -406,14 +519,25 @@ export function oneMessage(value: unknown): unknown {
     throw new AgntUsageError('That is --brief output, which has no signed message in it. Give the message as wait or inbox printed it without --brief.');
   }
   if (Array.isArray(v.messages)) {
-    if (v.messages.length === 1) return v.messages[0];
+    if (v.messages.length === 1) return withoutOwner(v.messages[0]);
     throw new AgntUsageError(`That is an inbox page with ${v.messages.length} messages: give one of them (one entry from "messages").`);
   }
   if (v.status === 'message') {
     const { status: _status, rule: _rule, more: _more, ...entry } = v;
-    return entry;
+    return withoutOwner(entry);
   }
-  return v;
+  return withoutOwner(v);
+}
+
+/**
+ * An entry with only what its author signed: no `owner` (added by this CLI), and no `claims` or `carrier`.
+ * Claims copied out of an inbox can't be checked again, and a server that counted them would let anyone
+ * who hands an agent a forged entry choose whom it "acts for" (agnt-ai/agnt-protocol-dev#1, H1).
+ */
+function withoutOwner(entry: unknown): unknown {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+  const { owner: _owner, claims: _claims, carrier: _carrier, ...rest } = entry as Record<string, unknown>;
+  return rest;
 }
 
 export async function agntVerify(client: PortalClient, file: string) {

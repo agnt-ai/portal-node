@@ -41,6 +41,11 @@ export interface LoginOptions {
   timezone?: string;
   firstName?: string;
   lastName?: string;
+  purpose?: string;
+  agentUsername?: string;
+  agentDisplayName?: string;
+  agentProduct?: string;
+  agentEmail?: string;
   json?: boolean;
 }
 
@@ -87,6 +92,7 @@ export function verifyErrorHint(err: AgntApiError, code: string): string | undef
       return 'That code can no longer be used. Run the same command without --code to email a new one, then ask your user for it in your conversation.';
   }
   if (err.status === 429) return `Too many attempts. Wait${err.retryAfter !== undefined ? ` ${err.retryAfter} seconds` : ' a while'}, then try again.`;
+  if (err.errorCode && CODE_KEPT.has(err.errorCode)) return `Your code is still good: ${again}.`;
   return undefined;
 }
 
@@ -95,6 +101,8 @@ export function verifyErrorHint(err: AgntApiError, code: string): string | undef
  * command itself has to change, as when the code was used and a new one is needed.
  */
 export function verifyExitCode(err: AgntApiError): number {
+  // A spent code: the server answers otp_max_attempts with a 429, but only a new code helps.
+  if (err.errorCode === 'otp_max_attempts' || err.errorCode === 'otp_expired') return 1;
   if (err.errorCode === 'agnt_unavailable_new_code') return 1;
   return err.status === 429 || err.status === 503 ? 75 : 1;
 }

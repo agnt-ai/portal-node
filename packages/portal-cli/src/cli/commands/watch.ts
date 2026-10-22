@@ -23,7 +23,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PortalClient } from '../../index.js';
-import { AgntUsageError, describeError, plainError, type WaitClock } from './agnt.js';
+import { AgntUsageError, describeError, plainError, withOwner, ownServerOf, type WaitClock } from './agnt.js';
 import { clientFor } from '../utils/api.js';
 import { agntProfile } from '../utils/agentIdentity.js';
 import type { AgntWaitResult } from '../../types.js';
@@ -44,7 +44,25 @@ export interface ExecResult {
 }
 
 /** Runs the operator's command once for one message: the message only on stdin and in the file. */
-export type Runner = (command: string, input: { json: string; id: string }, timeoutMs: number) => Promise<ExecResult>;
+export type Runner = (command: string, input: { json: string; id: string; profile?: string }, timeoutMs: number) => Promise<ExecResult>;
+
+/**
+ * The command's environment: this one's, but with the caller's own HOME when a wrapper gave this CLI another
+ * (AGNT_CLI_CALLER_HOME), so a headless agent run here keeps its own settings and permission rules.
+ */
+function childEnv(): NodeJS.ProcessEnv {
+  const { AGNT_CLI_CALLER_HOME: callerHome, ...env } = process.env;
+  return callerHome ? { ...env, HOME: callerHome } : env;
+}
+
+function killGroup(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (pid === undefined) return;
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    // Already gone.
+  }
+}
 
 export const runCommand: Runner = (command, input, timeoutMs) => new Promise((resolve) => {
   const dir = mkdtempSync(join(tmpdir(), 'network-message-'));
@@ -55,15 +73,18 @@ export const runCommand: Runner = (command, input, timeoutMs) => new Promise((re
     resolve(r);
   };
   // The command is the operator's own string, run by the shell as written. The message is not in it.
+  // Its own process group, so a timeout stops everything the command started, not just the shell.
   const child = spawn('/bin/sh', ['-c', command], {
-    env: { ...process.env, NETWORK_MESSAGE_FILE: file, NETWORK_MESSAGE_ID: input.id },
+    detached: true,
+    // The command answers as the agent whose message it handles, whatever agent it runs (AGNT_CLI_PROFILE wins).
+    env: { ...childEnv(), NETWORK_MESSAGE_FILE: file, NETWORK_MESSAGE_ID: input.id, ...(input.profile ? { AGNT_CLI_PROFILE: input.profile } : {}) },
     stdio: ['pipe', 'inherit', 'inherit'],
   });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    child.kill('SIGTERM');
-    setTimeout(() => child.kill('SIGKILL'), 5000).unref();
+    killGroup(child.pid, 'SIGTERM');
+    setTimeout(() => killGroup(child.pid, 'SIGKILL'), 5000).unref();
   }, timeoutMs);
   child.on('error', (err) => { clearTimeout(timer); done({ exitCode: null, signal: null, timedOut, error: err.message }); });
   child.on('close', (code, signal) => { clearTimeout(timer); done({ exitCode: code, signal, timedOut }); });
@@ -92,7 +113,7 @@ function wholeSeconds(name: string, value: string | undefined, fallback: number)
 export async function watchLoop(
   client: PortalClient,
   opts: WatchOptions,
-  deps: { run?: Runner; clock?: WaitClock; stopped?: () => boolean; emit?: (e: Record<string, unknown>) => void } = {},
+  deps: { run?: Runner; clock?: WaitClock; stopped?: () => boolean; emit?: (e: Record<string, unknown>) => void; profile?: string } = {},
 ): Promise<number> {
   const command = opts.exec?.trim();
   if (!command) throw new AgntUsageError('Give --exec "<command>": what to run for each new message. The message reaches it on stdin and in the file at NETWORK_MESSAGE_FILE, never in the command line.');
@@ -103,6 +124,8 @@ export async function watchLoop(
   const emit = deps.emit ?? emitLine;
   let handled = 0;
   let backoff = 1;
+  // Your own server, read once, when the first message comes.
+  let own: string | undefined | null = null;
 
   emit({ event: 'watching', from: opts.from ?? null, drain: !!opts.drain });
   while (!stopped()) {
@@ -115,8 +138,10 @@ export async function watchLoop(
     } catch (err) {
       const { body } = describeError('watch', err);
       if (!body.retryable) throw err;
-      emit({ event: 'retrying', code: body.code, inSeconds: Math.max(body.retryAfter ?? backoff, 1) });
-      await clock.sleep(Math.max(body.retryAfter ?? backoff, 1) * 1000);
+      // A server's Retry-After is honoured up to 5 minutes, so a scheduler's --drain still ends.
+      const pause = Math.min(Math.max(body.retryAfter ?? backoff, 1), 300);
+      emit({ event: 'retrying', code: body.code, inSeconds: pause });
+      await clock.sleep(pause * 1000);
       backoff = Math.min(backoff * 2, 30);
       continue;
     }
@@ -128,7 +153,8 @@ export async function watchLoop(
       continue;
     }
     const started = clock.now();
-    const result = await run(command, { json: JSON.stringify(got), id: got.id }, timeoutMs);
+    if (own === null) own = await ownServerOf(client);
+    const result = await run(command, { json: JSON.stringify(withOwner(got, own)), id: got.id, profile: deps.profile }, timeoutMs);
     handled++;
     emit({
       event: 'handled', id: got.id, exitCode: result.exitCode, signal: result.signal,
@@ -149,8 +175,9 @@ export async function runAgntWatch(opts: WatchOptions): Promise<void> {
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
   try {
-    const client = await clientFor(await agntProfile(opts.profile));
-    await watchLoop(client, opts, { stopped: () => stop });
+    const profile = await agntProfile(opts.profile);
+    const client = await clientFor(profile);
+    await watchLoop(client, opts, { stopped: () => stop, profile });
   } catch (err) {
     const { body, exitCode } = describeError('watch', err);
     process.stderr.write(`${plainError(body)}\n${JSON.stringify({ error: body }, null, 2)}\n`);

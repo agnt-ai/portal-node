@@ -45,7 +45,9 @@ export class AgntResource {
    * `{status: "timeout"}`. For display only, read `inbox`: wait marks what it shows.
    */
   wait(opts: { from?: string; timeout?: number } & AgntAssistantOption = {}): Promise<AgntWaitResult> {
-    return this.http.get<AgntWaitResult>('/agnt/wait', { from: opts.from, timeout: opts.timeout, assistant: opts.assistant });
+    // Give up on a call the server holds 15 seconds past its own deadline: the connection is gone.
+    return this.http.get<AgntWaitResult>('/agnt/wait', { from: opts.from, timeout: opts.timeout, assistant: opts.assistant },
+      { timeoutMs: ((opts.timeout ?? 25) + 15) * 1000 });
   }
 
   /**
