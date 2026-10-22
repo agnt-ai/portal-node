@@ -20,7 +20,7 @@ import { publicRequest, AgntApiError } from '../../HttpClient.js';
 import { PortalClient } from '../../index.js';
 import { saveProfile } from '../utils/credentials.js';
 import { resolveProfileName } from '../utils/credentials.js';
-import { resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
+import { DEFAULT_API_URL, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import type { AgentAuthVerifyResult, AgentAuthVerifyFields } from '../../types.js';
 
@@ -34,11 +34,6 @@ export interface LoginOptions {
   timezone?: string;
   firstName?: string;
   lastName?: string;
-  purpose?: string;
-  agentUsername?: string;
-  agentDisplayName?: string;
-  agentProduct?: string;
-  agentEmail?: string;
   json?: boolean;
 }
 
@@ -54,11 +49,6 @@ export function signupFieldsFrom(opts: LoginOptions): { fields: AgentAuthVerifyF
   return { fields };
 }
 
-/** Error codes from verify that leave the code unspent: fix the flag and run again with the same --code. */
-const CODE_KEPT = new Set([
-  'bad_request', 'otp_invalid',
-]);
-
 /** Plain guidance for a refused verify: what happened, and the next command. */
 export function verifyErrorHint(err: AgntApiError, code: string): string | undefined {
   const again = `run the same command with --code ${code}`;
@@ -72,7 +62,6 @@ export function verifyErrorHint(err: AgntApiError, code: string): string | undef
       return 'That code can no longer be used. Run the same command without --code to email a new one, then ask your user for it in your conversation.';
   }
   if (err.status === 429) return `Too many attempts. Wait${err.retryAfter !== undefined ? ` ${err.retryAfter} seconds` : ' a while'}, then try again.`;
-  if (err.errorCode && CODE_KEPT.has(err.errorCode)) return `Your code is still good: ${again}.`;
   return undefined;
 }
 
@@ -81,6 +70,8 @@ export function verifyErrorHint(err: AgntApiError, code: string): string | undef
  * command itself has to change, as when the code was used and a new one is needed.
  */
 export function verifyExitCode(err: AgntApiError): number {
+  // A spent code: the server answers otp_max_attempts with a 429, but only a new code helps.
+  if (err.errorCode === 'otp_max_attempts' || err.errorCode === 'otp_expired') return 1;
   return err.status === 429 || err.status === 503 ? 75 : 1;
 }
 
@@ -149,12 +140,16 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
     } catch (err) {
       const e = err as Error;
       const status = err instanceof AgntApiError ? err.status : null;
+      // No answer at all (status null) may pass too: the same command, later.
+      const retry = status === null || status === 429 || status >= 500;
+      const hint = status === 429 ? 'Too many codes for now. Wait a while, then run the same command again.'
+        : status === null ? 'No answer from the API. Check the connection, then run the same command again.' : undefined;
       fail(err instanceof AgntApiError ? err.errorCode ?? 'start_failed' : 'start_failed', `Could not send the code: ${e.message}`,
-        { status, hint: status === 429 ? 'Too many codes for now. Wait a while, then run the same command again.' : undefined },
-        status === 429 || (status !== null && status >= 500) ? 75 : 1);
+        { status, hint }, retry ? 75 : 1);
     }
     const askUser = askForCode(email);
-    const next = finishCommand(opts);
+    // Step 2 must reach the same API, also when AGNT_API_URL chose it: the printed command can run without that variable.
+    const next = finishCommand({ ...opts, apiUrl: apiUrl !== DEFAULT_API_URL ? apiUrl : opts.apiUrl });
     const sentAt = new Date().toISOString();
     const findCode = findCodeHint(email, sentAt);
     emit(opts, {
@@ -189,8 +184,11 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
 
   // An app that does not read sign-up fields ignores them: set the timezone it was given anyway. Best effort,
   // and never a step for anyone to take.
+  // Only when the account has none: a timezone the person chose is never replaced.
   if (!result!.profile && fields.timezone) {
-    await new PortalClient({ apiUrl, apiKey: result!.apiKey }).me.update({ timezone: fields.timezone } as any).catch(() => undefined);
+    const client = new PortalClient({ apiUrl, apiKey: result!.apiKey });
+    const me = await client.me.get().catch(() => undefined) as { timezone?: string | null } | undefined;
+    if (me && !me.timezone) await client.me.update({ timezone: fields.timezone } as any).catch(() => undefined);
   }
 
   const profileFlag = opts.profile ? ` --profile ${shellWord(opts.profile)}` : '';
