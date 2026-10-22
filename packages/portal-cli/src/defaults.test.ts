@@ -6,12 +6,22 @@ import {
   isHydrated,
   resolveDefaultAccountSlug,
   resolveDefaultAccountName,
-  resolveApiUrl
+  resolveApiUrl,
+  resolvePortalUrl,
+  signInWhere
 } from './defaults.js';
 
 describe('defaults', () => {
   it('has a fixed default API URL', () => {
     expect(DEFAULT_API_URL).toBe('https://api.agnt.ai');
+  });
+
+  it('the portal URL counts only when hydrated with an https URL; sign-in text follows it', () => {
+    expect(resolvePortalUrl('https://app.example.test')).toBe('https://app.example.test');
+    expect(resolvePortalUrl('{{portalUrl}}')).toBeUndefined();
+    expect(resolvePortalUrl('the Example web app')).toBeUndefined();
+    expect(signInWhere('https://app.example.test')).toBe('at https://app.example.test');
+    expect(signInWhere(null)).toMatch(/^to \S/);
   });
 
   it('AGNT_API_URL overrides the default API URL, and only when set', () => {

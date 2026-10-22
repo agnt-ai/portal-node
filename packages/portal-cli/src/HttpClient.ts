@@ -150,8 +150,8 @@ export class HttpClient {
     return this.request<T>('PATCH', path, body);
   }
 
-  delete<T>(path: string): Promise<T> {
-    return this.request<T>('DELETE', path);
+  delete<T>(path: string, params?: Record<string, any>): Promise<T> {
+    return this.request<T>('DELETE', path, undefined, params);
   }
 
   /**

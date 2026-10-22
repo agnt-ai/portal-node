@@ -12,6 +12,8 @@
 export const DEFAULT_ACCOUNT_SLUG = '{{accountSlug}}';
 export const DEFAULT_ACCOUNT_NAME = '{{accountName}}';
 export const DEFAULT_API_URL = 'https://api.agnt.ai';
+/** The app's own web address, hydrated from --portal-url; anything but an https URL means none was given. */
+export const DEFAULT_PORTAL_URL = '{{portalUrl}}';
 
 /**
  * The API a new sign-in or saved key talks to: AGNT_API_URL when set (for example a test environment),
@@ -27,6 +29,16 @@ export function resolveApiUrl(env: NodeJS.ProcessEnv = process.env): string {
 // test can't rely on DEFAULT_ACCOUNT_SLUG itself still being the placeholder.
 export function isHydrated(value: string): boolean {
   return !value.startsWith('{{');
+}
+
+/** The app's web address, or undefined when the build was not given one. */
+export function resolvePortalUrl(value: string = DEFAULT_PORTAL_URL): string | undefined {
+  return /^https:\/\/\S+$/.test(value) ? value : undefined;
+}
+
+/** Where a person goes to use their account: "at <portal URL>", or "to <app name>" when the build has no URL. */
+export function signInWhere(portal: string | null = resolvePortalUrl() ?? null): string {
+  return portal ? `at ${portal}` : 'to {{accountName}}';
 }
 
 export function resolveDefaultAccountSlug(): string | undefined {
