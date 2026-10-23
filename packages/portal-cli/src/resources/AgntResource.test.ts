@@ -30,10 +30,22 @@ describe('AgntResource', () => {
     expect(http.post).toHaveBeenCalledWith('/agnt/send', body);
   });
 
-  it('inbox passes after, limit and assistant as query', async () => {
+  it('inbox passes the exact opaque since, limit and assistant as query', async () => {
     const http = fakeHttp();
-    await new AgntResource(http).inbox({ after: 41, limit: 10 });
-    expect(http.get).toHaveBeenCalledWith('/agnt/inbox', { after: 41, limit: 10, assistant: undefined });
+    const since = '  00041+/=%:opaque  ';
+    await new AgntResource(http).inbox({ since, limit: 10 });
+    expect(http.get).toHaveBeenCalledWith('/agnt/inbox', { since, limit: 10, assistant: undefined });
+  });
+
+  it('refuses legacy after including zero, empty/non-string tokens and invalid limits before HTTP', async () => {
+    const http = fakeHttp();
+    const resource = new AgntResource(http);
+    for (const after of [0, 41, undefined, 'opaque']) {
+      await expect(resource.inbox({ after } as any)).rejects.toThrow(/explicit migration decision/);
+    }
+    for (const since of ['', null, 41]) await expect(resource.inbox({ since } as any)).rejects.toThrow(/nonempty opaque token/);
+    for (const limit of [0, 201, 1.5, NaN, '50']) await expect(resource.inbox({ limit } as any)).rejects.toThrow(/1 to 200/);
+    expect(http.get).not.toHaveBeenCalled();
   });
 
   it('wait passes from and timeout as query', async () => {

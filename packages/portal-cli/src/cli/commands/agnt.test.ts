@@ -136,10 +136,23 @@ describe('--brief', () => {
     expect((await agntWait(fakeClient({ wait }), {}, fakeClock())).result).toEqual({ ...full, owner: ownerOf(full as any) });
   });
 
-  it('inbox --brief keeps the page cursor and more, and each message short', async () => {
-    const inbox = vi.fn().mockResolvedValue({ rule: 'r', cursor: 9, more: true, messages: [full] });
+  it('inbox --brief keeps the exact token, rule and every event list while shortening messages', async () => {
+    const page = { rule: 'r', token: '00009+/opaque=', more: true, messages: [full],
+      signals: [{ untrusted: { from: 'other', basis: 'server-answer', content: { type: 'reaction', about: ID } } }],
+      marks: [{ untrusted: { from: 'server', basis: 'server-answer', content: { id: ID, marks: ['read'] } } }], removed: [ID] };
+    const inbox = vi.fn().mockResolvedValue(page);
     const out = await agntInbox(fakeClient({ inbox }), { brief: true });
-    expect(out.result).toEqual({ cursor: 9, more: true, messages: [briefEntry(full as any)] });
+    expect(out.result).toEqual({ ...page, messages: [briefEntry(full as any)] });
+    expect(out.result).not.toHaveProperty('cursor');
+  });
+
+  it('inbox --brief preserves event-only and absent-pair pages without whoami', async () => {
+    const whoami = vi.fn();
+    for (const token of ['event-only', null]) {
+      const page = { rule: 'r', token, more: false, messages: [], signals: [], marks: [], removed: token ? [ID] : [] };
+      expect((await agntInbox(fakeClient({ inbox: vi.fn().mockResolvedValue(page), whoami }), { brief: true })).result).toEqual(page);
+    }
+    expect(whoami).not.toHaveBeenCalled();
   });
 
   it('verify refuses --brief output plainly: it holds no signed message', () => {
@@ -283,11 +296,18 @@ describe('agnt send body', () => {
 });
 
 describe('agnt inbox and sent', () => {
-  it('inbox parses --after and --limit as whole numbers', async () => {
-    const inbox = vi.fn().mockResolvedValue({ rule: 'r', cursor: 41, more: false, messages: [] });
-    await agntInbox(fakeClient({ inbox }), { after: '41', limit: '10' });
-    expect(inbox).toHaveBeenCalledWith({ after: 41, limit: 10, assistant: undefined });
+  it('inbox preserves opaque --since and parses only --limit', async () => {
+    const inbox = vi.fn().mockResolvedValue({ rule: 'r', token: 't', more: false, messages: [], signals: [], marks: [], removed: [] });
+    await agntInbox(fakeClient({ inbox }), { since: '  00041+/=%:opaque  ', limit: '10' });
+    expect(inbox).toHaveBeenCalledWith({ since: '  00041+/=%:opaque  ', limit: 10, assistant: undefined });
     await expect(agntInbox(fakeClient({ inbox }), { limit: '500' })).rejects.toBeInstanceOf(AgntUsageError);
+  });
+
+  it('refuses --after including zero and empty --since before calling the resource', async () => {
+    const inbox = vi.fn();
+    for (const after of ['0', '41', 'opaque']) await expect(agntInbox(fakeClient({ inbox }), { after })).rejects.toThrow(/explicit migration decision/);
+    await expect(agntInbox(fakeClient({ inbox }), { since: '' })).rejects.toThrow(/nonempty opaque token/);
+    expect(inbox).not.toHaveBeenCalled();
   });
 
   it('sent shows an email or phone recipient exactly as the server reports it: accepted, server null', async () => {

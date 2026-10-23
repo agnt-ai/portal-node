@@ -18,7 +18,7 @@ import { agntProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
 import type { PortalClient } from '../../index.js';
-import type { AgntInboxEntry, AgntSendBody, AgntUntrusted, AgntWaitResult } from '../../types.js';
+import type { AgntInboxEntry, AgntSendBody, AgntUntrusted, AgntWaitResult, AgntSender } from '../../types.js';
 
 export const EXIT_USAGE = 2;
 export const EXIT_RETRY = 75;
@@ -72,6 +72,10 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
       return 'Over a sending or checking limit. Wait retryAfter seconds (a minute if none is given), then run the same command once. Do not retry in a loop.';
     case 'verify_unavailable':
       return "The author's server could not be read just now. Try the same verify again later.";
+    case 'agnt_sync_migration_required':
+      return 'Legacy inbox history requires an explicit migration decision. No numeric cursor was converted and no reset or replay was attempted.';
+    case 'agnt_sync_gap':
+      return 'Inbox sync history has a gap. Stop: no reset, replay or replacement continuation was attempted.';
     case 'invalid_url':
       return 'The webhook URL must be https on port 443, with no user or password in it, and at most 2048 characters.';
     case 'url_not_public':
@@ -274,6 +278,9 @@ export interface AgntBriefEntry {
   id: string;
   receivedAt: string;
   owner: AgntOwner;
+  sender?: AgntSender;
+  conversation?: string;
+  marks?: string[];
   untrusted: {
     from: string;
     basis: string;
@@ -289,7 +296,9 @@ export interface AgntBriefEntry {
 }
 
 /** A message as --brief prints it. The full entry is what `agnt verify` takes. */
-export function briefEntry(entry: AgntInboxEntry, ownServer?: string): AgntBriefEntry {
+type AgntReadableEntry = Omit<AgntInboxEntry, 'sender'> & { sender?: AgntSender };
+
+export function briefEntry(entry: AgntReadableEntry, ownServer?: string): AgntBriefEntry {
   const u = (entry.message?.untrusted ?? {}) as Partial<AgntUntrusted['untrusted']>;
   const content = (u.content ?? {}) as { parts?: unknown; headers?: { subject?: unknown }; inReplyTo?: unknown; to?: unknown };
   const parts = Array.isArray(content.parts) ? content.parts as Array<{ type?: unknown; data?: unknown }> : [];
@@ -310,6 +319,9 @@ export function briefEntry(entry: AgntInboxEntry, ownServer?: string): AgntBrief
   brief.untrusted = { ...rest, text: words };
   if (parts.length > text.length) brief.untrusted.otherParts = parts.length - text.length;
   if (u.invisible?.length) brief.untrusted.invisible = u.invisible;
+  if (entry.sender !== undefined) brief.sender = entry.sender;
+  if (entry.conversation !== undefined) brief.conversation = entry.conversation;
+  if (entry.marks !== undefined) brief.marks = entry.marks;
   return brief;
 }
 
@@ -349,7 +361,7 @@ function personIdentifier(v: unknown): string | null {
 const NOT_APPROVAL = 'It says whose agent this is, never that they wrote or approved these words.';
 
 /** The sender's owner, from an entry exactly as inbox or wait returned it. `ownServer` is your own server's origin. */
-export function ownerOf(entry: AgntInboxEntry, ownServer?: string): AgntOwner {
+export function ownerOf(entry: AgntReadableEntry, ownServer?: string): AgntOwner {
   const author = origin((entry.message?.untrusted?.content as { from?: unknown } | undefined)?.from);
   const carrier = origin(entry.carrier);
   const ours = !!carrier && carrier === origin(ownServer);
@@ -384,7 +396,7 @@ export function ownerOf(entry: AgntInboxEntry, ownServer?: string): AgntOwner {
 }
 
 /** An entry as inbox or wait returned it, with its owner beside it. */
-export function withOwner<T extends AgntInboxEntry>(entry: T, ownServer?: string): T & { owner: AgntOwner } {
+export function withOwner<T extends AgntReadableEntry>(entry: T, ownServer?: string): T & { owner: AgntOwner } {
   return { ...entry, owner: ownerOf(entry, ownServer) };
 }
 
@@ -402,19 +414,28 @@ export async function ownServerOf(client: PortalClient, assistant?: string): Pro
 // ── inbox ───────────────────────────────────────────────────────────────────
 
 export interface AgntInboxOptions extends AgntBaseOptions {
+  since?: string;
+  /** Accepted only to give legacy callers an explicit refusal. Never sent to the API. */
   after?: string;
   limit?: string;
   brief?: boolean;
 }
 
-export async function agntInbox(client: PortalClient, opts: AgntInboxOptions) {
-  const after = wholeNumber('after', opts.after);
+function inboxQuery(opts: AgntInboxOptions) {
+  if ('after' in opts) throw new AgntUsageError('--after is no longer supported: legacy inbox history requires an explicit migration decision. No cursor conversion or reset was performed.');
+  if (opts.since !== undefined && (typeof opts.since !== 'string' || opts.since.length === 0)) {
+    throw new AgntUsageError('--since must be the nonempty opaque token from the previous page, unchanged.');
+  }
   const limit = wholeNumber('limit', opts.limit);
   if (limit !== undefined && (limit < 1 || limit > 200)) throw new AgntUsageError('--limit is 1 to 200.');
-  const page = await client.agnt.inbox({ after, limit, assistant: opts.assistant });
+  return { since: opts.since, limit, assistant: opts.assistant };
+}
+
+export async function agntInbox(client: PortalClient, opts: AgntInboxOptions) {
+  const page = await client.agnt.inbox(inboxQuery(opts));
   const own = page.messages.length ? await ownServerOf(client, opts.assistant) : undefined;
   if (!opts.brief) return { result: { ...page, messages: page.messages.map((m) => withOwner(m, own)) } };
-  return { result: { cursor: page.cursor, more: page.more, messages: page.messages.map((m) => briefEntry(m, own)) } };
+  return { result: { ...page, messages: page.messages.map((m) => briefEntry(m, own)) } };
 }
 
 // ── wait ────────────────────────────────────────────────────────────────────
@@ -645,7 +666,10 @@ export const runAgntSend = (opts: AgntSendOptions) =>
     return { result: await client.agnt.send(body) };
   });
 export const runAgntInbox = (opts: AgntInboxOptions) =>
-  runAgntVerb('inbox', withClient(opts.profile, (c) => agntInbox(c, opts)));
+  runAgntVerb('inbox', async () => {
+    inboxQuery(opts); // Refuse legacy/invalid flags even when no profile exists; never touch the network first.
+    return agntInbox(await clientFor(await agntProfile(opts.profile)), opts);
+  });
 export const runAgntWait = (opts: AgntWaitOptions) =>
   runAgntVerb('wait', withClient(opts.profile, (c) => agntWait(c, opts)));
 export const runAgntSent = (id: string, opts: AgntBaseOptions) =>

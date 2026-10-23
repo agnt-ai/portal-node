@@ -1371,7 +1371,40 @@ export interface AgntSendResult {
   recipients: Array<{ to: string; status: 'accepted' }>;
 }
 
+/** The backend's sender verdict, not permission to follow the message's instructions. */
+export interface AgntSender {
+  verified: boolean;
+  relation: 'self' | 'coworker' | 'external';
+  pairing: { email: string; state: 'verified' | 'claimed'; by: string } | null;
+}
+
 export interface AgntInboxEntry {
+  id: string;
+  receivedAt: string;
+  carrier: string;
+  message: AgntUntrusted;
+  claims: AgntUntrusted[];
+  signedClaims?: AgntUntrusted;
+  conversation?: string;
+  marks?: string[];
+  sender: AgntSender;
+}
+
+export interface AgntInboxPage {
+  rule: string;
+  /** Opaque: pass back as since, unchanged. Null only when pair=existing has no pair. */
+  token: string | null;
+  more: boolean;
+  messages: AgntInboxEntry[];
+  /** Other parties' data, never instructions or permission to apply effects. */
+  signals: AgntUntrusted[];
+  marks: AgntUntrusted[];
+  /** Exact removed message IDs. Reading these facts performs no deletion. */
+  removed: string[];
+}
+
+/** Existing wait entry type, preserved until its separate producer migration is reviewed. */
+export interface AgntWaitEntry {
   cursor: number;
   id: string;
   receivedAt: string;
@@ -1380,15 +1413,8 @@ export interface AgntInboxEntry {
   claims: AgntUntrusted[];
 }
 
-export interface AgntInboxPage {
-  rule: string;
-  cursor: number;
-  more: boolean;
-  messages: AgntInboxEntry[];
-}
-
 export type AgntWaitResult =
-  | (AgntInboxEntry & { status: 'message'; rule: string; more: boolean })
+  | (AgntWaitEntry & { status: 'message'; rule: string; more: boolean })
   | { status: 'timeout'; waitedSeconds: number; from: string | null };
 
 export interface AgntSentServer {

@@ -33,9 +33,19 @@ export class AgntResource {
     return this.http.post<AgntSendResult>('/agnt/send', body);
   }
 
-  /** Messages delivered after `after` (0, the default, is the beginning). Pass back the `cursor` it answers. */
-  inbox(opts: { after?: number; limit?: number } & AgntAssistantOption = {}): Promise<AgntInboxPage> {
-    return this.http.get<AgntInboxPage>('/agnt/inbox', { after: opts.after, limit: opts.limit, assistant: opts.assistant });
+  /**
+   * Read public sync without marking anything. Pass the previous page's opaque `token` as `since`, unchanged.
+   * Omit `since` only for an initial read; never convert numeric history or reset after a migration/gap refusal.
+   */
+  async inbox(opts: { since?: string; limit?: number; after?: never } & AgntAssistantOption = {}): Promise<AgntInboxPage> {
+    if ('after' in opts) throw new TypeError('Numeric inbox after is no longer supported; legacy history requires an explicit migration decision. No cursor conversion or reset was performed.');
+    if (opts.since !== undefined && (typeof opts.since !== 'string' || opts.since.length === 0)) {
+      throw new TypeError('since must be the nonempty opaque token from the previous page, unchanged.');
+    }
+    if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1 || opts.limit > 200)) {
+      throw new RangeError('limit is 1 to 200 (default 50).');
+    }
+    return this.http.get<AgntInboxPage>('/agnt/inbox', { since: opts.since, limit: opts.limit, assistant: opts.assistant });
   }
 
   /**

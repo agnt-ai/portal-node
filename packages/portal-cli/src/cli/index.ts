@@ -2205,15 +2205,19 @@ agntCmd
 
 agntCmd
   .command('inbox')
-  .summary('Read messages delivered after a cursor (reading marks nothing)')
+  .summary('Read public inbox sync using an opaque token (reading marks nothing)')
   .description(
-    'Messages delivered to your agent after a cursor (0, the default, is the beginning).\n' +
-    'Pass the answer\'s "cursor" back as --after next time, after you have handled the page;\n' +
-    '"more": true means read again at once. This only reads: it does not mark anything shown.\n\n' +
-    'Example: {{accountSlug}} agnt inbox --after 41'
+    'Read public sync: messages, signals, marks and removed IDs, without applying effects.\n' +
+    'For the next page pass the exact returned "token" as --since, unchanged. Never parse it\n' +
+    'as a number or decode it. "more": true means another page is available.\n' +
+    'Omit --since only for an initial read. Legacy --after is refused, including 0.\n' +
+    'Migration or sync-gap refusals require a decision: no automatic reset or replay.\n\n' +
+    'Examples: {{accountSlug}} agnt inbox\n' +
+    '          {{accountSlug}} agnt inbox --since "<exact returned token>"'
   )
-  .option('--after <cursor>', 'Read messages after this cursor')
-  .option('--brief', 'Only each message\'s sender, owner, id, receivedAt and text, still inside "untrusted" (verify needs the full output)')
+  .option('--since <token>', 'The exact opaque token from the previous page, unchanged')
+  .option('--after <cursor>', 'Unsupported legacy flag: refused without conversion or reset')
+  .option('--brief', 'Shorten messages only; keep token, more and all event lists (verify needs the full message)')
   .option('--limit <n>', 'Messages per page, 1 to 200 (default 50)')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')

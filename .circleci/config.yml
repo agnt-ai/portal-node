@@ -76,6 +76,11 @@ jobs:
           name: Install
           command: npm install
       - run:
+          # Compile the hydrated SDK/CLI before tests exercise its actual entry point.
+          # This is the ordinary build only, not prepublishOnly or a release job.
+          name: Build SDK and CLI
+          command: npm run build
+      - run:
           # No sync:openapi here — src/generated/api.d.ts is a committed
           # file now (see agnt-backend's sync:openapi, which regenerates it
           # from a local sibling checkout and pushes the diff into this repo
