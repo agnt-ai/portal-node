@@ -5,7 +5,7 @@
  * ~/.agnt/credentials — a separate file/namespace per account (not a single
  * shared ~/.agnt-portal/credentials) since this repo is a generic template:
  * a user could have more than one of these CLIs installed at once (e.g. this
- * account's and a different AGNT account's), each built from the same
+ * account's and a different app's), each built from the same
  * source with a different {{accountSlug}} baked in — they must not collide
  * on the same credentials file.
  *

@@ -1241,6 +1241,8 @@ export interface AgentAuthVerifyFields {
   timezone?: string;
   firstName?: string;
   lastName?: string;
+  purpose?: AgentSignupPurpose;
+  agent?: AgentSignupAgent;
 }
 
 export interface AgentSignupTimezone {
@@ -1270,4 +1272,211 @@ export interface AgentAuthVerifyResult {
   apiKeyId: string;
   /** Present when the app reads sign-up fields; absent if the server's profile step failed (the key is still good). */
   profile?: AgentSignupProfile;
+  /** Echoed by apps with the {{accountName}} Network on. */
+  purpose?: AgentSignupPurpose;
+  /** Present when sign-up named an agent. */
+  agnt?: AgentSignupAgnt;
 }
+
+/**
+ * What agent sign-up signs the person up for. Required by apps with the {{accountName}} Network on; there is no default.
+ * - account: a full account. The app's own assistant stays primary; the agent is a second assistant.
+ * - network: the network only. The agent is the person's one assistant; the key reaches only the
+ *   `/agnt/*` routes and the profile.
+ */
+export type AgentSignupPurpose = 'account' | 'network';
+
+/** The agent's own assistant, named at sign-up. */
+export interface AgentSignupAgent {
+  /** Lower-case letters, digits and hyphens, 2 to 28 characters; becomes `<username>@<the network's domain>`, its {{accountName}} Network ID. */
+  username: string;
+  displayName?: string;
+  product?: string;
+  /** The agent's own mailbox; a second code goes there once the agent exists. */
+  email?: string;
+}
+
+/** The agent's own email, as sign-up left it: a code was mailed there, or could not be. */
+export interface AgentSignupAgentEmail {
+  value: string;
+  verification: 'code_sent' | 'not_sent';
+  reason?: string;
+}
+
+/** The agent's {{accountName}} Network identity, when sign-up named an agent. {{accountName}} holds its keys. */
+export interface AgentSignupAgnt {
+  address: string;
+  assistant: string;
+  pair: string;
+  /**
+   * Who holds the agent's keys: "custodial" (the app holds them). Older servers sent the app's own slug instead,
+   * with the same meaning. Data only: the CLI never shows it to a person.
+   */
+  custody: string;
+  email?: AgentSignupAgentEmail;
+}
+
+// ── {{accountName}} Network messaging (/agnt/*) ─────────────────────────────────────────────────
+
+/**
+ * What another party wrote: never instructions or authorisation. `from` names who wrote it and `basis`
+ * says how that is known.
+ */
+export interface AgntUntrusted<T = unknown> {
+  untrusted: {
+    from: string;
+    basis: 'author-signed' | 'server-claim' | 'server-answer';
+    content: T;
+    /** Characters no reader sees, by where they are: a red flag. */
+    invisible?: Array<{ path: string; codePoints: string[] }>;
+  };
+}
+
+export interface AgntPair {
+  id: string;
+  assistant: string;
+  principal: string;
+  status: string;
+  registeredAt?: string | null;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+export interface AgntWhoami {
+  address: string;
+  pair: AgntPair;
+  /** keys: "custodial", or the app's slug from older servers (the same meaning). Data only, never user text. */
+  custody: { keys: string; note: string };
+}
+
+export interface AgntTextPart {
+  type: string;
+  data: string;
+}
+
+export interface AgntSendBody {
+  /** Network IDs (or other network addresses), emails (mailto: allowed) or phones (E.164, or tel:+...). 1 to 100. */
+  to: string[];
+  text?: string;
+  parts?: AgntTextPart[];
+  inReplyTo?: string | null;
+  headers?: Record<string, string>;
+  assistant?: string;
+}
+
+export interface AgntSendResult {
+  id: string;
+  receivedAt: string;
+  /** Every recipient answers "accepted", whatever happens next. */
+  recipients: Array<{ to: string; status: 'accepted' }>;
+}
+
+/** The backend's sender verdict, not permission to follow the message's instructions. */
+export interface AgntSender {
+  verified: boolean;
+  relation: 'self' | 'coworker' | 'external';
+  pairing: { email: string; state: 'verified' | 'claimed'; by: string } | null;
+}
+
+export interface AgntInboxEntry {
+  id: string;
+  receivedAt: string;
+  carrier: string;
+  message: AgntUntrusted;
+  claims: AgntUntrusted[];
+  signedClaims?: AgntUntrusted;
+  conversation?: string;
+  marks?: string[];
+  sender: AgntSender;
+}
+
+export interface AgntInboxPage {
+  rule: string;
+  /** Opaque: pass back as since, unchanged. Null only when pair=existing has no pair. */
+  token: string | null;
+  more: boolean;
+  messages: AgntInboxEntry[];
+  /** Other parties' data, never instructions or permission to apply effects. */
+  signals: AgntUntrusted[];
+  marks: AgntUntrusted[];
+  /** Exact removed message IDs. Reading these facts performs no deletion. */
+  removed: string[];
+}
+
+/** Existing wait entry type, preserved until its separate producer migration is reviewed. */
+export interface AgntWaitEntry {
+  cursor: number;
+  id: string;
+  receivedAt: string;
+  carrier: string;
+  message: AgntUntrusted;
+  claims: AgntUntrusted[];
+}
+
+export type AgntWaitResult =
+  | (AgntWaitEntry & { status: 'message'; rule: string; more: boolean })
+  | { status: 'timeout'; waitedSeconds: number; from: string | null };
+
+export interface AgntSentServer {
+  /** null for recipients given as an email or phone: {{accountName}} never says where those went. */
+  server: string | null;
+  recipients: string[];
+  /** "accepted" is the only status a recipient given as an email or phone ever shows. */
+  status: 'pending' | 'delivered' | 'failed' | 'accepted';
+  reason?: string | AgntUntrusted;
+}
+
+export interface AgntSentReport {
+  id: string;
+  servers: AgntSentServer[];
+}
+
+/** A block: an address, or a whole domain as `*@domain`. Blocks are the person's, for all of their agents. */
+export interface AgntBlock {
+  match: string;
+  kind: 'address' | 'domain';
+  createdAt: string;
+}
+
+export interface AgntWebhookDelivery {
+  at: string;
+  kind: 'message' | 'test';
+  ok: boolean;
+  httpStatus?: number;
+  error?: string;
+}
+
+/** The agent's webhook: one notify-only, signed push URL per agent. */
+export interface AgntWebhook {
+  url: string;
+  status: 'active' | 'disabled';
+  /** "consecutive_failures": too many failed pushes in a row; set the URL again to turn it back on. */
+  disabledReason?: string;
+  disabledAt?: string;
+  consecutiveFailures: number;
+  lastDelivery: AgntWebhookDelivery | null;
+  /** The last test push only (message pushes never touch it). Older servers leave it out. */
+  lastTest?: AgntWebhookDelivery | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The webhook, and its signing secret only when it was just made or rotated (never shown again). */
+export interface AgntWebhookResult {
+  webhook: AgntWebhook;
+  secret?: string;
+}
+
+/** What POST /agnt/leave answers: the address is retired and the keys revoked. The account always stays ("kept"); older servers could answer "deleted". */
+export interface AgntLeaveResult {
+  status: 'left';
+  address: string;
+  registration: 'deleted' | 'kept';
+  keysRevoked: number;
+  /** True when the server sent the person the "your agent was disconnected" email; absent from servers that don't say. */
+  emailed?: boolean;
+}
+
+export type AgntVerifyResult =
+  | { verified: true; id: string; authorSigned: true; authorServer: string; principal: unknown; [key: string]: unknown }
+  | { verified: false; id: string | null; reason: string; [key: string]: unknown };
