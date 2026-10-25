@@ -95,7 +95,14 @@ import { runTrashList, runTrashRestore } from './commands/trash.js';
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
 import { AgntApiError } from '../HttpClient.js';
 
-const ONBOARDING_ERROR_CODES = new Set(['onboarding_required', 'onboarding_incomplete']);
+/** Plain guidance for refusals any command can meet, printed under the error. */
+const ERROR_HINTS: Record<string, string> = {
+  // Booking and scheduling wait for a timezone the person confirmed, not an IP guess.
+  timezone_unconfirmed:
+    'This needs a confirmed timezone, and the one on the account is missing or a guess. Ask your user which\n' +
+    'timezone they are in, then set it (any timezone you set counts as confirmed):\n' +
+    '  {{accountSlug}} me update \'{"timezone":"America/New_York"}\'',
+};
 
 function reportAndExit(err: unknown): never {
   if (err instanceof AgntApiError) {
@@ -104,9 +111,23 @@ function reportAndExit(err: unknown): never {
     // the one place that reliably catches an agent that skipped (or never
     // saw) login's own onboarding hint and hit the server-side gate later on
     // some other command instead.
-    if (err.errorCode && ONBOARDING_ERROR_CODES.has(err.errorCode)) {
+    // Only an older server still asks for this. Nothing about the account is wrong.
+    if (err.errorCode === 'onboarding_required') {
       console.error('');
-      console.error('Run: {{accountSlug}} onboard --timezone "America/New_York" --working-hours \'{"MO":[{"start":"09:00","end":"17:00"}]}\'');
+      console.error('The account is fine: this server still asks for a one-time setup step. Run it yourself:');
+      console.error('  {{accountSlug}} onboard');
+      console.error('(add --timezone <IANA zone> if you know it; it is optional)');
+    }
+    if (err.errorCode === 'onboarding_incomplete') {
+      console.error('');
+      console.error('This server needs a timezone and working hours before the account can be used. Ask your user for');
+      console.error('them, then run:');
+      console.error('  {{accountSlug}} onboard --timezone "America/New_York" --working-hours \'{"MO":[{"start":"09:00","end":"17:00"}]}\'');
+    }
+    const hint = err.errorCode ? ERROR_HINTS[err.errorCode] : undefined;
+    if (hint) {
+      console.error('');
+      console.error(hint);
     }
   } else if (err instanceof Error) {
     console.error(`Error: ${err.message}`);
@@ -129,10 +150,11 @@ const program = new Command();
 program
   .name('{{accountSlug}}')
   .description(
-    'Connect your own agent to your {{accountName}} account — no browser required.\n\n' +
-      'Typical first run:\n' +
-      '  {{accountSlug}} login --email you@example.com\n' +
-      '  {{accountSlug}} onboard --timezone "America/New_York" --working-hours \'{"MO":[{"start":"09:00","end":"17:00"}]}\'  # required — everything else 428s until this is done\n' +
+    'Connect your own agent to your {{accountName}} account — no browser required. Made for an AI\n' +
+      'agent to run: the agent runs every command, and asks its user only for their email and the\n' +
+      'one-time code emailed to them.\n\n' +
+      'First steps:\n' +
+      '  {{accountSlug}} login --email <your user\'s email>   # then the same with --code <the code>\n' +
       '  {{accountSlug}} tasks list\n' +
       '  {{accountSlug}} connections connect --mcp-server-url https://mcp.notion.com'
   )
@@ -141,21 +163,25 @@ program
 program
   .command('login')
   .description(
-    'Sign up or log in — works for both a new email (creates the account) and an\n' +
-    'existing one (logs in), the server decides which. Sends a one-time code to\n' +
-    'the email; run again from a second agent/device to mint a second, separately\n' +
-    'revocable key.\n\n' +
-    'Examples:\n' +
-    '  {{accountSlug}} login --email you@example.com\n' +
-    '  {{accountSlug}} login --email you@example.com --account {{accountSlug}} --label "work-laptop"\n' +
-    '  {{accountSlug}} login --email you@example.com --code 123456   # skip the interactive prompt'
+    'Sign up or log in, in two steps, with no prompts. A new email creates the account and an\n' +
+    'existing one logs in: the server decides. Each finished login mints its own revocable key.\n\n' +
+    '  1. {{accountSlug}} login --email <your user\'s email>\n' +
+    '     Emails them a one-time code and exits. Ask your user for it in your conversation.\n' +
+    '  2. The same command with --code <the code>. Saves the key and says what to tell your user.\n\n' +
+    'Output is JSON on stdout ("askUser" or "tellUser" says what to say to your user), with a plain\n' +
+    'summary on stderr unless --json. A refused sign-up says whether the code is still good:\n' +
+    'when it is, run the same command with --code <the same code>.'
   )
-  .requiredOption('--email <email>', 'Your email address')
-  .option('--account <slug>', 'AGNT account slug to sign up/log in under (defaults to the account this CLI was published for)')
-  .option('--code <code>', 'Verification code, if you already have it (skips the interactive prompt)')
+  .option('--email <email>', 'Your user\'s email address (required; without it you get the line to ask them)')
+  .option('--account <slug>', 'Account slug of the app to sign up/log in under (defaults to the app this CLI was published for)')
+  .option('--code <code>', 'The one-time code your user got by email (step 2)')
   .option('--label <label>', 'Label for the API key this mints, e.g. the agent/device name (defaults to this machine\'s hostname)')
   .option('--profile <name>', 'Credentials profile to save under (default: "default")')
-  .option('--api-url <url>', 'Override the API base URL')
+  .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
+  .option('--timezone <tz>', 'The person\'s IANA timezone, e.g. "America/New_York". Never replaces one they set themselves')
+  .option('--first-name <name>', 'The person\'s first name')
+  .option('--last-name <name>', 'The person\'s last name')
+  .option('--json', 'JSON only: no plain summary on stderr (the API key is saved, never printed)')
   .action(async (opts) => {
     await runLogin(opts);
   });
@@ -163,15 +189,12 @@ program
 program
   .command('onboard')
   .description(
-    'Set your timezone and working hours — required before any other command\n' +
-    'will work (the server blocks everything else until this is done). Both\n' +
-    'flags are required; there is no default working-hours guess.\n\n' +
-    'Example:\n' +
-    '  {{accountSlug}} onboard --timezone "America/New_York" \\\n' +
-    '    --working-hours \'{"MO":[{"start":"09:00","end":"17:00"}],"TU":[{"start":"09:00","end":"17:00"}]}\''
+    'Optional. Marks the account set up, and sets a timezone or working hours when given.\n' +
+    'Only an older server asks for this. If it answers onboarding_incomplete, it needs both.\n\n' +
+    'Example: {{accountSlug}} onboard --timezone "America/New_York"'
   )
-  .option('--timezone <tz>', 'IANA timezone, e.g. "America/New_York"')
-  .option('--working-hours <json>', 'Day-keyed JSON of {start,end} ranges — keys MO/TU/WE/TH/FR/SA/SU')
+  .option('--timezone <tz>', 'IANA timezone, e.g. "America/New_York" (optional)')
+  .option('--working-hours <json>', 'Day-keyed JSON of {start,end} ranges, keys MO..SU (optional)')
   .option('--profile <name>', 'Credentials profile to use')
   .option('--json', 'Print raw JSON')
   .action(async (opts) => {
@@ -197,8 +220,8 @@ program
   .description('Save an API key you already have to ~/.{{accountSlug}}/credentials (like `aws configure --profile`)')
   .requiredOption('--api-key <key>', 'API key (ak_live_...)')
   .option('--profile <name>', 'Profile name', 'default')
-  .option('--api-url <url>', 'API base URL')
-  .option('--account <slug>', 'AGNT account slug')
+  .option('--api-url <url>', 'API base URL (default: AGNT_API_URL, else the production API)')
+  .option('--account <slug>', 'Account slug of the app')
   .action(async (opts) => {
     await runConfigure(opts);
   });

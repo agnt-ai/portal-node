@@ -4,11 +4,18 @@ Connect your own agent to your {{accountName}} account — no browser required. 
 
 ## Quickstart
 
+This CLI is made for an AI agent to run. The agent runs every command, and asks its user, in its own conversation with them, only for their email and the one-time code emailed to them. The user never types in a terminal.
+
+The agent gets each itself when it can. It uses an email it already knows for its user, and reads the code from the user's inbox if it has a mail tool. It asks only when it can't, in words that make clear the email is the user's and why: "I need to sign you up for a free {{accountName}} account. What's your email address?", then "I've emailed a code to <email> to confirm it's you. What is it?". Each command's `askUser` and `findCode` fields carry the exact lines.
+
+Signing in is two steps, with no prompts:
+
 ```
-npx @agnt-sdk/{{accountSlug}} login --email you@example.com
+{{accountSlug}} login --email <your user's email>                   # emails them a code; ask them for it
+{{accountSlug}} login --email <your user's email> --code <the code>   # saves an API key
 ```
 
-This sends a one-time code to your email, verifies it, and saves a personal API key to `~/.{{accountSlug}}/credentials`. Run it again from a second agent or machine and you'll get a second, separately-revocable key — nothing is shared or rotated out from under the first one.
+The key is saved to `~/.{{accountSlug}}/credentials`. Each finished login mints its own separately revocable key, so a second agent or machine never rotates out the first one's.
 
 ```
 {{accountSlug}} tasks list
@@ -30,6 +37,14 @@ import { PortalClient } from '@agnt-sdk/{{accountSlug}}';
 const client = new PortalClient({ apiUrl: 'https://api.agnt.ai', apiKey: 'ak_live_...' });
 await client.tasks.list();
 const { authUrl } = await client.connections.connectMcp({ mcpServerUrl: 'https://mcp.notion.com' });
+```
+
+## Another API
+
+Every command talks to the production API unless told otherwise. To point a new sign-in at another one (for example a test environment), set `AGNT_API_URL` or pass `--api-url`. The profile it saves keeps that URL, so later commands follow it:
+
+```
+AGNT_API_URL=https://api.example.test {{accountSlug}} login --email <your user's email>
 ```
 
 ## Already have a key?

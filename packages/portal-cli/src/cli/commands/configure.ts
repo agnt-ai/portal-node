@@ -4,11 +4,11 @@
  * on another machine, or issued from the account's dashboard).
  *
  * Usage:
- *   {{accountSlug}} configure --profile staging --api-url https://staging-api.agnt.ai --api-key ak_live_... --account {{accountSlug}}
+ *   {{accountSlug}} configure --profile test --api-url https://api.example.test --api-key ak_live_... --account {{accountSlug}}
  */
 
 import { saveProfile } from '../utils/credentials.js';
-import { resolveDefaultAccountSlug, DEFAULT_API_URL } from '../../defaults.js';
+import { resolveDefaultAccountSlug, resolveApiUrl, apiUrlProblem } from '../../defaults.js';
 
 export interface ConfigureOptions {
   profile: string;
@@ -23,7 +23,12 @@ export async function runConfigure(opts: ConfigureOptions): Promise<void> {
     process.exit(1);
   }
 
-  const apiUrl = opts.apiUrl?.trim() || DEFAULT_API_URL;
+  const apiUrl = opts.apiUrl?.trim() || resolveApiUrl();
+  const urlProblem = apiUrlProblem(apiUrl);
+  if (urlProblem) {
+    console.error(urlProblem);
+    process.exit(1);
+  }
   const account = opts.account?.trim() || resolveDefaultAccountSlug();
 
   try {
