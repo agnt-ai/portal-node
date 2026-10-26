@@ -1,7 +1,7 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   Contact, CreateContactBody, UpdateContactBody, ListContactsParams,
-  ContactsPage, ContactActivity, BulkTagResult
+  ContactsPage, ContactActivity, BulkTagResult, LinkedInImportResult
 } from '../types.js';
 
 /**
@@ -50,5 +50,14 @@ export class ContactsResource {
   async bulkTag(ids: string[], opts: { add?: string[]; remove?: string[] }): Promise<BulkTagResult> {
     const r = await this.http.post<any>('/contacts/bulk-tag', { ids, add: opts.add, remove: opts.remove });
     return r.bulkTag;
+  }
+
+  /**
+   * Import the full text of LinkedIn's Connections.csv (the Connections file in
+   * LinkedIn's data export). Re-importing updates the same contacts; no duplicates.
+   */
+  async importLinkedIn(csv: string): Promise<LinkedInImportResult> {
+    const r = await this.http.post<any>('/contacts/import/linkedin', { csv });
+    return r.linkedInImport;
   }
 }

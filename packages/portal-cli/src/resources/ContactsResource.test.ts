@@ -60,4 +60,13 @@ describe('ContactsResource', () => {
     expect(http.post).toHaveBeenCalledWith('/contacts/bulk-tag', { ids: ['c1', 'c2'], add: ['vip'], remove: ['cold'] });
     expect(result).toEqual({ updated: 2 });
   });
+
+  it('importLinkedIn() posts { csv } to /contacts/import/linkedin and unwraps { linkedInImport }', async () => {
+    const summary = { total: 2, created: 1, updated: 1, skipped: 0, withEmail: 1, errors: [] };
+    const http = fakeHttp({ post: vi.fn().mockResolvedValue({ linkedInImport: summary }) });
+    const csv = 'First Name,Last Name,URL,Email Address,Company,Position,Connected On\nAda,Lovelace,https://www.linkedin.com/in/ada,ada@example.com,Example Co,Engineer,01 Jan 2026\n';
+    const result = await new ContactsResource(http).importLinkedIn(csv);
+    expect(http.post).toHaveBeenCalledWith('/contacts/import/linkedin', { csv });
+    expect(result).toEqual(summary);
+  });
 });
