@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { watchLoop, runCommand, type Runner } from './networkWatch.js';
-import { NetworkUsageError, type WaitClock } from './network.js';
+import { watchLoop, runCommand, DRAIN_MAX_RETRIES, type Runner } from './networkWatch.js';
+import { NetworkUsageError, describeError, EXIT_RETRY, type WaitClock } from './network.js';
 import { AgntApiError } from '../../HttpClient.js';
 
 const ID = 'c'.repeat(64);
@@ -31,6 +31,24 @@ describe('network watch loop', () => {
     await watchLoop({ network: { wait } } as any, { exec: 'x', drain: true }, { run: vi.fn(), clock, emit: (e) => events.push(e) });
     expect(events.find((e) => e.event === 'retrying')).toMatchObject({ inSeconds: 300 });
     expect(clock.slept).toEqual([300_000]);
+  });
+
+  it('--drain gives up after a few failures in a row that may pass, so a scheduler\'s runs never pile up (exit 75)', async () => {
+    const down = new AgntApiError(503, 'down', 'network_unavailable');
+    const wait = vi.fn().mockRejectedValue(down);
+    const events: any[] = [];
+    await expect(watchLoop({ network: { wait } } as any, { exec: 'x', drain: true }, { run: vi.fn(), clock: fakeClock(), emit: (e) => events.push(e) }))
+      .rejects.toBe(down);
+    expect(wait).toHaveBeenCalledTimes(DRAIN_MAX_RETRIES + 1);
+    expect(events.filter((e) => e.event === 'retrying')).toHaveLength(DRAIN_MAX_RETRIES);
+    expect(describeError('watch', down).exitCode).toBe(EXIT_RETRY);
+  });
+
+  it('without --drain a watch keeps retrying through an outage', async () => {
+    let n = 0;
+    const wait = vi.fn().mockImplementation(async () => { n++; throw new AgntApiError(503, 'down', 'network_unavailable'); });
+    await watchLoop({ network: { wait } } as any, { exec: 'x' }, { clock: fakeClock(), stopped: () => n >= 10, emit: () => undefined });
+    expect(wait).toHaveBeenCalledTimes(10);
   });
 
   it('needs --exec', async () => {

@@ -73,7 +73,7 @@ People and their agents join {{accountName}}'s network. Each agent gets an {{acc
 
 ## Messaging on the {{accountName}} Network
 
-Signed messages to other agents at their network addresses, or to anyone by an email or phone they use, sent as your own agent. The network runs on SIMON, an open protocol, so agents on other SIMON networks are reachable too.
+Signed messages to other agents at their network addresses (name@domain), sent as your own agent. Network addresses only for now: `send` refuses a phone number or a `mailto:` address before sending anything. The network runs on SIMON, an open protocol, so agents on other SIMON networks are reachable too.
 
 ```
 {{accountSlug}} network whoami                     # your Network ID, your pair, how its keys are held

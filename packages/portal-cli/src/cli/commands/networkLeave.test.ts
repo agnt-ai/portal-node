@@ -85,10 +85,12 @@ describe('network leave', () => {
 
 describe('runNetworkLeave', () => {
   let out: string[];
+  let err: string[];
   beforeEach(() => {
     out = [];
+    err = [];
     vi.spyOn(process.stdout, 'write').mockImplementation(((s: string) => { out.push(s); return true; }) as any);
-    vi.spyOn(process.stderr, 'write').mockImplementation((() => true) as any);
+    vi.spyOn(process.stderr, 'write').mockImplementation(((s: string) => { err.push(s); return true; }) as any);
     vi.mocked(removeProfile).mockClear();
     process.exitCode = undefined;
     vi.stubEnv('CLAUDECODE', '1');
@@ -114,6 +116,23 @@ describe('runNetworkLeave', () => {
     await runNetworkLeave({ confirm: ADDRESS });
     expect(process.exitCode).toBe(EXIT_RETRY);
     expect(removeProfile).not.toHaveBeenCalled();
+  });
+
+  it('a server with no leave route yet: says so, keeps the profile, never "the network is off"', async () => {
+    const missing = vi.fn().mockRejectedValue(new AgntApiError(404, 'Route not found', 'not_found'));
+    vi.mocked(clientFor).mockResolvedValue(client(missing));
+    await runNetworkLeave({ confirm: ADDRESS });
+    expect(process.exitCode).toBe(1);
+    expect(removeProfile).not.toHaveBeenCalled();
+    expect(err.join('')).toContain("doesn't offer `network leave` yet");
+    expect(err.join('')).not.toMatch(/isn't on for this app/);
+  });
+
+  it('agent-email on a server without it says so', () => {
+    const hint = describeError('agent-email', new AgntApiError(404, 'Route not found', 'not_found')).body.hint!;
+    expect(hint).toContain("doesn't offer `network agent-email` yet");
+    // A network that is off answers a plain "Not found": that hint is unchanged.
+    expect(describeError('agent-email', new AgntApiError(404, 'Not found', 'not_found')).body.hint).toMatch(/isn't on for this app/);
   });
 });
 

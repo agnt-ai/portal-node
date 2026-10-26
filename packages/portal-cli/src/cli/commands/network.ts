@@ -1,6 +1,6 @@
 /**
  * {{accountSlug}} network — the {{accountName}} Network, as your own agent: signed messages to other agents at their
- * network addresses (name@domain), or to anyone by an email or phone they use. {{accountName}} holds the agent's keys and signs for it; this CLI only calls the
+ * network addresses (name@domain). {{accountName}} holds the agent's keys and signs for it; this CLI only calls the
  * {{accountName}} API, and never judges a sender itself: who sent a message is the server's `sender` verdict.
  *
  * Conventions:
@@ -65,7 +65,19 @@ const RETRYABLE_STATUS = new Set([408, 429, 502, 503, 504]);
 const NETWORK_OFF = 'The {{accountName}} Network isn\'t on for this app. Only the app\'s operator can turn it on: stop and tell your person.';
 
 /** The hint for a refusal, in plain words: what it means and what to do. */
-function hintFor(verb: string, code: string | undefined, status: number | null): string | undefined {
+/**
+ * The API's answer for a route it does not have at all: a server that does not offer this command yet. Distinct from
+ * the 404 of a network that is off ("Not found") and from a thing that does not exist.
+ */
+export function isMissingRoute(status: number | null, message: string | undefined): boolean {
+  return status === 404 && /^route not found$/i.test((message ?? '').trim());
+}
+
+const notOnThisServer = (verb: string) =>
+  `This server doesn't offer \`network ${verb}\` yet. Nothing was changed. Tell your person it isn't available on {{accountName}} yet; don't retry.`;
+
+function hintFor(verb: string, code: string | undefined, status: number | null, message?: string): string | undefined {
+  if (isMissingRoute(status, message)) return notOnThisServer(verb);
   switch (code) {
     case 'rate_limit':
       // Sign-up codes are limited per network address, which many people can share: never about this person.
@@ -91,7 +103,8 @@ function hintFor(verb: string, code: string | undefined, status: number | null):
     case 'webhook_disabled':
       return 'The webhook was turned off after too many failed pushes (network webhook show says why). Fix the receiver, then run network webhook set --url again to turn it back on.';
     case 'not_found':
-      if (verb === 'webhook') return 'This agent has no webhook yet. Set one: network webhook set --url <https URL>.';
+      if (verb === 'webhook show' || verb === 'webhook test') return 'This agent has no webhook yet. Set one: network webhook set --url <https URL>.';
+      // Only the per-id form: `network sent` with no id (verb "sent list") is a list, and its 404 means the network is off.
       return verb === 'sent'
         ? 'No message with that id among this agent\'s sends: an unknown id, another agent\'s, or past the hold window.'
         : NETWORK_OFF;
@@ -178,7 +191,7 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
     if (err.details) body.details = err.details;
     if (err.retryAfter !== undefined) body.retryAfter = err.retryAfter;
     // A command may attach its own guidance (join does, for sign-up refusals).
-    const hint = (err as AgntApiError & { cliHint?: string }).cliHint ?? hintFor(verb, body.code, err.status);
+    const hint = (err as AgntApiError & { cliHint?: string }).cliHint ?? hintFor(verb, body.code, err.status, err.message);
     if (hint) body.hint = hint;
     return { body, exitCode: retryable ? EXIT_RETRY : 1 };
   }
@@ -241,11 +254,38 @@ export interface NetworkSendOptions extends NetworkBaseOptions {
   header?: string[];
 }
 
+/**
+ * Whether `send` takes people's emails and phones as recipients. Not yet: the server takes network addresses only,
+ * and would treat an email as a network address on that email's domain. Flip this (and the help, the skill and
+ * join's next steps, which say "network addresses only") once the server delivers to emails and phones.
+ */
+export const EMAIL_AND_PHONE_RECIPIENTS = false;
+
+/** A network address: name@domain, with a dot in the domain. */
+const NETWORK_ADDRESS = /^[^\s@:]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+
+/** Why a recipient can't be sent to yet, or undefined. Only network addresses, until EMAIL_AND_PHONE_RECIPIENTS. */
+export function recipientProblem(to: string): string | undefined {
+  if (EMAIL_AND_PHONE_RECIPIENTS) return undefined;
+  if (/^tel:/i.test(to) || (/^\+?[0-9 ().-]+$/.test(to) && to.replace(/[^0-9]/g, '').length >= 6)) {
+    return `${to} is a phone number. {{accountName}} sends to network addresses only for now (name@domain, such as a Network ID).`;
+  }
+  if (/^mailto:/i.test(to)) {
+    return `${to} is an email. {{accountName}} sends to network addresses only for now: give the agent's Network ID (name@domain), without mailto:.`;
+  }
+  if (!NETWORK_ADDRESS.test(to)) return `${to} is not a network address: give name@domain, such as a Network ID.`;
+  return undefined;
+}
+
 /** The request body from options; `--text -` reads the text from stdin. */
 export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string = () => readFileSync(0, 'utf8')): NetworkSendBody {
   const to = (opts.to ?? []).flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean);
-  if (!to.length) throw new NetworkUsageError('Give at least one --to: a Network ID (or another network address), an email or a phone (E.164).');
+  if (!to.length) throw new NetworkUsageError('Give at least one --to: a Network ID (or another network address).');
   if (to.length > 100) throw new NetworkUsageError('At most 100 recipients per message.');
+  for (const t of to) {
+    const problem = recipientProblem(t);
+    if (problem) throw new NetworkUsageError(problem);
+  }
   if (opts.text === undefined) throw new NetworkUsageError('Give --text, the message (or --text - to read it from stdin).');
   const text = opts.text === '-' ? readStdin() : opts.text;
   const body: NetworkSendBody = { to, text };
@@ -612,7 +652,7 @@ export const runNetworkInbox = (opts: NetworkInboxOptions) =>
 export const runNetworkWait = (opts: NetworkWaitOptions) =>
   runNetworkVerb('wait', withClient(opts.profile, (c) => networkWait(c, opts)));
 export const runNetworkSent = (id: string | undefined, opts: NetworkSentOptions) =>
-  runNetworkVerb('sent', withClient(opts.profile, (c) => networkSent(c, id, opts)));
+  runNetworkVerb(id === undefined ? 'sent list' : 'sent', withClient(opts.profile, (c) => networkSent(c, id, opts)));
 export const runNetworkVerify = (file: string, opts: NetworkBaseOptions) =>
   runNetworkVerb('verify', async () => {
     const message = readVerifyInput(file); // usage errors before reading credentials

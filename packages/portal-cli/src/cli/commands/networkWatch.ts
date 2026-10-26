@@ -91,6 +91,9 @@ export const runCommand: Runner = (command, input, timeoutMs) => new Promise((re
   child.stdin.end(input.json);
 });
 
+/** How many failures in a row that may pass a --drain retries before it gives up with exit 75. */
+export const DRAIN_MAX_RETRIES = 3;
+
 const realClock: WaitClock = {
   now: () => Date.now(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -123,6 +126,8 @@ export async function watchLoop(
   const emit = deps.emit ?? emitLine;
   let handled = 0;
   let backoff = 1;
+  // Failures in a row that may pass. A --drain gives up after DRAIN_MAX_RETRIES of them, so scheduled runs never pile up.
+  let failures = 0;
 
   emit({ event: 'watching', from: opts.from ?? null, drain: !!opts.drain });
   while (!stopped()) {
@@ -132,9 +137,12 @@ export async function watchLoop(
       // Draining asks for what is already waiting; watching holds the server call open (it answers within ~22s).
       got = await client.network.wait({ from: opts.from, timeout: opts.drain ? 0 : 20 });
       backoff = 1;
+      failures = 0;
     } catch (err) {
       const { body } = describeError('watch', err);
       if (!body.retryable) throw err;
+      // Out of retries on a drain: the failure itself ends the run (exit 75), and the next scheduled run tries again.
+      if (opts.drain && ++failures > DRAIN_MAX_RETRIES) throw err;
       // A server's Retry-After is honoured up to 5 minutes, so a scheduler's --drain still ends.
       const pause = Math.min(Math.max(body.retryAfter ?? backoff, 1), 300);
       emit({ event: 'retrying', code: body.code, inSeconds: pause });

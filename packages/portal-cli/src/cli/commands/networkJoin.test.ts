@@ -156,7 +156,7 @@ describe('network join', () => {
     expect(JSON.stringify(result)).not.toContain('ak_live_secret');
   });
 
-  // Sign-up (C2) is the contract below: POST /portal/auth/agent/start {email, account}, then
+  // Agent sign-up is the contract below: POST /portal/auth/agent/start {email, account}, then
   // POST /portal/auth/agent/verify {email, account, code, label, purpose, timezone, agent{username, displayName, product}}.
   it('follows the agent sign-up contract: the two routes, no auth, and exactly the fields it names', async () => {
     const fetchMock = vi.fn()

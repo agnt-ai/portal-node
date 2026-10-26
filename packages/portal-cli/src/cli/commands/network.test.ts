@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  networkWait, networkInbox, networkSent, sendBodyFrom, briefEntry, readVerifyInput, oneMessage, describeError, runNetworkVerb,
+  networkWait, networkInbox, networkSent, sendBodyFrom, EMAIL_AND_PHONE_RECIPIENTS, briefEntry, readVerifyInput, oneMessage, describeError, runNetworkVerb,
   NetworkUsageError, EXIT_RETRY, EXIT_USAGE, EXIT_WAIT_TIMEOUT, WAIT_CALL_SECONDS, type WaitClock,
 } from './network.js';
 import { AgntApiError } from '../../HttpClient.js';
@@ -212,8 +212,21 @@ describe('network send body', () => {
   });
 
   it('splits comma-separated --to and keeps the order given', () => {
-    const body = sendBodyFrom({ to: ['bob@agent.example.net,carol@example.com', '+14155550100'], text: 'hi', subject: 's' });
-    expect(body).toEqual({ to: ['bob@agent.example.net', 'carol@example.com', '+14155550100'], text: 'hi', headers: { subject: 's' } });
+    const body = sendBodyFrom({ to: ['bob@agent.example.net,carol@agent.example.org', 'dan@agent.example.com'], text: 'hi', subject: 's' });
+    expect(body).toEqual({ to: ['bob@agent.example.net', 'carol@agent.example.org', 'dan@agent.example.com'], text: 'hi', headers: { subject: 's' } });
+  });
+
+  it('network addresses only for now: a phone, a tel: or mailto: address, or no name@domain is refused before sending', () => {
+    expect(EMAIL_AND_PHONE_RECIPIENTS).toBe(false);
+    for (const to of ['+14155550100', 'tel:+14155550100', '(415) 555-0100']) {
+      expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is a phone number\. .* network addresses only for now/);
+    }
+    expect(() => sendBodyFrom({ to: ['mailto:carol@example.com'], text: 'x', subject: 's' })).toThrow(/is an email\. .* network addresses only for now/);
+    for (const to of ['carol', 'carol@localhost', '@example.com']) {
+      expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is not a network address/);
+    }
+    // One bad recipient stops the whole send: nothing goes to the others either.
+    expect(() => sendBodyFrom({ to: ['bob@agent.example.net', '+14155550100'], text: 'x', subject: 's' })).toThrow(NetworkUsageError);
   });
 
   it('reads --text - from stdin', () => {
@@ -274,10 +287,10 @@ describe('network inbox and sent', () => {
     expect(inbox).not.toHaveBeenCalled();
   });
 
-  it('sent shows an email or phone recipient exactly as the server reports it: accepted, server null', async () => {
+  it('sent shows the server\'s delivery report exactly as given', async () => {
     const report = { id: ID, servers: [
       { server: 'https://agent.example.net', recipients: ['bob@agent.example.net'], status: 'delivered' },
-      { server: null, recipients: ['carol@example.com', '+14155550100'], status: 'accepted' },
+      { server: null, recipients: ['carol@agent.example.org'], status: 'accepted' },
     ] };
     const sent = vi.fn().mockResolvedValue(report);
     expect(await networkSent(fakeClient({ sent }), ID, {})).toEqual({ result: report });
@@ -323,6 +336,17 @@ describe('network verify input', () => {
 });
 
 describe('network errors', () => {
+  it('a 404 on the sent list means the network is off, never "no message with that id"', () => {
+    expect(describeError('sent list', new AgntApiError(404, 'Not found', 'not_found')).body.hint).toMatch(/isn't on for this app/);
+    expect(describeError('sent', new AgntApiError(404, 'x', 'not_found')).body.hint).toMatch(/No message with that id/);
+  });
+
+  it('a route this server does not have yet says so, for any command, never "the network is off"', () => {
+    const { body, exitCode } = describeError('whoami', new AgntApiError(404, 'Route not found', 'not_found'));
+    expect(body.hint).toContain("doesn't offer `network whoami` yet");
+    expect(exitCode).toBe(1);
+  });
+
   it('a 404 anywhere but sent and webhook means the network is off for this app: stop and tell the person', () => {
     for (const verb of ['wait', 'send', 'whoami']) {
       const { body, exitCode } = describeError(verb, new AgntApiError(404, 'Not found', 'not_found'));

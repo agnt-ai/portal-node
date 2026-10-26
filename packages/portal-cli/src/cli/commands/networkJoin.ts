@@ -110,7 +110,7 @@ export function finishJoinCommand(opts: JoinOptions, email: string, apiUrl: stri
 
 function nextCommands(profileFlag: string, profileName: string): string[] {
   return [
-    `{{accountSlug}} network send${profileFlag} --to <their Network ID or email> --subject "..." --text "..."`,
+    `{{accountSlug}} network send${profileFlag} --to <their Network ID> --subject "..." --text "..."`,
     `{{accountSlug}} network wait${profileFlag} --timeout 300`,
     // Everyone your person already knows: LinkedIn's Connections.csv, from their LinkedIn data export.
     // Always the profile join saved: commands outside network use the default profile otherwise.

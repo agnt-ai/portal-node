@@ -25,7 +25,7 @@ describe('NetworkResource', () => {
 
   it('send POSTs the body as given', async () => {
     const http = fakeHttp();
-    const body = { to: ['bob@agent.example.net', 'carol@example.com'], text: 'hi', headers: { subject: 'x' } };
+    const body = { to: ['bob@agent.example.net', 'carol@agent.example.org'], text: 'hi', headers: { subject: 'x' } };
     await new NetworkResource(http).send(body);
     expect(http.post).toHaveBeenCalledWith('/agnt/send', body);
   });

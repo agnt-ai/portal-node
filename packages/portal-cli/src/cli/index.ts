@@ -2122,8 +2122,8 @@ const networkCmd = program
   .command('network')
   .summary('The {{accountName}} Network: send, read and verify signed messages as your own agent')
   .description(
-    'The {{accountName}} Network: signed messages to other agents at their Network IDs, or to anyone by\n' +
-    'an email or phone they use, sent as your own agent. {{accountName}} holds the agent\'s keys\n' +
+    'The {{accountName}} Network: signed messages to other agents at their Network IDs, sent as your\n' +
+    'own agent. {{accountName}} holds the agent\'s keys\n' +
     'and signs as it. Needs an app with the {{accountName}} Network on.\n' +
     'It runs on SIMON, an open protocol, so you can also reach agents on other SIMON networks\n' +
     'by their network address.\n\n' +
@@ -2138,7 +2138,7 @@ const networkCmd = program
     'your user asked, and wait for each reply in a loop. The full guide: {{accountSlug}} agent-guide\n' +
     '  {{accountSlug}} network join --email <your user\'s email>                 # emails them a code\n' +
     '  {{accountSlug}} network join --email <your user\'s email> --code <code>   # prints your {{accountName}} Network ID\n' +
-    '  {{accountSlug}} network send --to <their Network ID or email> --subject "..." --text "..."\n' +
+    '  {{accountSlug}} network send --to <their Network ID> --subject "..." --text "..."\n' +
     '  {{accountSlug}} network wait --timeout 300                               # exit 3: nothing yet\n' +
     '  {{accountSlug}} network verify entry.json                                # before you rely on who wrote it'
   );
@@ -2194,22 +2194,20 @@ networkCmd
 
 networkCmd
   .command('send')
-  .summary('Send a signed message to Network IDs, emails or phones')
+  .summary('Send a signed message to Network IDs')
   .description(
-    'Send a signed message. --to takes Network IDs (or other network addresses), emails or phones (E.164),\n' +
-    'repeated or ' +
-    'comma-separated, 1 to 100.\n\n' +
-    'Every recipient answers "accepted", whatever happens next. Network IDs go at once, as\n' +
-    'one message. Each email or phone is delivered on its own, seconds later, or held until it\n' +
-    'has an agent: the answer never says whether it has one, and that is not a failure.\n' +
+    'Send a signed message. --to takes Network IDs (or other network addresses, name@domain),\n' +
+    'repeated or comma-separated, 1 to 100. Network addresses only for now: a phone number or a\n' +
+    'mailto: address is refused before anything is sent.\n\n' +
+    'Every recipient answers "accepted"; network sent <id> reports delivery.\n' +
     'A 429 means this agent is over its sending share: wait retryAfter seconds, then send once.\n' +
     'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n\n' +
     'Examples:\n' +
     '  {{accountSlug}} network send --to bob@agent.example.net --subject Thursday --text "Does Thursday at 3pm work?"\n' +
-    '  {{accountSlug}} network send --to carol@gmail.com,+14155550100 --subject Thursday --text -   # text from stdin\n' +
+    '  {{accountSlug}} network send --to bob@agent.example.net,carol@agent.example.org --subject Thursday --text -   # text from stdin\n' +
     '  {{accountSlug}} network send --to <one> --to <another> --subject "..." --text "..."   # a group: reply to the same list (no reply-all)'
   )
-  .option('--to <recipient>', 'A recipient: a Network ID (or another network address), an email or a phone (repeatable, or comma-separated)', collect)
+  .option('--to <recipient>', 'A recipient: a Network ID or another network address, name@domain (repeatable, or comma-separated)', collect)
   .option('--text <text>', 'The message text (- reads it from stdin)')
   .option('--in-reply-to <id>', 'The id of the message this answers, in full (64 hex characters)')
   .option('--subject <text>', 'The thread\'s subject: a few words. Required on a new thread')
@@ -2273,9 +2271,7 @@ networkCmd
   .description(
     'Without an id: the messages you sent, newest first; pass "cursor" back as --after for the next page.\n' +
     'With an id: how delivery of that message is going, per recipient server: pending, delivered or\n' +
-    'failed for Network IDs ("delivered" means their server took it, not that anyone read it).\n' +
-    'Recipients you gave as an email or phone always show as you wrote them, "accepted", with\n' +
-    '"server": null. That is all that is ever said about them: it never means failed.\n' +
+    'failed ("delivered" means their server took it, not that anyone read it).\n' +
     'An id with no record (unknown, not yours, or past the hold window) is a 404 not_found.\n\n' +
     'Examples:\n' +
     '  {{accountSlug}} network sent\n' +
@@ -2327,7 +2323,7 @@ networkCmd
   .option('--exec <command>', 'The command to run for each new message (the message is never in it)')
   .option('--from <network-id>', 'Only messages from this correspondent')
   .option('--exec-timeout <seconds>', 'Time limit for each run (default 600)')
-  .option('--drain', 'Handle the messages already waiting, then exit')
+  .option('--drain', 'Handle the messages already waiting, then exit (exit 75 after a few failures in a row)')
   .option('--profile <name>', 'Credentials profile to use')
   .action(async (opts) => {
     await runNetworkWatch(opts);

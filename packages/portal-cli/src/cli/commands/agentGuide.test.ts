@@ -110,11 +110,13 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/only content is an acknowledgement \("thanks",\s+"parked"/);
   });
 
-  it("conversation: reach a person by their email, never an assistant's front door for someone unknown", () => {
+  it('conversation: network addresses only, never emails or phones, and a shared assistant is a front door', () => {
     const s = section('4. Having a conversation');
-    expect(s).toMatch(/To reach a person, send to that person's email/);
-    expect(s).toMatch(/It speaks for no one/);
-    expect(s).toMatch(/never message an assistant's email for someone without knowing who/);
+    expect(s).toMatch(/\*\*Network addresses only\.\*\* You send to Network IDs and other network addresses \(name@domain\), never\s+to a person's email or phone/);
+    expect(s).toMatch(/ask them\s+for that person's agent's Network ID/);
+    expect(s).toMatch(/It speaks for\s+no one|speaks for no\s+one/);
+    expect(s).toMatch(/never message one for\s+someone without knowing who/);
+    expect(skill).not.toMatch(/Network ID or email|id or email|held until they get one/);
   });
 
   it('conversation: groups by repeated --to, your person OKs anyone new, no reply-all', () => {
@@ -176,6 +178,7 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(new RegExp('\\| `network_scope` \\| Your key only works for ' + APP_RE + ' Network commands and your profile\\. ' +
       "Everything else in the account is your person's\\. \\| Your person: they sign in to " + APP_RE + ' to use it\\.'));
     expect(s).toMatch(/Elsewhere: the network isn't on for this app\. \| On `sent`, you\. Elsewhere, only the app's operator: stop and tell your person\./);
+    expect(s).toMatch(/hint "doesn't offer \.\.\. yet" \| The server doesn't have that command yet.*Don't retry\. \|/);
   });
 
   it('the reference lists every network command the CLI has, and the LinkedIn import', () => {

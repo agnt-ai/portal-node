@@ -236,6 +236,24 @@ describe('runLogin against a mocked API', () => {
     expect(text).not.toMatch(/onboard|working hours|workingHours|Still to fill/i);
   });
 
+  it('under a detected agent, every network next step names the profile login saved, so it is never signed up twice', async () => {
+    mockFetch(signupResponse);
+    vi.stubEnv('CLAUDECODE', '1');
+    vi.stubEnv('AGNT_CLI_PROFILE', '');
+    await runLogin({ email: 'person@example.com', account: 'acme', code: '123456', label: 't', apiUrl: 'https://api.example.test',
+      purpose: 'network', agentUsername: 'sally' });
+    const out = JSON.parse(stdout.join(''));
+    const network = [...out.next, out.agentEmail.next].filter((c: string) => / network /.test(c));
+    expect(network.length).toBeGreaterThanOrEqual(4);
+    for (const c of network) expect(c).toMatch(/ --profile default(\s|$)/);
+    // Each one resolves to that profile even under Claude Code, where a bare command would look for "claude-code".
+    const { networkProfile } = await import('../utils/agentIdentity.js');
+    await expect(networkProfile('default')).resolves.toBe('default');
+    // The suggested send is a complete command: a new thread needs --subject.
+    expect(out.next.find((c: string) => / network send /.test(c))).toMatch(/--to <their Network ID> --subject "\.\.\." --text "\.\.\."$/);
+    vi.unstubAllEnvs();
+  });
+
   it('step 2 with sign-up flags: sends them, and an app that reads them needs no second call', async () => {
     const fetchMock = mockFetch(signupResponse);
     await runLogin({ email: 'person@example.com', account: 'acme', code: '123456', label: 't', apiUrl: 'https://api.example.test',

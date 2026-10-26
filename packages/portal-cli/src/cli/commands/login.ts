@@ -15,7 +15,7 @@
  *
  * The person's timezone and name may be given too; an app that reads them uses them.
  * With the {{accountName}} Network, sign-up also takes a --purpose (a full "account", or the "network" only) and the agent's
- * own identity (--agent-username and friends), and answers with the agent's {{accountName}} Network ID (loginAgnt.ts).
+ * own identity (--agent-username and friends), and answers with the agent's {{accountName}} Network ID (loginNetwork.ts).
  */
 
 import { publicRequest, AgntApiError } from '../../HttpClient.js';
@@ -234,7 +234,9 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   let next = [`{{accountSlug}} tasks list${profileFlag}`];
   let moreLines: string[] = [];
   let extra: Record<string, unknown> = {};
-  const agnt = networkConnected(result!, profileFlag);
+  // The network commands look for the agent's own profile (claude-code, codex, ...), not the default one login may
+  // have saved to, so every next step names the profile the key is in: never a second sign-up.
+  const agnt = networkConnected(result!, ` ${flagWord('--profile', profileName)}`);
   if (agnt) ({ tellUser, next, lines: moreLines, extra } = agnt);
 
   // The key itself is saved to the profile, never printed.

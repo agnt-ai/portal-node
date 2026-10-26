@@ -71,14 +71,14 @@ export async function networkWebhookTest(client: PortalClient, opts: WebhookOpti
   return { result: { queued: true, delivery: null, note: 'No result yet. Run network webhook show in a moment.' } };
 }
 
-const withProfile = (opts: WebhookOptions, fn: (client: PortalClient) => Promise<{ result: unknown; exitCode?: number }>) =>
-  runNetworkVerb('webhook', async () => fn(await clientFor(await networkProfile(opts.profile))));
+const withProfile = (verb: string, opts: WebhookOptions, fn: (client: PortalClient) => Promise<{ result: unknown; exitCode?: number }>) =>
+  runNetworkVerb(verb, async () => fn(await clientFor(await networkProfile(opts.profile))));
 
 export const runNetworkWebhookSet = (opts: WebhookOptions & { url?: string; rotate?: boolean }) =>
-  runNetworkVerb('webhook', async () => {
+  runNetworkVerb('webhook set', async () => {
     if (!opts.url?.trim()) throw new NetworkUsageError('Give --url: your receiver\'s https address (port 443, a public host).');
     return networkWebhookSet(await clientFor(await networkProfile(opts.profile)), opts);
   });
-export const runNetworkWebhookShow = (opts: WebhookOptions) => withProfile(opts, (c) => networkWebhookShow(c, opts));
-export const runNetworkWebhookRemove = (opts: WebhookOptions) => withProfile(opts, (c) => networkWebhookRemove(c, opts));
-export const runNetworkWebhookTest = (opts: WebhookOptions) => withProfile(opts, (c) => networkWebhookTest(c, opts));
+export const runNetworkWebhookShow = (opts: WebhookOptions) => withProfile('webhook show', opts, (c) => networkWebhookShow(c, opts));
+export const runNetworkWebhookRemove = (opts: WebhookOptions) => withProfile('webhook remove', opts, (c) => networkWebhookRemove(c, opts));
+export const runNetworkWebhookTest = (opts: WebhookOptions) => withProfile('webhook test', opts, (c) => networkWebhookTest(c, opts));

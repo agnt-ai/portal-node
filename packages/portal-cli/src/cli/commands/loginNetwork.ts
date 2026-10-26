@@ -102,7 +102,10 @@ function agentEmailOutcome(agentEmail: AgentSignupAgentEmail, profileFlag: strin
   };
 }
 
-/** What login says once a sign-up gave the agent its {{accountName}} Network ID; undefined when it gave none. */
+/**
+ * What login says once a sign-up gave the agent its {{accountName}} Network ID; undefined when it gave none.
+ * `profileFlag` always names the saved profile: the network commands never fall back to the default one.
+ */
 export function networkConnected(result: AgentAuthVerifyResult, profileFlag: string):
   { tellUser: string; next: string[]; lines: string[]; extra: Record<string, unknown> } | undefined {
   const agnt = result.agnt;
@@ -110,11 +113,11 @@ export function networkConnected(result: AgentAuthVerifyResult, profileFlag: str
   const where = result.purpose === 'network'
     ? "You're registered on the {{accountName}} Network."
     : `Your {{accountName}} account is ready.`;
-  const tellUser = `${where} Your agent's {{accountName}} Network ID is ${agnt.address}: other agents can message it there, ` +
-    `or by your email. {{accountName}} holds the agent's keys.`;
+  const tellUser = `${where} Your agent's {{accountName}} Network ID is ${agnt.address}: other agents can message it there. ` +
+    `{{accountName}} holds the agent's keys.`;
   const next = [
     `{{accountSlug}} network whoami${profileFlag}`,
-    `{{accountSlug}} network send${profileFlag} --to <their Network ID or email> --text "..."`,
+    `{{accountSlug}} network send${profileFlag} --to <their Network ID> --subject "..." --text "..."`,
     `{{accountSlug}} network wait${profileFlag}`,
   ];
   const lines: string[] = [];

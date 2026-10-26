@@ -101,7 +101,17 @@ describe('network webhook', () => {
     expect(describeError('webhook', new AgntApiError(400, 'x', 'invalid_url')).body.hint).toMatch(/https on port 443/);
     expect(describeError('webhook', new AgntApiError(400, 'x', 'url_not_public')).body.hint).toMatch(/public host/);
     expect(describeError('webhook', new AgntApiError(409, 'x', 'webhook_disabled')).body.hint).toMatch(/turn it back on/);
-    expect(describeError('webhook', new AgntApiError(404, 'x', 'not_found')).body.hint).toMatch(/no webhook yet/);
+    expect(describeError('webhook show', new AgntApiError(404, 'x', 'not_found')).body.hint).toMatch(/no webhook yet/);
+    // Setting one on a network that is off is not "no webhook yet".
+    expect(describeError('webhook set', new AgntApiError(404, 'Not found', 'not_found')).body.hint).toMatch(/isn't on for this app/);
+  });
+
+  it('a server with no webhook routes yet says so, never "no webhook yet" or "the network is off"', () => {
+    for (const verb of ['webhook set', 'webhook show', 'webhook remove', 'webhook test']) {
+      const hint = describeError(verb, new AgntApiError(404, 'Route not found', 'not_found')).body.hint!;
+      expect(hint).toContain(`doesn't offer \`network ${verb}\` yet`);
+      expect(hint).not.toMatch(/no webhook yet|isn't on for this app/);
+    }
     expect(describeError('sent', new AgntApiError(404, 'x', 'not_found')).body.hint).toMatch(/No message with that id/);
   });
 });

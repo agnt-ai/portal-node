@@ -1377,7 +1377,7 @@ export interface NetworkTextPart {
 }
 
 export interface NetworkSendBody {
-  /** Network IDs (or other network addresses), emails (mailto: allowed) or phones (E.164, or tel:+...). 1 to 100. */
+  /** Network IDs (or other network addresses), 1 to 100. */
   to: string[];
   text?: string;
   parts?: NetworkTextPart[];
@@ -1440,10 +1440,10 @@ export type NetworkWaitResult =
   | { status: 'timeout'; waitedSeconds: number; from: string | null };
 
 export interface NetworkSentServer {
-  /** null for recipients given as an email or phone: {{accountName}} never says where those went. */
+  /** The recipients' server, or null when it is not known. */
   server: string | null;
   recipients: string[];
-  /** "accepted" is the only status a recipient given as an email or phone ever shows. */
+  /** "accepted": the server no longer keeps the report, or did not answer. */
   status: 'pending' | 'delivered' | 'failed' | 'accepted';
   reason?: string | NetworkUntrusted;
 }

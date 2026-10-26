@@ -28,8 +28,8 @@ export class NetworkResource {
   }
 
   /**
-   * Send a message. `to` takes Network IDs (or other network addresses), and on apps that deliver to them, emails or
-   * phones. Every recipient answers "accepted"; `sent(id)` reports delivery.
+   * Send a message. `to` takes Network IDs (or other network addresses). Every recipient answers "accepted";
+   * `sent(id)` reports delivery.
    */
   send(body: NetworkSendBody): Promise<NetworkSendResult> {
     return this.http.post<NetworkSendResult>('/agnt/send', body);
