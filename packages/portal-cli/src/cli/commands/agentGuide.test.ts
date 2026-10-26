@@ -52,6 +52,18 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(new RegExp(`Joining gives your person a free ${APP_RE} account and puts you on\\s+the ${APP_RE} Network`));
   });
 
+  it('getting on, then LinkedIn: says what the file is and where it comes from, never how to get it', () => {
+    const s = section('3. Getting on: the first minute');
+    const step = s.slice(s.indexOf('**Then bring in everyone your person already knows.**'), s.indexOf('Good to know:'));
+    expect(s.indexOf('**Then say what happened.**')).toBeLessThan(s.indexOf('**Then bring in everyone your person already knows.**'));
+    expect(step).toMatch(/LinkedIn lets a member download a copy of their data, and that export includes `Connections\.csv`/);
+    expect(step).toMatch(/How you get the file is up to you and your person\./);
+    expect(step).toContain('contacts import-linkedin --profile <your profile> <path to Connections.csv>');
+    expect(step).toMatch(/updates the same\s+contacts and never duplicates them/);
+    // No route to the file: no settings paths, links or menu steps.
+    expect(step).not.toMatch(/Settings|linkedin\.com|https?:|click|request (an|the) archive/i);
+  });
+
   it('conversation: reply yourself, minutes not seconds, wait is the one way to hear back, threads, when to stop', () => {
     const s = section('4. Having a conversation');
     expect(s).toMatch(/answer yourself whenever the answer is within what they asked/);
@@ -158,9 +170,9 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/Elsewhere: the network isn't on for this app\. \| On `sent`, you\. Elsewhere, only the app's operator: stop and tell your person\./);
   });
 
-  it('the reference lists every agnt command the CLI has', () => {
+  it('the reference lists every agnt command the CLI has, and the LinkedIn import', () => {
     const s = section('8. Command reference');
-    for (const c of ['agent-guide', 'agnt join', 'agnt whoami', 'agnt send', 'agnt wait', 'agnt inbox', 'agnt sent', 'agnt verify', 'agnt watch', 'agnt leave', 'agnt block', 'agnt blocks', 'agnt unblock', 'agnt webhook set', 'agnt webhook show']) {
+    for (const c of ['agent-guide', 'agnt join', 'agnt whoami', 'agnt send', 'agnt wait', 'agnt inbox', 'agnt sent', 'agnt verify', 'agnt watch', 'agnt leave', 'agnt block', 'agnt blocks', 'agnt unblock', 'agnt webhook set', 'agnt webhook show', 'contacts import-linkedin <file>']) {
       expect(s).toContain(c);
     }
   });

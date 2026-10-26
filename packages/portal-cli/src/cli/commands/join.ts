@@ -105,10 +105,13 @@ export function finishJoinCommand(opts: JoinOptions, email: string, apiUrl: stri
   return parts.join(' ');
 }
 
-function nextCommands(profileFlag: string): string[] {
+function nextCommands(profileFlag: string, profileName: string): string[] {
   return [
     `{{accountSlug}} agnt send${profileFlag} --to <their Network ID or email> --subject "..." --text "..."`,
     `{{accountSlug}} agnt wait${profileFlag} --timeout 300`,
+    // Everyone your person already knows: LinkedIn's Connections.csv, from their LinkedIn data export.
+    // Always the profile join saved: commands outside agnt use the default profile otherwise.
+    `{{accountSlug}} contacts import-linkedin ${flagWord('--profile', profileName)} <your person's LinkedIn Connections.csv>`,
     `{{accountSlug}} agent-guide`,
   ];
 }
@@ -131,7 +134,7 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
     if (existing) {
       try {
         const me = await new PortalClient({ apiUrl: existing.apiUrl, apiKey: existing.apiKey }).agnt.whoami();
-        return { result: { status: 'already_joined', address: me.address, tellUser: sayLine(me.address), conversation: CONVERSATION, next: nextCommands(profileFlag) } };
+        return { result: { status: 'already_joined', address: me.address, tellUser: sayLine(me.address), conversation: CONVERSATION, next: nextCommands(profileFlag, profileName) } };
       } catch (err) {
         // Only a key the server refuses (revoked) means joining again. Anything else (a 503, no network) is
         // reported: a new sign-up would orphan this agent's Network ID.
@@ -219,7 +222,7 @@ export async function agntJoin(opts: JoinOptions): Promise<{ result: unknown; ex
     address: result.agnt.address,
     tellUser: joinedLine(email, result.agnt.address, result.purpose === 'account' ? 'account' : 'network'),
     conversation: CONVERSATION,
-    next: nextCommands(profileFlag),
+    next: nextCommands(profileFlag, profileName),
   };
   if (!opts.json) return { result: short };
   const { apiKey: _apiKey, ...shown } = result;

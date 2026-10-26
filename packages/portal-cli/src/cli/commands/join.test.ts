@@ -163,6 +163,19 @@ describe('agnt join', () => {
     expect(JSON.stringify(result)).not.toMatch(/apiKeyId|toFill|"user"|ak_live/);
   });
 
+  it('next suggests importing LinkedIn connections, always on the profile join saved', async () => {
+    global.fetch = vi.fn().mockResolvedValue(answer(201, joined('claude-code-7k3m9q2x'))) as any;
+    vi.stubEnv('CLAUDECODE', '1');
+    const { result } = await agntJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'claude-code-7k3m9q2x' }) as any;
+    vi.unstubAllEnvs();
+    // Commands outside agnt fall back to the default profile, so the import names the agent's own one.
+    expect(result.next).toContainEqual(expect.stringMatching(/ contacts import-linkedin --profile claude-code <your person's LinkedIn Connections\.csv>$/));
+    expect(result.next.at(-1)).toMatch(/ agent-guide$/);
+
+    const { result: odd } = await agntJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'claude-code-7k3m9q2x', profile: '-odd' }) as any;
+    expect(odd.next).toContainEqual(expect.stringMatching(/ contacts import-linkedin --profile=-odd <your person's LinkedIn Connections\.csv>$/));
+  });
+
   it('a network join says "free account" in Paul\'s words, never "full account", at any step', async () => {
     const said: string[] = [];
     said.push(describeError('join', await agntJoin({}).catch((e) => e)).body.askUser!);
