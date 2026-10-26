@@ -14,6 +14,8 @@
  * that may pass later, 1 otherwise.
  *
  * The person's timezone and name may be given too; an app that reads them uses them.
+ * With the {{accountName}} Network, sign-up also takes a --purpose (a full "account", or the "network" only) and the agent's
+ * own identity (--agent-username and friends), and answers with the agent's {{accountName}} Network ID (loginNetwork.ts).
  */
 
 import { publicRequest, AgntApiError } from '../../HttpClient.js';
@@ -23,6 +25,8 @@ import { resolveProfileName } from '../utils/credentials.js';
 import { DEFAULT_API_URL, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import type { AgentAuthVerifyResult, AgentAuthVerifyFields } from '../../types.js';
+import { networkSignupFields, networkVerifyHint, networkConnected } from './loginNetwork.js';
+import { guessProduct } from '../utils/agentIdentity.js';
 
 export interface LoginOptions {
   email: string;
@@ -34,6 +38,11 @@ export interface LoginOptions {
   timezone?: string;
   firstName?: string;
   lastName?: string;
+  purpose?: string;
+  agentUsername?: string;
+  agentDisplayName?: string;
+  agentProduct?: string;
+  agentEmail?: string;
   json?: boolean;
 }
 
@@ -46,12 +55,24 @@ export function signupFieldsFrom(opts: LoginOptions): { fields: AgentAuthVerifyF
   if (opts.timezone?.trim()) fields.timezone = opts.timezone.trim();
   if (opts.firstName?.trim()) fields.firstName = opts.firstName.trim();
   if (opts.lastName?.trim()) fields.lastName = opts.lastName.trim();
+  const agnt = networkSignupFields(opts);
+  if ('error' in agnt) return agnt;
+  Object.assign(fields, agnt.fields);
   return { fields };
 }
+
+/** Error codes from verify that leave the code unspent: fix the flag and run again with the same --code. */
+const CODE_KEPT = new Set([
+  'bad_request', 'otp_invalid',
+  'purpose_required', 'invalid_purpose', 'purpose_not_supported', 'agent_required',
+  'invalid_agent', 'invalid_username', 'agnt_username_reserved', 'agnt_not_enabled',
+]);
 
 /** Plain guidance for a refused verify: what happened, and the next command. */
 export function verifyErrorHint(err: AgntApiError, code: string): string | undefined {
   const again = `run the same command with --code ${code}`;
+  const networkHint = networkVerifyHint(err, again);
+  if (networkHint) return networkHint;
   switch (err.errorCode) {
     case 'bad_request':
       return `Fix the flag the message names. Your code is still good: ${again}.`;
@@ -62,6 +83,7 @@ export function verifyErrorHint(err: AgntApiError, code: string): string | undef
       return 'That code can no longer be used. Run the same command without --code to email a new one, then ask your user for it in your conversation.';
   }
   if (err.status === 429) return `Too many attempts. Wait${err.retryAfter !== undefined ? ` ${err.retryAfter} seconds` : ' a while'}, then try again.`;
+  if (err.errorCode && CODE_KEPT.has(err.errorCode)) return `Your code is still good: ${again}.`;
   return undefined;
 }
 
@@ -72,6 +94,7 @@ export function verifyErrorHint(err: AgntApiError, code: string): string | undef
 export function verifyExitCode(err: AgntApiError): number {
   // A spent code: the server answers otp_max_attempts with a 429, but only a new code helps.
   if (err.errorCode === 'otp_max_attempts' || err.errorCode === 'otp_expired') return 1;
+  if (err.errorCode === 'agnt_unavailable_new_code') return 1;
   return err.status === 429 || err.status === 503 ? 75 : 1;
 }
 
@@ -96,6 +119,11 @@ export function finishCommand(opts: LoginOptions): string {
     ['--timezone', opts.timezone?.trim()],
     ['--first-name', opts.firstName?.trim()],
     ['--last-name', opts.lastName?.trim()],
+    ['--purpose', opts.purpose?.trim()],
+    ['--agent-username', opts.agentUsername?.trim()],
+    ['--agent-display-name', opts.agentDisplayName?.trim()],
+    ['--agent-product', opts.agentProduct?.trim()],
+    ['--agent-email', opts.agentEmail?.trim()],
   ];
   const parts = ['{{accountSlug}} login'];
   for (const [flag, value] of flags) if (value) parts.push(flagWord(flag, value));
@@ -174,7 +202,8 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   }
 
   // Step 2: check the code and finish.
-  const label = opts.label?.trim() || `CLI (${(await import('os')).hostname()})`;
+  // The key's label, where the person sees their keys: the one given, else the product. Never this computer's name.
+  const label = opts.label?.trim() || opts.agentProduct?.trim() || guessProduct();
   let result: AgentAuthVerifyResult;
   try {
     result = await publicRequest<AgentAuthVerifyResult>(apiUrl, '/portal/auth/agent/verify', {
@@ -194,7 +223,8 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   // An app that does not read sign-up fields ignores them: set the timezone it was given anyway. Best effort,
   // and never a step for anyone to take.
   // Only when the account has none: a timezone the person chose is never replaced.
-  if (!result!.profile && fields.timezone) {
+  // A server that took an agent sign-up (it echoes `purpose`) read the timezone itself, and its key may not reach /me.
+  if (!result!.profile && !result!.purpose && fields.timezone) {
     const client = new PortalClient({ apiUrl, apiKey: result!.apiKey });
     const me = await client.me.get().catch(() => undefined) as { timezone?: string | null } | undefined;
     if (me && !me.timezone) await client.me.update({ timezone: fields.timezone } as any).catch(() => undefined);
@@ -205,6 +235,10 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   let next = [`{{accountSlug}} tasks list${profileFlag}`];
   let moreLines: string[] = [];
   let extra: Record<string, unknown> = {};
+  // The network commands look for the agent's own profile (claude-code, codex, ...), not the default one login may
+  // have saved to, so every next step names the profile the key is in: never a second sign-up.
+  const agnt = networkConnected(result!, ` ${flagWord('--profile', profileName)}`);
+  if (agnt) ({ tellUser, next, lines: moreLines, extra } = agnt);
 
   // The key itself is saved to the profile, never printed.
   const { apiKey: _apiKey, ...shown } = result!;

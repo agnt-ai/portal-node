@@ -76,6 +76,11 @@ jobs:
           name: Install
           command: npm install
       - run:
+          # Compile the hydrated SDK/CLI before tests exercise its actual entry point.
+          # This is the ordinary build only, not prepublishOnly or a release job.
+          name: Build SDK and CLI
+          command: npm run build
+      - run:
           # No sync:openapi here — src/generated/api.d.ts is a committed
           # file now (see agnt-backend's sync:openapi, which regenerates it
           # from a local sibling checkout and pushes the diff into this repo
@@ -174,11 +179,15 @@ jobs:
               const fs = require('fs');
               const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
               const current = '$CURRENT';
-              if (current) {
-                const [maj, min, patch] = current.split('.').map(Number);
+              const parse = (v) => v.split('.').map(Number);
+              const newer = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
+              // A checked-in version above what's published (a deliberate minor/major bump) is used as is;
+              // otherwise publish one patch past what's published.
+              if (current && !newer(parse(pkg.version), parse(current))) {
+                const [maj, min, patch] = parse(current);
                 pkg.version = [maj, min, patch + 1].join('.');
               }
-              // else: nothing published yet under this name — keep the checked-in version (0.1.0).
+              // else: nothing published yet, or the checked-in version is newer — keep the checked-in version.
               fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
               console.log('Publishing version:', pkg.version);
             "

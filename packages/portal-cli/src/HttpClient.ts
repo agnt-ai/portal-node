@@ -102,7 +102,7 @@ export class HttpClient {
     this.apiKey = apiKey;
   }
 
-  private async request<T>(method: string, path: string, body?: any, params?: Record<string, any>): Promise<T> {
+  private async request<T>(method: string, path: string, body?: any, params?: Record<string, any>, timeoutMs?: number): Promise<T> {
     let url = `${this.apiUrl}${path}`;
     if (params && Object.keys(params).length > 0) {
       const qs = new URLSearchParams();
@@ -123,6 +123,8 @@ export class HttpClient {
     if (body !== undefined) {
       init.body = JSON.stringify(body);
     }
+    // A long poll that stalls (a laptop asleep, a dropped network) ends with a TimeoutError instead of hanging.
+    if (timeoutMs !== undefined) init.signal = AbortSignal.timeout(timeoutMs);
 
     const response = await fetch(url, init);
 
@@ -134,12 +136,12 @@ export class HttpClient {
     return response.json() as Promise<T>;
   }
 
-  get<T>(path: string, params?: Record<string, any>): Promise<T> {
-    return this.request<T>('GET', path, undefined, params);
+  get<T>(path: string, params?: Record<string, any>, opts: { timeoutMs?: number } = {}): Promise<T> {
+    return this.request<T>('GET', path, undefined, params, opts.timeoutMs);
   }
 
-  post<T>(path: string, body?: any): Promise<T> {
-    return this.request<T>('POST', path, body);
+  post<T>(path: string, body?: any, opts: { timeoutMs?: number } = {}): Promise<T> {
+    return this.request<T>('POST', path, body, undefined, opts.timeoutMs);
   }
 
   put<T>(path: string, body?: any): Promise<T> {
@@ -150,8 +152,8 @@ export class HttpClient {
     return this.request<T>('PATCH', path, body);
   }
 
-  delete<T>(path: string): Promise<T> {
-    return this.request<T>('DELETE', path);
+  delete<T>(path: string, params?: Record<string, any>, opts: { timeoutMs?: number } = {}): Promise<T> {
+    return this.request<T>('DELETE', path, undefined, params, opts.timeoutMs);
   }
 
   /**

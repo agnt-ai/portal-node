@@ -8,7 +8,7 @@ import type {
  * Scheduling tables — "when2meet"-style shared availability grids: a host
  * proposes candidate slots, invites participants, participants respond, the
  * host picks a winner. Public/unauthenticated participant-facing endpoints
- * (shared-token join/respond, used by people without an AGNT account) aren't
+ * (shared-token join/respond, used by people without an account) aren't
  * wrapped here — this resource is for the authenticated table owner.
  */
 export class SchedulingTablesResource {
