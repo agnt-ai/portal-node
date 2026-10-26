@@ -82,6 +82,37 @@ export async function runContactsActivity(contactId: string, opts: ContactsActiv
   console.log(JSON.stringify(activity, null, 2));
 }
 
+export interface ContactsBulkImportOptions {
+  profile?: string;
+  json?: boolean;
+}
+
+/** Reads a JSON array of contacts from disk (each like `contacts create`'s body, with an email) and imports them. */
+export async function runContactsBulkImport(file: string, opts: ContactsBulkImportOptions): Promise<void> {
+  let contacts: unknown;
+  try {
+    contacts = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (err) {
+    console.error(`Could not read ${file} as JSON: ${(err as Error).message}`);
+    process.exit(1);
+  }
+  if (!Array.isArray(contacts) || contacts.length === 0 || contacts.length > 1000) {
+    console.error(`${file} must hold a JSON array of 1 to 1000 contacts.`);
+    process.exit(1);
+  }
+  const client = await clientFor(opts.profile);
+  const result = await client.contacts.bulkImport(contacts as any[]);
+
+  if (opts.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  console.log(`Imported ${result.total} contacts: ${result.created} new, ${result.updated} updated, ${result.skipped} skipped.`);
+  for (const e of result.errors ?? []) {
+    console.log(e.index == null ? `  ${e.error}` : `  contact ${e.index + 1}: ${e.error}`);
+  }
+}
+
 export interface ContactsImportLinkedInOptions {
   profile?: string;
   json?: boolean;

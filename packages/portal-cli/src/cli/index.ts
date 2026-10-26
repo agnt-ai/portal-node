@@ -26,7 +26,7 @@ import { runMemoriesList, runMemoriesCreate, runMemoriesUpdate, runMemoriesDelet
 import { runChatsList, runChatsGet, runChatsMessages, runChatsProcess, runChatsDelete } from './commands/chats.js';
 import {
   runContactsList, runContactsGet, runContactsCreate, runContactsDelete, runContactsActivity,
-  runContactsImportLinkedIn
+  runContactsImportLinkedIn, runContactsBulkImport
 } from './commands/contacts.js';
 import {
   runCompaniesList, runCompaniesSearch, runCompaniesGet, runCompaniesCreate,
@@ -614,6 +614,19 @@ contactsCmd
   .option('--json', 'Print raw JSON')
   .action(async (body, opts) => {
     await runContactsCreate(body, opts);
+  });
+
+contactsCmd
+  .command('bulk-import <file>')
+  .description(
+    'Create or update up to 1000 contacts from a JSON array file (each like contacts create\'s body, with an email). ' +
+    'A contact that already exists is updated, not duplicated.\n\n' +
+    'Example: {{accountSlug}} contacts bulk-import contacts.json'
+  )
+  .option('--profile <name>', 'Credentials profile to use')
+  .option('--json', 'Print raw JSON')
+  .action(async (file, opts) => {
+    await runContactsBulkImport(file, opts);
   });
 
 contactsCmd

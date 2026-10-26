@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runContactsImportLinkedIn } from './contacts.js';
+import { runContactsImportLinkedIn, runContactsBulkImport } from './contacts.js';
 import { clientFor } from '../utils/api.js';
 
 vi.mock('../utils/api.js', () => ({
@@ -84,5 +84,47 @@ describe('runContactsImportLinkedIn', () => {
     expect(clientFor).not.toHaveBeenCalled();
     err.mockRestore();
     exit.mockRestore();
+  });
+});
+
+describe('runContactsBulkImport', () => {
+  let dir: string;
+  let log: ReturnType<typeof vi.spyOn>;
+  let err: ReturnType<typeof vi.spyOn>;
+  let exit: ReturnType<typeof vi.spyOn>;
+  const write = (name: string, text: string) => { const f = join(dir, name); writeFileSync(f, text); return f; };
+
+  beforeEach(() => {
+    vi.mocked(clientFor).mockReset();
+    dir = mkdtempSync(join(tmpdir(), 'bulk-import-'));
+    log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`exit ${code}`); }) as any);
+  });
+
+  afterEach(() => {
+    log.mockRestore(); err.mockRestore(); exit.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('sends the array as contacts and prints the summary, numbering errors from 1', async () => {
+    const contacts = [{ email: 'ada@example.com', name: 'Ada Lovelace' }, { name: 'No Email' }];
+    const result = { success: true, total: 2, created: 1, updated: 0, skipped: 1, errors: [{ index: 1, error: 'Email is required' }] };
+    const client = { contacts: { bulkImport: vi.fn().mockResolvedValue(result) } };
+    vi.mocked(clientFor).mockResolvedValue(client as any);
+
+    await runContactsBulkImport(write('contacts.json', JSON.stringify(contacts)), { profile: 'work' });
+
+    expect(clientFor).toHaveBeenCalledWith('work');
+    expect(client.contacts.bulkImport).toHaveBeenCalledWith(contacts);
+    expect(log).toHaveBeenCalledWith('Imported 2 contacts: 1 new, 0 updated, 1 skipped.');
+    expect(log).toHaveBeenCalledWith('  contact 2: Email is required');
+  });
+
+  it('refuses before any API call: unreadable JSON, not an array, empty, or over 1000', async () => {
+    for (const text of ['{not json', '{"email":"a@example.com"}', '[]', JSON.stringify(Array.from({ length: 1001 }, (_, i) => ({ email: `p${i}@example.com` })))]) {
+      await expect(runContactsBulkImport(write('bad.json', text), {})).rejects.toThrow('exit 1');
+    }
+    expect(clientFor).not.toHaveBeenCalled();
   });
 });

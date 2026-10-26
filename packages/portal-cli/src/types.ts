@@ -275,6 +275,17 @@ export interface LinkedInImportResult {
   errors: Array<{ index?: number; email?: string; error: string }>;
 }
 
+// POST /contacts/bulk-import — hand-typed like LinkedInImportResult.
+export interface BulkImportResult {
+  success: boolean;
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  /** index is the contact's 0-based position in the list; a batch-level error has none. */
+  errors: Array<{ index?: number; email?: string; error: string }>;
+}
+
 export type Company = components['schemas']['Company'];
 export type CreateCompanyBody = components['schemas']['CreateCompanyBody'];
 export type UpdateCompanyBody = components['schemas']['UpdateCompanyBody'];

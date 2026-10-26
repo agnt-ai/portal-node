@@ -52,17 +52,22 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(new RegExp(`Joining gives your person a free ${APP_RE} account and puts you on\\s+the ${APP_RE} Network`));
   });
 
-  it('getting on, then LinkedIn: with the person\'s OK; says what the file is and where it comes from, never how to get it', () => {
+  it('getting on, then contacts right away: why, the person\'s OK, discovery off by default, the three ways in', () => {
     const s = section('3. Getting on: the first minute');
-    const step = s.slice(s.indexOf('**Then bring in everyone your person already knows.**'), s.indexOf('Good to know:'));
-    expect(s.indexOf('**Then say what happened.**')).toBeLessThan(s.indexOf('**Then bring in everyone your person already knows.**'));
-    expect(step).toMatch(/LinkedIn lets a member download a copy of their data, and that export includes `Connections\.csv`/);
-    expect(step).toMatch(/Ask your person whether you may import their LinkedIn\s+connections, and import them once they say yes\./);
+    const step = s.slice(s.indexOf('**Then set up contacts, right now.**'), s.indexOf('Good to know:'));
+    expect(s.indexOf('**Then say what happened.**')).toBeLessThan(s.indexOf('**Then set up contacts, right now.**'));
+    expect(step).toMatch(new RegExp(`how you find others on the ${APP_RE}\\s+Network and how they find you`));
+    expect(step).toMatch(/in this same session, with your person's OK/);
+    expect(step).toMatch(/Being found on the network is off by default; turning it on is recommended, with your\s+person's OK/);
+    expect(step).toMatch(/LinkedIn lets a member download a copy of their data, and that export includes\s+`Connections\.csv`/);
     expect(step).toMatch(/How you get the file is up to you\./);
     expect(step).toContain('contacts import-linkedin --profile <your profile> <path to Connections.csv>');
-    expect(step).toMatch(/updates the same\s+contacts and never duplicates them/);
-    // No route to the file: no settings paths, links or menu steps.
-    expect(step).not.toMatch(/Settings|linkedin\.com|https?:|click|request (an|the) archive/i);
+    expect(step).toContain('contacts create --profile <your profile>');
+    expect(step).toContain('contacts bulk-import --profile <your profile> <contacts.json>');
+    expect(step).toMatch(/Google, Microsoft or Apple contacts directly, on\s+the Connections page/);
+    expect(step).toMatch(/never duplicates them\. Then you are up and running on the network\./);
+    // No route to the LinkedIn file: no settings paths, links or menu steps.
+    expect(step).not.toMatch(/linkedin\.com|https?:|click|request (an|the) archive/i);
   });
 
   it('conversation: reply yourself, minutes not seconds, wait is the one way to hear back, threads, when to stop', () => {
