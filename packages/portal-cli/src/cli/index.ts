@@ -24,7 +24,10 @@ import {
 import { runConnectionsList, runConnect, runDisconnect, runRefresh } from './commands/connections.js';
 import { runMemoriesList, runMemoriesCreate, runMemoriesUpdate, runMemoriesDelete } from './commands/memories.js';
 import { runChatsList, runChatsGet, runChatsMessages, runChatsProcess, runChatsDelete } from './commands/chats.js';
-import { runContactsList, runContactsGet, runContactsCreate, runContactsDelete, runContactsActivity } from './commands/contacts.js';
+import {
+  runContactsList, runContactsGet, runContactsCreate, runContactsDelete, runContactsActivity,
+  runContactsImportLinkedIn
+} from './commands/contacts.js';
 import {
   runCompaniesList, runCompaniesSearch, runCompaniesGet, runCompaniesCreate,
   runCompaniesFindOrCreate, runCompaniesUpdate, runCompaniesDelete, runCompaniesContacts
@@ -611,6 +614,19 @@ contactsCmd
   .option('--json', 'Print raw JSON')
   .action(async (body, opts) => {
     await runContactsCreate(body, opts);
+  });
+
+contactsCmd
+  .command('import-linkedin <file>')
+  .description(
+    'Import LinkedIn connections from Connections.csv (the Connections file in LinkedIn\'s data export). ' +
+    'Re-importing updates the same contacts; no duplicates.\n\n' +
+    'Example: {{accountSlug}} contacts import-linkedin ~/Downloads/Connections.csv'
+  )
+  .option('--profile <name>', 'Credentials profile to use')
+  .option('--json', 'Print raw JSON')
+  .action(async (file, opts) => {
+    await runContactsImportLinkedIn(file, opts);
   });
 
 contactsCmd

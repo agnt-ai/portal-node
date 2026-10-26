@@ -258,6 +258,23 @@ export interface BulkTagResult {
   [key: string]: unknown;
 }
 
+// POST /contacts/import/linkedin — hand-typed until the generated types are
+// regenerated from a backend main that has the endpoint.
+export interface LinkedInImportResult {
+  /** Connections in the file. */
+  total: number;
+  /** New contacts. */
+  created: number;
+  /** Existing contacts enriched (never overwritten). */
+  updated: number;
+  /** Rows dropped. */
+  skipped: number;
+  /** Connections that shared an email. */
+  withEmail: number;
+  /** At most 50; index is the row's position after the header. */
+  errors: Array<{ index: number; error: string }>;
+}
+
 export type Company = components['schemas']['Company'];
 export type CreateCompanyBody = components['schemas']['CreateCompanyBody'];
 export type UpdateCompanyBody = components['schemas']['UpdateCompanyBody'];

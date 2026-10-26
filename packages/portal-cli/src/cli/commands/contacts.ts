@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { clientFor } from '../utils/api.js';
 
 export interface ContactsListOptions {
@@ -79,4 +80,34 @@ export async function runContactsActivity(contactId: string, opts: ContactsActiv
   const client = await clientFor(opts.profile);
   const activity = await client.contacts.activity(contactId);
   console.log(JSON.stringify(activity, null, 2));
+}
+
+export interface ContactsImportLinkedInOptions {
+  profile?: string;
+  json?: boolean;
+}
+
+/** Reads LinkedIn's Connections.csv from disk and imports it; the backend parses it. */
+export async function runContactsImportLinkedIn(file: string, opts: ContactsImportLinkedInOptions): Promise<void> {
+  let csv: string;
+  try {
+    csv = readFileSync(file, 'utf8');
+  } catch (err) {
+    console.error(`Could not read ${file}: ${(err as Error).message}`);
+    process.exit(1);
+  }
+  const client = await clientFor(opts.profile);
+  const result = await client.contacts.importLinkedIn(csv);
+
+  if (opts.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  console.log(
+    `Imported ${result.total} LinkedIn connections: ${result.created} new, ${result.updated} updated, ` +
+    `${result.skipped} skipped; ${result.withEmail} shared an email.`
+  );
+  for (const e of result.errors ?? []) {
+    console.log(`  row ${e.index}: ${e.error}`);
+  }
 }
