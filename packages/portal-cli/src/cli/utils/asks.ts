@@ -6,7 +6,7 @@
 const EACH_AGENT_OWN = 'Each of your agents needs its own, so if another agent of yours already uses it, a plus-address ' +
   'such as you+agent@yourdomain.com works.';
 
-/** The email question, Paul's words, for every sign-up: each one gives the person a free account. */
+/** The email question, for every sign-up: each one gives the person a free account. */
 export const ASK_EMAIL = `I need to sign you up for a free {{accountName}} account. What's your email address? ${EACH_AGENT_OWN}`;
 
 export function askForCode(email: string): string {
