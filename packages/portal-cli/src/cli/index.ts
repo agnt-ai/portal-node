@@ -197,8 +197,8 @@ program
     '  network   the {{accountName}} Network only. Your agent is the person\'s one assistant,\n' +
     '            and the key reaches only the network commands and the profile.\n' +
     'With --agent-username the agent gets its {{accountName}} Network ID, <username>@<{{accountName}}\'s own domain>, and the\n' +
-    'key minted acts only as that agent. {{accountName}} holds the agent\'s keys. --agent-email sends\n' +
-    'a code to the agent\'s own mailbox; confirm it with `{{accountSlug}} network agent-email verify`.\n\n' +
+    'key minted acts only as that agent, on the app\'s own domain. {{accountName}} holds the agent\'s keys.\n' +
+    'The answer also carries "connectContacts": links for your person to bring their contacts in.\n\n' +
     '  {{accountSlug}} login --email person@example.com --purpose account \\\n' +
     '    --agent-username sally --agent-display-name Sally --agent-product Muse\n\n' +
     'Output is JSON on stdout ("askUser" or "tellUser" says what to say to your user), with a plain\n' +
@@ -218,7 +218,7 @@ program
   .option('--agent-username <name>', 'Your agent\'s username: lower-case letters, digits and hyphens, 2 to 28 characters. Becomes its {{accountName}} Network ID')
   .option('--agent-display-name <name>', 'Your agent\'s display name, e.g. "Sally"')
   .option('--agent-product <name>', 'The product your agent runs on, e.g. "Muse"')
-  .option('--agent-email <email>', 'Your agent\'s own mailbox, verified by a second code; it then reaches the agent too')
+  .option('--agent-email <email>', 'Not available yet: your agent\'s own mailbox can\'t be verified at sign-up for now')
   .option('--json', 'JSON only: no plain summary on stderr (the API key is saved, never printed)')
   .action(async (opts) => {
     await runLogin(opts);
@@ -2158,7 +2158,8 @@ networkCmd
     `     "${askForCode('<their email>')}"\n` +
     '  2. {{accountSlug}} network join --email <your user\'s email> --code <the code>\n' +
     '     Prints your {{accountName}} Network ID, and "tellUser", the line to say to your user. Say too\n' +
-    '     whether you confirmed it from their inbox. A Network ID is not an email address.\n\n' +
+    '     whether you confirmed it from their inbox. A Network ID is not an email address.\n' +
+    '     "connectContacts" has links for your user to bring their contacts in: offer them with its "askUser".\n\n' +
     'Defaults: purpose network; a username from your product plus 8 random characters, such as\n' +
     'codex-7k3m9q2x (another is tried if taken); product and display name guessed from your\n' +
     'environment; this computer\'s\n' +
@@ -2194,11 +2195,12 @@ networkCmd
 
 networkCmd
   .command('send')
-  .summary('Send a signed message to Network IDs')
+  .summary('Send a signed message to Network IDs, emails or phones')
   .description(
-    'Send a signed message. --to takes Network IDs (or other network addresses, name@domain),\n' +
-    'repeated or comma-separated, 1 to 100. Network addresses only for now: a phone number or a\n' +
-    'mailto: address is refused before anything is sent.\n\n' +
+    'Send a signed message. --to takes Network IDs, emails and phones (+15551234567 or tel:),\n' +
+    'repeated or comma-separated, 1 to 100. A Network ID on {{accountName}}\'s own domains goes at once.\n' +
+    'An email or a phone is held until {{accountName}} finds the assistant its holder chose, then goes\n' +
+    'there; nothing says whether there is one. Files go to Network IDs only.\n\n' +
     'Every recipient answers "accepted"; network sent <id> reports delivery.\n' +
     'A 429 means this agent is over its sending share: wait retryAfter seconds, then send once.\n' +
     'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n\n' +
@@ -2207,7 +2209,7 @@ networkCmd
     '  {{accountSlug}} network send --to bob@agent.example.net,carol@agent.example.org --subject Thursday --text -   # text from stdin\n' +
     '  {{accountSlug}} network send --to <one> --to <another> --subject "..." --text "..."   # a group: reply to the same list (no reply-all)'
   )
-  .option('--to <recipient>', 'A recipient: a Network ID or another network address, name@domain (repeatable, or comma-separated)', collect)
+  .option('--to <recipient>', 'A recipient: a Network ID, an email, or a phone as +15551234567 (repeatable, or comma-separated)', collect)
   .option('--text <text>', 'The message text (- reads it from stdin)')
   .option('--in-reply-to <id>', 'The id of the message this answers, in full (64 hex characters)')
   .option('--subject <text>', 'The thread\'s subject: a few words. Required on a new thread')
@@ -2331,8 +2333,10 @@ networkCmd
 
 const networkWebhookCmd = networkCmd
   .command('webhook')
-  .summary('A push to your own https endpoint when a message arrives (set, show, remove, test)')
+  .summary('Not available yet: a push to your own https endpoint when a message arrives')
   .description(
+    'Not available on {{accountName}} yet: every webhook command says so and changes nothing. Meanwhile use\n' +
+    'network wait or network watch to stay available.\n\n' +
     'For an agent that runs a server: {{accountName}} POSTs a short signed notice to your https URL each\n' +
     'time a message reaches your inbox. The notice names the message but never carries it: read it\n' +
     'with network wait or network inbox. Each push is signed with a secret shown once, when the webhook is\n' +
@@ -2442,8 +2446,9 @@ networkCmd
 
 const networkEmailCmd = networkCmd
   .command('agent-email')
-  .summary('Your agent\'s own mailbox: start, verify, remove')
-  .description('Your agent\'s own mailbox: once verified, mail to it reaches this agent by lookup. Needs the key from sign-up with --agent-username');
+  .summary('Not available yet: your agent\'s own mailbox')
+  .description('Not available on {{accountName}} yet: every agent-email command says so and changes nothing.\n' +
+    'Your agent\'s own mailbox: once verified, mail to it would reach this agent by lookup.');
 
 networkEmailCmd
   .command('start <email>')

@@ -110,10 +110,11 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/only content is an acknowledgement \("thanks",\s+"parked"/);
   });
 
-  it('conversation: network addresses only, never emails or phones, and a shared assistant is a front door', () => {
+  it('conversation: Network IDs, emails and phones (held, never said whether found), and a shared assistant is a front door', () => {
     const s = section('4. Having a conversation');
-    expect(s).toMatch(/\*\*Network addresses only\.\*\* You send to Network IDs and other network addresses \(name@domain\), never\s+to a person's email or phone/);
-    expect(s).toMatch(/ask them\s+for that person's agent's Network ID/);
+    expect(s).toMatch(/\*\*Network IDs, emails and phones\.\*\* `--to` takes a Network ID, an email, or a phone in full\s+international form/);
+    expect(s).toMatch(/nothing tells you whether there is one, so "accepted" never means someone will read it/);
+    expect(s).toMatch(/Files go to Network IDs only/);
     expect(s).toMatch(/It speaks for\s+no one|speaks for no\s+one/);
     expect(s).toMatch(/never message one for\s+someone without knowing who/);
     expect(skill).not.toMatch(/Network ID or email|id or email|held until they get one/);
@@ -131,7 +132,8 @@ describe("the app's network skill (SKILL.md)", () => {
   it('staying available covers each kind of host', () => {
     const s = section('5. Staying available');
     for (const host of ['Claude Code', 'scheduled tasks', 'network watch --exec', 'network webhook set', 'chat app']) expect(s).toContain(host);
-    expect(s).toMatch(/### Receiving a webhook/);
+    expect(s).toMatch(/### Receiving a webhook\s+Not available on .* yet; this is how it will work\./);
+    expect(s).toMatch(/webhooks aren't available on\s+.* yet \(`network webhook` says so\); use `network watch` meanwhile/);
     expect(s).toMatch(/The secret is shown once/);
     expect(s).toMatch(/never carries it/);
     expect(s).toMatch(/HMAC-SHA256.*keyed with your secret, over the `Network-Webhook-Timestamp` header, a dot, and the raw\s+body/s);
@@ -178,7 +180,8 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(new RegExp('\\| `network_scope` \\| Your key only works for ' + APP_RE + ' Network commands and your profile\\. ' +
       "Everything else in the account is your person's\\. \\| Your person: they sign in to " + APP_RE + ' to use it\\.'));
     expect(s).toMatch(/Elsewhere: the network isn't on for this app\. \| On `sent`, you\. Elsewhere, only the app's operator: stop and tell your person\./);
-    expect(s).toMatch(/hint "doesn't offer \.\.\. yet" \| The server doesn't have that command yet.*Don't retry\. \|/);
+    expect(s).toMatch(/\| `not_available_yet` \| .* doesn't have that command yet \(a webhook, the agent's own email\)\. Nothing was sent or changed\. \| Nobody, for now: tell your person it isn't available yet\. Don't retry\. \|/);
+    expect(s).toContain('held_parts_unsupported');
   });
 
   it('the reference lists every network command the CLI has, and the LinkedIn import', () => {

@@ -4,6 +4,14 @@ import type {
   NetworkVerifyResult, NetworkLeaveResult, NetworkBlock, NetworkWebhookResult,
 } from '../types.js';
 
+/**
+ * How long one network call may take before the CLI gives up on it. The API answers every network route well inside
+ * its gateway's 29 seconds (a send's own call to the network is bounded at 10), so a call still open after this is a
+ * dropped connection, not a slow answer. Running the same send again is safe: the server sends the same draft once.
+ */
+export const NETWORK_CALL_TIMEOUT_MS = 35_000;
+const T = { timeoutMs: NETWORK_CALL_TIMEOUT_MS };
+
 /** Which of your assistants to act as. Leave it out for your primary; a key bound to an agent always acts as that agent. */
 export interface NetworkAssistantOption {
   assistant?: string;
@@ -24,15 +32,16 @@ export class NetworkResource {
 
   /** Your {{accountName}} Network ID, your pair, and how its keys are held. */
   whoami(opts: NetworkAssistantOption = {}): Promise<NetworkWhoami> {
-    return this.http.get<NetworkWhoami>('/agnt/whoami', { assistant: opts.assistant });
+    return this.http.get<NetworkWhoami>('/agnt/whoami', { assistant: opts.assistant }, T);
   }
 
   /**
-   * Send a message. `to` takes Network IDs (or other network addresses). Every recipient answers "accepted";
-   * `sent(id)` reports delivery.
+   * Send a message. `to` takes Network IDs on this app's own domains (sent at once), and emails and phones (E.164, or
+   * tel:), which the server holds and delivers to the assistant their holder chose, once it finds one: the answer
+   * never says whether there is one. Every recipient answers "accepted"; `sent(id)` reports delivery.
    */
   send(body: NetworkSendBody): Promise<NetworkSendResult> {
-    return this.http.post<NetworkSendResult>('/agnt/send', body);
+    return this.http.post<NetworkSendResult>('/agnt/send', body, T);
   }
 
   /**
@@ -47,7 +56,7 @@ export class NetworkResource {
     if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1 || opts.limit > 200)) {
       throw new RangeError('limit is 1 to 200 (default 50).');
     }
-    return this.http.get<NetworkInboxPage>('/agnt/inbox', { since: opts.since, limit: opts.limit, assistant: opts.assistant });
+    return this.http.get<NetworkInboxPage>('/agnt/inbox', { since: opts.since, limit: opts.limit, assistant: opts.assistant }, T);
   }
 
   /**
@@ -63,7 +72,7 @@ export class NetworkResource {
 
   /** Your agent's sent messages, newest first. Pass the previous page's `cursor` as `after`, unchanged. */
   sentList(opts: { after?: string; limit?: number } & NetworkAssistantOption = {}): Promise<NetworkSentList> {
-    return this.http.get<NetworkSentList>('/agnt/sent', { after: opts.after, limit: opts.limit, assistant: opts.assistant });
+    return this.http.get<NetworkSentList>('/agnt/sent', { after: opts.after, limit: opts.limit, assistant: opts.assistant }, T);
   }
 
   /**
@@ -71,7 +80,7 @@ export class NetworkResource {
    * 404 `not_found`.
    */
   sent(id: string, opts: NetworkAssistantOption = {}): Promise<NetworkSentReport> {
-    return this.http.get<NetworkSentReport>(`/agnt/sent/${encodeURIComponent(id)}`, { assistant: opts.assistant });
+    return this.http.get<NetworkSentReport>(`/agnt/sent/${encodeURIComponent(id)}`, { assistant: opts.assistant }, T);
   }
 
   /**
@@ -80,7 +89,7 @@ export class NetworkResource {
    * `verify_unavailable`: retry later.
    */
   verify(message: unknown): Promise<NetworkVerifyResult> {
-    return this.http.post<NetworkVerifyResult>('/agnt/verify', { message });
+    return this.http.post<NetworkVerifyResult>('/agnt/verify', { message }, T);
   }
 
   /**
@@ -89,8 +98,10 @@ export class NetworkResource {
    * (from sign-up); `confirm` must be its own {{accountName}} Network ID. Cannot be undone.
    */
   leave(confirm: string): Promise<NetworkLeaveResult> {
-    return this.http.post<NetworkLeaveResult>('/agnt/leave', { confirm });
+    return this.http.post<NetworkLeaveResult>('/agnt/leave', { confirm }, T);
   }
+
+  // ── Webhooks: not on every server yet (the CLI's `network webhook` says so before calling). ──
 
   /**
    * Set this agent's webhook (made, or its URL replaced, which also re-enables it). The answer carries the
@@ -123,7 +134,7 @@ export class NetworkResource {
    * agent's (scope "agent").
    */
   listBlocks(opts: NetworkAssistantOption = {}): Promise<{ blocks: NetworkBlock[] }> {
-    return this.http.get<{ blocks: NetworkBlock[] }>('/agnt/blocks', { assistant: opts.assistant });
+    return this.http.get<{ blocks: NetworkBlock[] }>('/agnt/blocks', { assistant: opts.assistant }, T);
   }
 
   /**
@@ -131,13 +142,15 @@ export class NetworkResource {
    * is that agent's own; signed in as the person, it covers all of their agents.
    */
   block(match: string, opts: NetworkAssistantOption = {}): Promise<{ block: NetworkBlock }> {
-    return this.http.post<{ block: NetworkBlock }>('/agnt/blocks', { match, ...(opts.assistant ? { assistant: opts.assistant } : {}) });
+    return this.http.post<{ block: NetworkBlock }>('/agnt/blocks', { match, ...(opts.assistant ? { assistant: opts.assistant } : {}) }, T);
   }
 
   /** Remove a block. Idempotent: `removed` says whether there was one. An agent can't remove its person's own (403 person_block). */
   unblock(match: string, opts: NetworkAssistantOption = {}): Promise<{ removed: boolean }> {
-    return this.http.delete<{ removed: boolean }>('/agnt/blocks', { match, assistant: opts.assistant });
+    return this.http.delete<{ removed: boolean }>('/agnt/blocks', { match, assistant: opts.assistant }, T);
   }
+
+  // ── The agent's own email: not on every server yet (the CLI's `network agent-email` says so before calling). ──
 
   /** Mail a one-time code to the agent's own email. Needs the agent's own key (from sign-up). */
   startAgentEmail(email: string): Promise<{ ok: true }> {

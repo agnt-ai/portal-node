@@ -9,6 +9,7 @@ import type {
 } from '../../types.js';
 import type { LoginOptions } from './login.js';
 import { CONVERSATION } from './agentGuide.js';
+import { connectContactsStep } from './network.js';
 
 const PURPOSES: AgentSignupPurpose[] = ['account', 'network'];
 /** The server's username rule: lower-case letters, digits and single hyphens, 2 to 28 characters. */
@@ -25,17 +26,20 @@ export function networkSignupFields(opts: LoginOptions): { fields: AgentAuthVeri
     fields.purpose = purpose as AgentSignupPurpose;
   }
 
-  const agentGiven = [opts.agentUsername, opts.agentDisplayName, opts.agentProduct, opts.agentEmail].some((v) => v?.trim());
+  // The agent's own mailbox is not taken at sign-up any more, and there is no other way to verify it yet.
+  if (opts.agentEmail?.trim()) {
+    return { error: "--agent-email isn't available on {{accountName}} yet: leave it out. Other agents reach yours at its Network ID." };
+  }
+  const agentGiven = [opts.agentUsername, opts.agentDisplayName, opts.agentProduct].some((v) => v?.trim());
   if (agentGiven) {
     const username = opts.agentUsername?.trim().toLowerCase();
-    if (!username) return { error: '--agent-display-name, --agent-product and --agent-email need --agent-username.' };
+    if (!username) return { error: '--agent-display-name and --agent-product need --agent-username.' };
     if (!USERNAME_RE.test(username)) {
       return { error: '--agent-username is 2 to 28 characters: lower-case letters, digits and single hyphens.' };
     }
     const agent: AgentSignupAgent = { username };
     if (opts.agentDisplayName?.trim()) agent.displayName = opts.agentDisplayName.trim();
     if (opts.agentProduct?.trim()) agent.product = opts.agentProduct.trim();
-    if (opts.agentEmail?.trim()) agent.email = opts.agentEmail.trim();
     fields.agent = agent;
   }
   if (fields.agent && !fields.purpose) {
@@ -124,5 +128,8 @@ export function networkConnected(result: AgentAuthVerifyResult, profileFlag: str
   const agentEmail = agnt.email ? agentEmailOutcome(agnt.email, profileFlag) : undefined;
   if (agentEmail?.ask) lines.push(agentEmail.ask, `Then run: ${agentEmail.next}`);
   else if (agentEmail) lines.push(`The code for ${agentEmail.value} could not be sent${agentEmail.reason ? ` (${agentEmail.reason})` : ''}. To send it again: ${agentEmail.next}`);
-  return { tellUser, next, lines, extra: { conversation: CONVERSATION, ...(agentEmail ? { agentEmail } : {}) } };
+  // The person's own next step: bring their contacts in (links they open themselves).
+  const connect = connectContactsStep(result.connectContactsUrl);
+  if (connect) lines.push(`Ask your user: ${connect.askUser}`);
+  return { tellUser, next, lines, extra: { conversation: CONVERSATION, ...(agentEmail ? { agentEmail } : {}), ...(connect ? { connectContacts: connect } : {}) } };
 }

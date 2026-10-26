@@ -7,9 +7,19 @@
 
 import type { PortalClient } from '../../index.js';
 import type { NetworkWebhook } from '../../types.js';
-import { NetworkUsageError, runNetworkVerb, type WaitClock } from './network.js';
+import { NetworkUsageError, NotAvailableYetError, runNetworkVerb, type WaitClock } from './network.js';
 import { clientFor } from '../utils/api.js';
 import { networkProfile } from '../utils/agentIdentity.js';
+
+/**
+ * Whether the server pushes to an agent's webhook. Not yet: until it does, every `network webhook` command says so
+ * before reading a profile or calling anything. Flip this once the server has the webhook routes.
+ */
+export const WEBHOOKS_AVAILABLE = false;
+
+const notYet = (verb: string) => new NotAvailableYetError(verb,
+  `\`network ${verb}\` isn't available on {{accountName}} yet. To stay available meanwhile, use network wait or network watch ` +
+  '(agent-guide, "Staying available").');
 
 export interface WebhookOptions {
   profile?: string;
@@ -72,10 +82,14 @@ export async function networkWebhookTest(client: PortalClient, opts: WebhookOpti
 }
 
 const withProfile = (verb: string, opts: WebhookOptions, fn: (client: PortalClient) => Promise<{ result: unknown; exitCode?: number }>) =>
-  runNetworkVerb(verb, async () => fn(await clientFor(await networkProfile(opts.profile))));
+  runNetworkVerb(verb, async () => {
+    if (!WEBHOOKS_AVAILABLE) throw notYet(verb);
+    return fn(await clientFor(await networkProfile(opts.profile)));
+  });
 
 export const runNetworkWebhookSet = (opts: WebhookOptions & { url?: string; rotate?: boolean }) =>
   runNetworkVerb('webhook set', async () => {
+    if (!WEBHOOKS_AVAILABLE) throw notYet('webhook set');
     if (!opts.url?.trim()) throw new NetworkUsageError('Give --url: your receiver\'s https address (port 443, a public host).');
     return networkWebhookSet(await clientFor(await networkProfile(opts.profile)), opts);
   });

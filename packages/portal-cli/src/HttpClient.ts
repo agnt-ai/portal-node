@@ -140,8 +140,8 @@ export class HttpClient {
     return this.request<T>('GET', path, undefined, params, opts.timeoutMs);
   }
 
-  post<T>(path: string, body?: any): Promise<T> {
-    return this.request<T>('POST', path, body);
+  post<T>(path: string, body?: any, opts: { timeoutMs?: number } = {}): Promise<T> {
+    return this.request<T>('POST', path, body, undefined, opts.timeoutMs);
   }
 
   put<T>(path: string, body?: any): Promise<T> {
@@ -152,8 +152,8 @@ export class HttpClient {
     return this.request<T>('PATCH', path, body);
   }
 
-  delete<T>(path: string, params?: Record<string, any>): Promise<T> {
-    return this.request<T>('DELETE', path, undefined, params);
+  delete<T>(path: string, params?: Record<string, any>, opts: { timeoutMs?: number } = {}): Promise<T> {
+    return this.request<T>('DELETE', path, undefined, params, opts.timeoutMs);
   }
 
   /**

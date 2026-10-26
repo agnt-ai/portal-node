@@ -18,7 +18,9 @@ import { networkProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
 import type { PortalClient } from '../../index.js';
-import type { NetworkInboxEntry, NetworkSendBody, NetworkUntrusted, NetworkWaitResult, NetworkSender } from '../../types.js';
+import type {
+  NetworkConnectContactsUrl, NetworkInboxEntry, NetworkSendBody, NetworkUntrusted, NetworkWaitResult, NetworkSender,
+} from '../../types.js';
 
 export const EXIT_USAGE = 2;
 export const EXIT_RETRY = 75;
@@ -58,6 +60,21 @@ export class NetworkUsageError extends Error {
     this.name = 'NetworkUsageError';
   }
 }
+
+/**
+ * A command whose server side {{accountName}} does not offer yet. Said before anything is sent or any profile read, so
+ * the agent gets one clear answer instead of an obscure refusal.
+ */
+export class NotAvailableYetError extends Error {
+  constructor(readonly verb: string, message?: string) {
+    super(message ?? `\`network ${verb}\` isn't available on {{accountName}} yet.`);
+    this.name = 'NotAvailableYetError';
+  }
+}
+
+/** The hint for a command that is not available yet: nothing was changed, and retrying does not help. */
+export const notAvailableHint = (verb: string) =>
+  `Nothing was sent or changed. Tell your person \`network ${verb}\` isn't available on {{accountName}} yet; don't retry.`;
 
 const RETRYABLE_STATUS = new Set([408, 429, 502, 503, 504]);
 
@@ -144,6 +161,10 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
       return 'This connection was not granted the {{accountName}} Network.';
     case 'invalid':
       return 'The server refused part of the request; details.field names it.';
+    case 'held_parts_unsupported':
+      return 'Files go to Network IDs only for now, not to an email or a phone. Send the text alone to them.';
+    case 'part_not_uploaded':
+      return 'A file part names bytes this agent has not uploaded yet. Upload it first, then send again.';
     case 'invalid_email':
       return 'Give a mailbox you read, not an {{accountName}} Network ID: a Network ID is not an email address.';
     case 'otp_invalid':
@@ -175,6 +196,12 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
       exitCode: 1,
     };
   }
+  if (err instanceof NotAvailableYetError) {
+    return {
+      body: { code: 'not_available_yet', message: err.message, status: null, retryable: false, hint: notAvailableHint(err.verb) },
+      exitCode: 1,
+    };
+  }
   if (err instanceof NetworkUsageError) {
     const body: NetworkCliErrorBody = { code: 'invalid', message: err.message, status: null, retryable: false };
     if (err.askUser) body.askUser = err.askUser;
@@ -182,6 +209,13 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
   }
   if (err instanceof AgntApiError) {
     const retryable = RETRYABLE_STATUS.has(err.status);
+    // A route the server does not have at all: the command is not offered there yet (never "the network is off").
+    if (isMissingRoute(err.status, err.message)) {
+      return {
+        body: { code: 'not_available_yet', message: `This server doesn't offer \`network ${verb}\` yet.`, status: 404, retryable: false, hint: notOnThisServer(verb) },
+        exitCode: 1,
+      };
+    }
     const body: NetworkCliErrorBody = {
       code: err.errorCode ?? (err.status === 404 ? 'not_found' : `http_${err.status}`),
       message: err.message,
@@ -198,7 +232,13 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
   // fetch rejects with a TypeError when there was no answer at all (DNS, refused, reset).
   if ((err instanceof TypeError && /fetch/i.test(err.message)) || (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError'))) {
     return {
-      body: { code: 'network_error', message: err.message, status: null, retryable: true, hint: 'No answer from the API. Check the connection, then run the same command again.' },
+      body: {
+        code: 'network_error', message: err.message, status: null, retryable: true,
+        hint: verb === 'send'
+          // The server sends the same message (the same text, headers and recipients) only once, so a retry never doubles it.
+          ? 'No answer from the API. Check the connection, then run the same send again: it is never delivered twice.'
+          : 'No answer from the API. Check the connection, then run the same command again.',
+      },
       exitCode: EXIT_RETRY,
     };
   }
@@ -241,7 +281,23 @@ export function collect(value: string, previous: string[] = []): string[] {
 export async function networkWhoami(client: PortalClient, opts: NetworkBaseOptions) {
   const me = await client.network.whoami({ assistant: opts.assistant });
   // The API's answer, plus the line to tell the user.
-  return { result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.` } };
+  const connect = connectContactsStep(me.connectContactsUrl);
+  return { result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.`, ...(connect ? { connectContacts: connect } : {}) } };
+}
+
+/**
+ * The person's next step after joining: bring their contacts in, so their agent can reach the people they know. The
+ * links are for the person to open (each signs them in to {{accountName}}), never for the agent. Undefined when the
+ * server gave none (an app with no portal, or an older server).
+ */
+export function connectContactsStep(urls: NetworkConnectContactsUrl | undefined):
+  { urls: { google: string; microsoft: string; apple: string }; askUser: string } | undefined {
+  if (!urls || typeof urls !== 'object' || typeof urls.google !== 'string') return undefined;
+  return {
+    urls,
+    askUser: 'Want me to be able to reach the people you already know? Connect the account that has your contacts in ' +
+      `{{accountName}}: Google ${urls.google}, Microsoft ${urls.microsoft}, or Apple ${urls.apple}. Open the link yourself; I can't do it for you.`,
+  };
 }
 
 // ── send ────────────────────────────────────────────────────────────────────
@@ -255,32 +311,41 @@ export interface NetworkSendOptions extends NetworkBaseOptions {
 }
 
 /**
- * Whether `send` takes people's emails and phones as recipients. Not yet: the server takes network addresses only,
- * and would treat an email as a network address on that email's domain. Flip this (and the help, the skill and
- * join's next steps, which say "network addresses only") once the server delivers to emails and phones.
+ * Whether `send` takes people's emails and phones as recipients. It does: the server sends a Network ID on the app's
+ * own domains at once, and holds any other name@domain (an email) or phone (E.164, or tel:) until it finds the
+ * assistant its holder chose, then delivers it there. The answer never says whether there is one.
  */
-export const EMAIL_AND_PHONE_RECIPIENTS = false;
+export const EMAIL_AND_PHONE_RECIPIENTS = true;
 
-/** A network address: name@domain, with a dot in the domain. */
+/** name@domain, with a dot in the domain: a Network ID, or an email. */
 const NETWORK_ADDRESS = /^[^\s@:]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+/** A phone as the server takes it: + and the country code, or tel: (spaces, dots, dashes and brackets allowed). */
+const PHONE = /^(tel:)?\+[0-9][0-9 ().-]{5,}$/i;
 
-/** Why a recipient can't be sent to yet, or undefined. Only network addresses, until EMAIL_AND_PHONE_RECIPIENTS. */
+/** Why a recipient can't be sent to, or undefined. Only what the server would refuse anyway, said sooner. */
 export function recipientProblem(to: string): string | undefined {
-  if (EMAIL_AND_PHONE_RECIPIENTS) return undefined;
-  if (/^tel:/i.test(to) || (/^\+?[0-9 ().-]+$/.test(to) && to.replace(/[^0-9]/g, '').length >= 6)) {
-    return `${to} is a phone number. {{accountName}} sends to network addresses only for now (name@domain, such as a Network ID).`;
+  if (!EMAIL_AND_PHONE_RECIPIENTS) {
+    if (/^tel:/i.test(to) || (/^\+?[0-9 ().-]+$/.test(to) && to.replace(/[^0-9]/g, '').length >= 6)) {
+      return `${to} is a phone number. {{accountName}} sends to network addresses only for now (name@domain, such as a Network ID).`;
+    }
+    if (/^mailto:/i.test(to)) {
+      return `${to} is an email. {{accountName}} sends to network addresses only for now: give the agent's Network ID (name@domain), without mailto:.`;
+    }
+    if (!NETWORK_ADDRESS.test(to)) return `${to} is not a network address: give name@domain, such as a Network ID.`;
+    return undefined;
   }
-  if (/^mailto:/i.test(to)) {
-    return `${to} is an email. {{accountName}} sends to network addresses only for now: give the agent's Network ID (name@domain), without mailto:.`;
+  if (PHONE.test(to)) return undefined;
+  if (/^tel:/i.test(to) || (/^[0-9 ().-]+$/.test(to) && to.replace(/[^0-9]/g, '').length >= 6)) {
+    return `${to} is a phone number without its country code: give it as + and the full number, such as +15551234567.`;
   }
-  if (!NETWORK_ADDRESS.test(to)) return `${to} is not a network address: give name@domain, such as a Network ID.`;
-  return undefined;
+  if (NETWORK_ADDRESS.test(to.replace(/^mailto:/i, ''))) return undefined;
+  return `${to} is not a Network ID, an email or a phone: give name@domain, or a phone such as +15551234567.`;
 }
 
 /** The request body from options; `--text -` reads the text from stdin. */
 export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string = () => readFileSync(0, 'utf8')): NetworkSendBody {
   const to = (opts.to ?? []).flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean);
-  if (!to.length) throw new NetworkUsageError('Give at least one --to: a Network ID (or another network address).');
+  if (!to.length) throw new NetworkUsageError('Give at least one --to: a Network ID, an email or a phone.');
   if (to.length > 100) throw new NetworkUsageError('At most 100 recipients per message.');
   for (const t of to) {
     const problem = recipientProblem(t);
@@ -552,6 +617,16 @@ export async function networkVerify(client: PortalClient, file: string) {
 
 // ── the agent's own email ───────────────────────────────────────────────────
 
+/**
+ * Whether the server verifies an agent's own mailbox. Not yet: sign-up no longer takes one, and the way an agent lists
+ * its own mailbox is still being decided. Until then `network agent-email` says so, without calling anything.
+ */
+export const AGENT_EMAIL_AVAILABLE = false;
+
+const agentEmailNotYet = () => new NotAvailableYetError('agent-email',
+  "`network agent-email` isn't available on {{accountName}} yet: your own mailbox can't be verified here for now. " +
+  'Other agents reach you at your Network ID (network whoami).');
+
 export async function networkAgentEmailStart(client: PortalClient, email: string) {
   const result = await client.network.startAgentEmail(email);
   return {
@@ -659,12 +734,18 @@ export const runNetworkVerify = (file: string, opts: NetworkBaseOptions) =>
     const client = await clientFor(await networkProfile(opts.profile));
     return { result: await client.network.verify(message) };
   });
+/** The agent-email commands, or the plain "not available yet" while the server has none. */
+const agentEmailVerb = (profile: string | undefined, fn: (client: PortalClient) => Promise<{ result: unknown; exitCode?: number }>) =>
+  runNetworkVerb('agent-email', async () => {
+    if (!AGENT_EMAIL_AVAILABLE) throw agentEmailNotYet();
+    return withClient(profile, fn)();
+  });
 export const runNetworkAgentEmailStart = (email: string, opts: NetworkBaseOptions) =>
-  runNetworkVerb('agent-email', withClient(opts.profile, (c) => networkAgentEmailStart(c, email)));
+  agentEmailVerb(opts.profile, (c) => networkAgentEmailStart(c, email));
 export const runNetworkAgentEmailVerify = (email: string, code: string, opts: NetworkBaseOptions) =>
-  runNetworkVerb('agent-email', withClient(opts.profile, (c) => networkAgentEmailVerify(c, email, code)));
+  agentEmailVerb(opts.profile, (c) => networkAgentEmailVerify(c, email, code));
 export const runNetworkAgentEmailRemove = (email: string, opts: NetworkBaseOptions) =>
-  runNetworkVerb('agent-email', withClient(opts.profile, (c) => networkAgentEmailRemove(c, email)));
+  agentEmailVerb(opts.profile, (c) => networkAgentEmailRemove(c, email));
 export const runNetworkBlock = (match: string, opts: NetworkBaseOptions) =>
   runNetworkVerb('block', withClient(opts.profile, (c) => networkBlock(c, match, opts)));
 export const runNetworkUnblock = (match: string, opts: NetworkBaseOptions) =>

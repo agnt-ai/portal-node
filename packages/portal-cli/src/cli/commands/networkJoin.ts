@@ -3,8 +3,9 @@
  * their email and the one-time code emailed to them. Everything else has a default.
  *
  *   1. `network join --email <the user's email>` emails the code and exits 0, saying what to ask the user.
- *   2. `network join --email <the user's email> --code <the code>` finishes and prints the agent's {{accountName}} Network ID,
- *      with the line the agent says to its user.
+ *   2. `network join --email <the user's email> --code <the code>` finishes: it saves the key to the agent's own
+ *      profile and prints the agent's {{accountName}} Network ID (minted on the app's own domain), the line the agent
+ *      says to its user, and the person's next step, `connectContacts` (links to bring their contacts in).
  *   Run again once joined, it only reports the Network ID.
  *
  * Defaults: the profile named after the agent (claude-code, codex, cursor or agent); purpose "network"; a
@@ -18,7 +19,7 @@ import { PortalClient } from '../../index.js';
 import { saveProfile, resolveProfile } from '../utils/credentials.js';
 import { DEFAULT_API_URL, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { signupFieldsFrom, verifyErrorHint, flagWord, type LoginOptions } from './login.js';
-import { NetworkUsageError } from './network.js';
+import { NetworkUsageError, connectContactsStep } from './network.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
 import { CONVERSATION } from './agentGuide.js';
@@ -137,7 +138,13 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     if (existing) {
       try {
         const me = await new PortalClient({ apiUrl: existing.apiUrl, apiKey: existing.apiKey }).network.whoami();
-        return { result: { status: 'already_joined', address: me.address, tellUser: sayLine(me.address), conversation: CONVERSATION, next: nextCommands(profileFlag, profileName) } };
+        const connect = connectContactsStep(me.connectContactsUrl);
+        return {
+          result: {
+            status: 'already_joined', address: me.address, tellUser: sayLine(me.address), conversation: CONVERSATION,
+            next: nextCommands(profileFlag, profileName), ...(connect ? { connectContacts: connect } : {}),
+          },
+        };
       } catch (err) {
         // Only a key the server refuses (revoked) means joining again. Anything else (a 503, no network) is
         // reported: a new sign-up would orphan this agent's Network ID.
@@ -221,10 +228,13 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     };
   }
 
+  // The person's own next step: bring their contacts in (links they open themselves).
+  const connect = connectContactsStep(result.connectContactsUrl);
   const short = {
     status: 'joined',
     address: result.agnt.address,
     tellUser: joinedLine(email, result.agnt.address, result.purpose === 'account' ? 'account' : 'network'),
+    ...(connect ? { connectContacts: connect } : {}),
     conversation: CONVERSATION,
     next: nextCommands(profileFlag, profileName),
   };

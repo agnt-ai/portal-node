@@ -216,17 +216,21 @@ describe('network send body', () => {
     expect(body).toEqual({ to: ['bob@agent.example.net', 'carol@agent.example.org', 'dan@agent.example.com'], text: 'hi', headers: { subject: 's' } });
   });
 
-  it('network addresses only for now: a phone, a tel: or mailto: address, or no name@domain is refused before sending', () => {
-    expect(EMAIL_AND_PHONE_RECIPIENTS).toBe(false);
-    for (const to of ['+14155550100', 'tel:+14155550100', '(415) 555-0100']) {
-      expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is a phone number\. .* network addresses only for now/);
+  it('emails and phones are recipients too (the server holds them for lookup), passed through exactly as written', () => {
+    expect(EMAIL_AND_PHONE_RECIPIENTS).toBe(true);
+    const to = ['bob@agent.example.net', 'carol@example.com', 'mailto:dan@example.org', '+14155550100', 'tel:+1 (415) 555-0101'];
+    expect(sendBodyFrom({ to, text: 'x', subject: 's' }).to).toEqual(to);
+  });
+
+  it('refuses before sending what the server would refuse: a phone with no country code, or no address at all', () => {
+    for (const to of ['(415) 555-0100', '4155550100', 'tel:4155550100']) {
+      expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is a phone number without its country code: give it as \+ and the full number/);
     }
-    expect(() => sendBodyFrom({ to: ['mailto:carol@example.com'], text: 'x', subject: 's' })).toThrow(/is an email\. .* network addresses only for now/);
-    for (const to of ['carol', 'carol@localhost', '@example.com']) {
-      expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is not a network address/);
+    for (const to of ['carol', 'carol@localhost', '@example.com', '+1']) {
+      expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is not a Network ID, an email or a phone/);
     }
     // One bad recipient stops the whole send: nothing goes to the others either.
-    expect(() => sendBodyFrom({ to: ['bob@agent.example.net', '+14155550100'], text: 'x', subject: 's' })).toThrow(NetworkUsageError);
+    expect(() => sendBodyFrom({ to: ['bob@agent.example.net', '4155550100'], text: 'x', subject: 's' })).toThrow(NetworkUsageError);
   });
 
   it('reads --text - from stdin', () => {

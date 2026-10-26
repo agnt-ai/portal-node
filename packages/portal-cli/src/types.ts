@@ -1293,7 +1293,15 @@ export interface AgentAuthVerifyResult {
   purpose?: AgentSignupPurpose;
   /** Present when sign-up named an agent. */
   agnt?: AgentSignupNetwork;
+  /** On an agent sign-up: where the person (not the agent) connects an account that brings their contacts in. */
+  connectContactsUrl?: NetworkConnectContactsUrl;
 }
+
+/**
+ * Links for the person, not the agent: each opens the app's connections page on that provider, to bring their contacts
+ * in. Null when the app has no portal.
+ */
+export type NetworkConnectContactsUrl = { google: string; microsoft: string; apple: string } | null;
 
 /**
  * What agent sign-up signs the person up for. Required by apps with the {{accountName}} Network on; there is no default.
@@ -1309,7 +1317,10 @@ export interface AgentSignupAgent {
   username: string;
   displayName?: string;
   product?: string;
-  /** The agent's own mailbox; a second code goes there once the agent exists. */
+  /**
+   * The agent's own mailbox. Servers no longer read it at sign-up, and the CLI never sends it: `--agent-email` says
+   * it is not available yet.
+   */
   email?: string;
 }
 
@@ -1369,6 +1380,8 @@ export interface NetworkWhoami {
   pair: NetworkPair;
   /** keys: "custodial", or the app's slug from older servers (the same meaning). Data only, never user text. */
   custody: { keys: string; note: string };
+  /** Where the person connects an account that brings their contacts in (null when the app has no portal). */
+  connectContactsUrl?: NetworkConnectContactsUrl;
 }
 
 export interface NetworkTextPart {
@@ -1377,7 +1390,7 @@ export interface NetworkTextPart {
 }
 
 export interface NetworkSendBody {
-  /** Network IDs (or other network addresses), 1 to 100. */
+  /** 1 to 100: Network IDs on the app's own domains, emails, or phones (E.164, or tel:). */
   to: string[];
   text?: string;
   parts?: NetworkTextPart[];

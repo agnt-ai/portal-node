@@ -26,11 +26,16 @@ describe('signupFieldsFrom', () => {
   it('builds timezone, names, purpose and the agent', () => {
     expect(signupFieldsFrom({
       email: 'p@example.com', timezone: ' America/New_York ', firstName: 'Ada', lastName: 'Lovelace', purpose: 'Account',
-      agentUsername: 'Sally', agentDisplayName: 'Sally', agentProduct: 'Muse', agentEmail: 'sally@example.org',
+      agentUsername: 'Sally', agentDisplayName: 'Sally', agentProduct: 'Muse',
     })).toEqual({ fields: {
       timezone: 'America/New_York', firstName: 'Ada', lastName: 'Lovelace', purpose: 'account',
-      agent: { username: 'sally', displayName: 'Sally', product: 'Muse', email: 'sally@example.org' },
+      agent: { username: 'sally', displayName: 'Sally', product: 'Muse' },
     } });
+  });
+
+  it("--agent-email is not available yet: refused before any code is asked for, never sent", () => {
+    const read = signupFieldsFrom({ email: 'p@example.com', purpose: 'network', agentUsername: 'sally', agentEmail: 'sally@example.org' });
+    expect(read).toEqual({ error: expect.stringMatching(/--agent-email isn't available on .* yet: leave it out/) });
   });
 
   it('refuses before any code is requested: a bad purpose, an agent with no purpose, network with no agent, a bad username', () => {
@@ -150,6 +155,20 @@ describe('runLogin against a mocked API', () => {
       email: { value: 'sally@example.org', verification: 'code_sent' } },
   };
 
+  /** POST /portal/auth/agent/verify's answer today: purpose, agnt, connectContactsUrl; no profile, no agnt.email. */
+  const currentSignupResponse = {
+    ok: true,
+    user: { id: 'u1', email: 'person@example.com', firstName: 'Ada', lastName: 'Lovelace', portalOnboarded: false },
+    apiKey: 'ak_live_secret', apiKeyId: 'k1',
+    purpose: 'network',
+    agnt: { address: 'sally@agent.example.test', assistant: 'as1', pair: 'p1', custody: 'custodial' },
+    connectContactsUrl: {
+      google: 'https://portal.example.test/connections?connect=google',
+      microsoft: 'https://portal.example.test/connections?connect=microsoft',
+      apple: 'https://portal.example.test/connections?connect=apple',
+    },
+  };
+
   function mockFetch(response: unknown, status = 201) {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: status < 400, status, headers: new Headers(), text: async () => JSON.stringify(response),
@@ -213,26 +232,31 @@ describe('runLogin against a mocked API', () => {
   });
 
   it('step 2 sends the fields with the code, saves the key, and says what to tell the user, with no onboarding step', async () => {
-    const fetchMock = mockFetch(signupResponse);
+    // The agent sign-up as the server answers it now: no profile step, no agent email, the contacts links for the person.
+    const fetchMock = mockFetch(currentSignupResponse);
     await runLogin({
       email: 'person@example.com', account: 'acme', code: '123456', label: 'test', apiUrl: 'https://api.example.test',
-      purpose: 'network', timezone: 'America/New_York', agentUsername: 'sally', agentEmail: 'sally@example.org',
+      purpose: 'network', timezone: 'America/New_York', agentUsername: 'sally',
     });
+    // One call: the server read the timezone itself, so nothing else is asked of it.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.example.test/portal/auth/agent/verify');
     expect(JSON.parse(init.body)).toEqual({
       email: 'person@example.com', account: 'acme', code: '123456', label: 'test',
-      timezone: 'America/New_York', purpose: 'network', agent: { username: 'sally', email: 'sally@example.org' },
+      timezone: 'America/New_York', purpose: 'network', agent: { username: 'sally' },
     });
     expect(saveProfile).toHaveBeenCalledWith('default', { apiUrl: 'https://api.example.test', apiKey: 'ak_live_secret', apiKeyId: 'k1', account: 'acme' });
     const out = JSON.parse(stdout.join(''));
     expect(out.apiKey).toBeUndefined();
     expect(out).toMatchObject({ status: 'connected', purpose: 'network', savedProfile: 'default', agnt: { address: 'sally@agent.example.test' } });
     expect(out.tellUser).toMatch(/sally@agent\.example\.test/);
-    expect(out.agentEmail).toMatchObject({ value: 'sally@example.org', verification: 'code_sent' });
-    expect(out.agentEmail.next).toMatch(/agent-email verify sally@example.org/);
+    expect(out.agentEmail).toBeUndefined();
+    expect(out.connectContacts.urls).toEqual(currentSignupResponse.connectContactsUrl);
+    expect(out.connectContacts.askUser).toContain('https://portal.example.test/connections?connect=google');
     const text = stderr.join('');
     expect(text).toMatch(/Tell your user:/);
+    expect(text).toMatch(/Ask your user: Want me to be able to reach the people you already know\?/);
     expect(text).not.toMatch(/onboard|working hours|workingHours|Still to fill/i);
   });
 
@@ -243,8 +267,8 @@ describe('runLogin against a mocked API', () => {
     await runLogin({ email: 'person@example.com', account: 'acme', code: '123456', label: 't', apiUrl: 'https://api.example.test',
       purpose: 'network', agentUsername: 'sally' });
     const out = JSON.parse(stdout.join(''));
-    const network = [...out.next, out.agentEmail.next].filter((c: string) => / network /.test(c));
-    expect(network.length).toBeGreaterThanOrEqual(4);
+    const network = [...out.next, ...(out.agentEmail ? [out.agentEmail.next] : [])].filter((c: string) => / network /.test(c));
+    expect(network.length).toBeGreaterThanOrEqual(3);
     for (const c of network) expect(c).toMatch(/ --profile default(\s|$)/);
     // Each one resolves to that profile even under Claude Code, where a bare command would look for "claude-code".
     const { networkProfile } = await import('../utils/agentIdentity.js');

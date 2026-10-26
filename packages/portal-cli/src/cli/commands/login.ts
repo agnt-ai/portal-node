@@ -223,7 +223,8 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   // An app that does not read sign-up fields ignores them: set the timezone it was given anyway. Best effort,
   // and never a step for anyone to take.
   // Only when the account has none: a timezone the person chose is never replaced.
-  if (!result!.profile && fields.timezone) {
+  // A server that took an agent sign-up (it echoes `purpose`) read the timezone itself, and its key may not reach /me.
+  if (!result!.profile && !result!.purpose && fields.timezone) {
     const client = new PortalClient({ apiUrl, apiKey: result!.apiKey });
     const me = await client.me.get().catch(() => undefined) as { timezone?: string | null } | undefined;
     if (me && !me.timezone) await client.me.update({ timezone: fields.timezone } as any).catch(() => undefined);
