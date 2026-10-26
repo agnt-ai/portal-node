@@ -208,7 +208,7 @@ program
   .option('--email <email>', 'Your user\'s email address (required; without it you get the line to ask them)')
   .option('--account <slug>', 'Account slug of the app to sign up/log in under (defaults to the app this CLI was published for)')
   .option('--code <code>', 'The one-time code your user got by email (step 2)')
-  .option('--label <label>', 'Label for the API key this mints, e.g. the agent/device name (defaults to this machine\'s hostname)')
+  .option('--label <label>', 'The API key\'s name, as your person sees it among their keys (default: your product, e.g. "Claude Code")')
   .option('--profile <name>', 'Credentials profile to save under (default: "default")')
   .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
   .option('--purpose <account|network>', 'What the sign-up is for: "account" (a full account) or "network" (the {{accountName}} Network only). Required by apps with the {{accountName}} Network on')

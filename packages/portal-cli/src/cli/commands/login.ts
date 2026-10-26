@@ -26,6 +26,7 @@ import { DEFAULT_API_URL, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDe
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import type { AgentAuthVerifyResult, AgentAuthVerifyFields } from '../../types.js';
 import { networkSignupFields, networkVerifyHint, networkConnected } from './loginNetwork.js';
+import { guessProduct } from '../utils/agentIdentity.js';
 
 export interface LoginOptions {
   email: string;
@@ -201,7 +202,8 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
   }
 
   // Step 2: check the code and finish.
-  const label = opts.label?.trim() || `CLI (${(await import('os')).hostname()})`;
+  // The key's label, where the person sees their keys: the one given, else the product. Never this computer's name.
+  const label = opts.label?.trim() || opts.agentProduct?.trim() || guessProduct();
   let result: AgentAuthVerifyResult;
   try {
     result = await publicRequest<AgentAuthVerifyResult>(apiUrl, '/portal/auth/agent/verify', {

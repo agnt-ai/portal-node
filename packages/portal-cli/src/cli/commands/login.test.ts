@@ -172,6 +172,19 @@ describe('runLogin against a mocked API', () => {
     expect(out.findCode).toMatch(/inbox.*first/);
   });
 
+  it('the key label is the one given, else the product: never this computer\'s name', async () => {
+    const { hostname } = await import('node:os');
+    const fetchMock = mockFetch(plainResponse);
+    vi.stubEnv('CLAUDECODE', '1');
+    await runLogin({ email: 'person@example.com', account: 'acme', code: '1', apiUrl: 'https://api.example.test' });
+    vi.unstubAllEnvs();
+    await runLogin({ email: 'person@example.com', account: 'acme', code: '1', apiUrl: 'https://api.example.test', purpose: 'account', agentUsername: 'sally', agentProduct: 'Muse' });
+    await runLogin({ email: 'person@example.com', account: 'acme', code: '1', apiUrl: 'https://api.example.test', label: 'Work laptop' });
+    const labels = fetchMock.mock.calls.map(([, init]: any) => JSON.parse(init.body).label);
+    expect(labels).toEqual(['Claude Code', 'Muse', 'Work laptop']);
+    for (const [, init] of fetchMock.mock.calls as any) expect(init.body).not.toContain(hostname());
+  });
+
   it('step 2, plain: saves the key, never prints it, says what to tell the user', async () => {
     const fetchMock = mockFetch(plainResponse);
     await runLogin({ email: 'person@example.com', account: 'acme', code: '123456', label: 'test', apiUrl: 'https://api.example.test' });
