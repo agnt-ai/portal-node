@@ -271,8 +271,8 @@ export interface LinkedInImportResult {
   skipped: number;
   /** Connections that shared an email. */
   withEmail: number;
-  /** At most 50; index is the row's position after the header. */
-  errors: Array<{ index: number; error: string }>;
+  /** At most 50; index (0-based) is the connection's position after the header. A batch-level error has no index. */
+  errors: Array<{ index?: number; email?: string; error: string }>;
 }
 
 export type Company = components['schemas']['Company'];
