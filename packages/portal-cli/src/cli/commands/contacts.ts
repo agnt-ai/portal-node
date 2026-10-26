@@ -108,6 +108,7 @@ export async function runContactsImportLinkedIn(file: string, opts: ContactsImpo
     `${result.skipped} skipped; ${result.withEmail} shared an email.`
   );
   for (const e of result.errors ?? []) {
-    console.log(`  row ${e.index}: ${e.error}`);
+    // index is 0-based after the header; a batch-level error (no index) is printed as is.
+    console.log(e.index == null ? `  ${e.error}` : `  connection ${e.index + 1}: ${e.error}`);
   }
 }

@@ -49,12 +49,18 @@ describe('runContactsImportLinkedIn', () => {
   });
 
   it('lists the per-row errors under the summary', async () => {
-    const result = { ...SUMMARY, skipped: 1, errors: [{ index: 3, error: 'no name' }] };
+    const result = {
+      ...SUMMARY, skipped: 1,
+      errors: [{ index: 3, error: 'no name' }, { error: '1 matched contact(s) could not be updated' }]
+    };
     vi.mocked(clientFor).mockResolvedValue({ contacts: { importLinkedIn: vi.fn().mockResolvedValue(result) } } as any);
 
     await runContactsImportLinkedIn(file, {});
 
-    expect(log).toHaveBeenCalledWith('  row 3: no name');
+    // 1-based for people; an error with no index (batch-level) never prints "row undefined".
+    expect(log).toHaveBeenCalledWith('  connection 4: no name');
+    expect(log).toHaveBeenCalledWith('  1 matched contact(s) could not be updated');
+    expect(log.mock.calls.some((c) => String(c[0]).includes('undefined'))).toBe(false);
   });
 
   it('--json prints the raw result', async () => {
