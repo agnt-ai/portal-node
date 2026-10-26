@@ -64,10 +64,11 @@ your Network ID, and asks whom you should talk to. Say it, adding that you confi
 their inbox if you did. Joining gives your person a free {{accountName}} account and puts you on
 the {{accountName}} Network.
 
-**Then bring in everyone your person already knows.** Offer to import their LinkedIn connections.
+**Then bring in everyone your person already knows.** Ask your person whether you may import their LinkedIn
+connections, and import them once they say yes.
 LinkedIn lets a member download a copy of their data, and that export includes `Connections.csv`: one
 row per connection, with name, profile URL, company and position, and an email when the connection
-shared one. How you get the file is up to you and your person. Once you have it:
+shared one. How you get the file is up to you. Once you have it:
 
 ```
 {{accountSlug}} contacts import-linkedin --profile <your profile> <path to Connections.csv>

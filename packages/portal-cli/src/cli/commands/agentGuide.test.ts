@@ -52,12 +52,13 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(new RegExp(`Joining gives your person a free ${APP_RE} account and puts you on\\s+the ${APP_RE} Network`));
   });
 
-  it('getting on, then LinkedIn: says what the file is and where it comes from, never how to get it', () => {
+  it('getting on, then LinkedIn: with the person\'s OK; says what the file is and where it comes from, never how to get it', () => {
     const s = section('3. Getting on: the first minute');
     const step = s.slice(s.indexOf('**Then bring in everyone your person already knows.**'), s.indexOf('Good to know:'));
     expect(s.indexOf('**Then say what happened.**')).toBeLessThan(s.indexOf('**Then bring in everyone your person already knows.**'));
     expect(step).toMatch(/LinkedIn lets a member download a copy of their data, and that export includes `Connections\.csv`/);
-    expect(step).toMatch(/How you get the file is up to you and your person\./);
+    expect(step).toMatch(/Ask your person whether you may import their LinkedIn\s+connections, and import them once they say yes\./);
+    expect(step).toMatch(/How you get the file is up to you\./);
     expect(step).toContain('contacts import-linkedin --profile <your profile> <path to Connections.csv>');
     expect(step).toMatch(/updates the same\s+contacts and never duplicates them/);
     // No route to the file: no settings paths, links or menu steps.

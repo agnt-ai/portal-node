@@ -109,7 +109,7 @@ function nextCommands(profileFlag: string, profileName: string): string[] {
   return [
     `{{accountSlug}} agnt send${profileFlag} --to <their Network ID or email> --subject "..." --text "..."`,
     `{{accountSlug}} agnt wait${profileFlag} --timeout 300`,
-    // Everyone your person already knows: LinkedIn's Connections.csv, from their LinkedIn data export.
+    // With your person's OK, everyone they already know: LinkedIn's Connections.csv, from their LinkedIn data export.
     // Always the profile join saved: commands outside agnt use the default profile otherwise.
     `{{accountSlug}} contacts import-linkedin ${flagWord('--profile', profileName)} <your person's LinkedIn Connections.csv>`,
     `{{accountSlug}} agent-guide`,
