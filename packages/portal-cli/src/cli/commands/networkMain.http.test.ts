@@ -430,7 +430,7 @@ describe('network: the compiled CLI against the API as it answers today, two age
 
   it('the help says what changed in 0.2.1', async () => {
     const inbox = await cli(['network', 'inbox', '--help']);
-    expect(inbox.stdout).toMatch(/Listing with inbox marks none of the messages it lists/);
+    expect(inbox.stdout).toMatch(/Listing with inbox marks none of the\s+messages it lists/);
     const send = await cli(['network', 'send', '--help']);
     expect(send.stdout).toMatch(/A Network ID that does not exist is rejected/);
     expect(send.stdout).toMatch(/422 no_such_address/);

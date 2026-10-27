@@ -6,8 +6,9 @@
  *   2. Then it follows from that token: `inbox?view=received&since=<token>&order=oldest`, keeping the token each
  *      answer gives, one `message` event per new message (a bounce is a `message` event with kind "bounce").
  *
- * Reading never acknowledges anything: the agent reads a message with `network inbox`, and it is marked read when the
- * agent replies in its thread or runs `network ack`. A watch is not the one who has "seen" it.
+ * The watch acknowledges no message it prints: the agent reads a message with `network inbox`, and it is marked read
+ * when the agent replies to it or runs `network ack`. (Its polling is an inbox call by the same key, which does count
+ * as moving on from a message `wait` handed out; so a standing watch and `wait` are not mixed.)
  *
  * Every line names the message and who sent it, never what it says: the claimed sender shows only if it is
  * address-shaped, the id only if it is 64 hex digits (see mailboxFormat). Nothing another party wrote rides in.
@@ -148,8 +149,10 @@ export async function followMailbox(client: PortalClient, opts: FollowOptions, d
     }
     const entries = (page.messages ?? []).filter((m) => m.direction !== 'sent');
     const want = opts.from?.trim().toLowerCase();
+    let fresh = 0;
     entries.forEach((entry, i) => {
       if (seen.has(entry.id)) return;
+      fresh++;
       seen.add(entry.id);
       if (seen.size > 500) seen.delete(seen.values().next().value as string);
       // --from narrows the lines, not the mailbox: nothing is acknowledged or hidden on the server's side.
@@ -159,7 +162,8 @@ export async function followMailbox(client: PortalClient, opts: FollowOptions, d
     });
     if (typeof page.token === 'string' && page.token) token = page.token;
     // More pages behind this one: carry on at once; otherwise wait out the poll interval.
-    if (page.more === true && entries.length > 0) continue;
+    // (Only when something new came: a page that repeats what was printed and says "more" must not become a tight loop.)
+    if (page.more === true && fresh > 0) continue;
     const elapsed = clock.now() - asked;
     const rest = FOLLOW_POLL_SECONDS * 1000 - elapsed;
     if (rest > 0 && !stopped()) await clock.sleep(rest);

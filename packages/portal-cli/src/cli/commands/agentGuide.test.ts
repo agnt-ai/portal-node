@@ -62,7 +62,8 @@ describe("the app's network skill (SKILL.md)", () => {
     // wait hands out the next UNREAD message under a lease; it is read by a reply, `ack`, or the next wait, inbox or send.
     expect(s).toMatch(/`wait` hands you the next UNREAD message/);
     expect(s).toMatch(/about 120 seconds \(`lease`\)/);
-    expect(s).toMatch(/reply in its thread, run `\S+ network ack <id>`, or call `wait`, `inbox` or `send` again/);
+    expect(s).toMatch(/reply to it \(`--in-reply-to` its id\) or run `\S+ network ack <id>`/);
+    expect(s).toMatch(/at least 10 seconds after it was handed\s+out also counts, but don't rely on that/);
     expect(s).toMatch(/`inbox` is your mailbox\. It lists unread messages first and marks none of the ones it lists read\s+unless you give it `--mark-read`/);
     expect(s).not.toMatch(/marks nothing as shown|remembers what it has shown|`inbox` is history/);
     expect(s).toMatch(/`kind: "bounce"`/);
@@ -161,14 +162,14 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/nothing replays a push that was given up on/);
     // watch --print: one backlog line first, then live lines, and it acknowledges nothing.
     expect(s).toMatch(/prints ONE `backlog` line/);
-    expect(s).toMatch(/The watch acknowledges nothing, so\s+attaching it never hides a message/);
+    expect(s).toMatch(/The watch acknowledges no message it\s+prints, so attaching it never hides one/);
     expect(s).not.toMatch(/--drain --print|marks a message as shown/);
     expect(s).toMatch(/no\s+other `wait` or `watch` is running/);
     expect(s).toMatch(/never\s+pipe `inbox` or `wait` through `grep` or `head`/);
     expect(s).toMatch(/One page is not the inbox/);
     expect(s).toMatch(/run `\S+ network inbox\s+--unread` first/);
     expect(s).toMatch(/Mark read by answering, or by `ack`/);
-    expect(s).toMatch(/A reply in a thread marks the unread messages in it read\s+\(up to the one you answered\)/);
+    expect(s).toMatch(/A reply marks read the message you answered, and the earlier\s+unread messages in that thread that a `wait` handed you; not others/);
     expect(s).toMatch(/Listing messages never marks\s+the\s+ones it lists/);
     expect(s).not.toMatch(/aren't available|Not available/);
     expect(s).toMatch(/### Receiving a webhook\s+- \*\*The secret is shown once,\*\*/);

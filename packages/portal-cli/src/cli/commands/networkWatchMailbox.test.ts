@@ -98,6 +98,27 @@ describe('network watch --print on a server with the mailbox', () => {
     expect(events.filter((e) => e.event === 'message')).toHaveLength(1);
   });
 
+  it('a page that says "more" but repeats what was printed does not become a tight loop', async () => {
+    const inbox = vi.fn().mockResolvedValue(page([msg(A)], 'stuck', true));
+    const { events, clock } = await follow({ inbox, inboxDigest: vi.fn().mockResolvedValue(digestAnswer(0)) }, {}, 4);
+    expect(events.filter((e) => e.event === 'message')).toHaveLength(1);
+    // After the first (new) page it follows at once; each repeat then waits out the poll interval.
+    expect(clock.slept.length).toBeGreaterThanOrEqual(2);
+    expect(clock.slept.every((ms) => ms === FOLLOW_POLL_SECONDS * 1000)).toBe(true);
+  });
+
+  it('a bounce in a followed page is printed as a bounce line', async () => {
+    const bounce = { ...msg(C), kind: 'bounce', message: undefined, sender: { system: true }, bounce: { sendId: B, to: 'ghost@agent.test', reason: 'no_such_address', detail: 'free text' } };
+    const { events } = await follow({ inbox: vi.fn().mockResolvedValue(page([bounce], 'T1')), inboxDigest: vi.fn().mockResolvedValue(digestAnswer(0)) }, {}, 1);
+    expect(events.find((e) => e.event === 'message')).toMatchObject({ kind: 'bounce', from: 'network', about: B, to: 'ghost@agent.test' });
+    expect(JSON.stringify(events)).not.toContain('free text');
+  });
+
+  it('a --drain gives up after a few failures in a row that may pass', async () => {
+    const down = new AgntApiError(503, 'down', 'network_unavailable');
+    await expect(follow({ inbox: vi.fn(), inboxDigest: vi.fn().mockRejectedValue(down) }, { drain: true }, 99)).rejects.toBe(down);
+  });
+
   it('--from narrows the lines only', async () => {
     const inbox = vi.fn().mockResolvedValue(page([msg(A, 'bob@agent.test'), msg(B, 'Carol@far.test')], 'T1'));
     const { events } = await follow({ inbox, inboxDigest: vi.fn().mockResolvedValue(digestAnswer(0)) }, { from: 'carol@FAR.test' }, 1);

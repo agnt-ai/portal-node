@@ -38,7 +38,7 @@ describe('inboxQuery', () => {
 
   it.each([
     [{ sent: true, all: true }, /not both/],
-    [{ unread: true, sent: true }, /--unread is about messages you received/],
+    [{ unread: true, sent: true }, /--unread is about messages you received: leave out --sent\.$/],
     [{ order: 'sideways' }, /--order is one of/],
     [{ thread: 'abc' }, /64 hex/],
     [{ thread: A, sent: true }, /both directions/],
@@ -68,10 +68,20 @@ describe('network inbox as a mailbox', () => {
     expect(out.notice).toMatch(/^more pages \(120 match in all\), use --cursor "cur 1" \(with the same other options\)\. Do not treat this page as the whole inbox\./);
     expect(morePagesLine({ more: true, cursor: null, token: 'tok 2' })).toBe('more pages, use --since "tok 2". Do not treat this page as the whole inbox.');
     expect(morePagesLine({ more: true, cursor: null, token: null })).toMatch(/no token/);
+    // On a mailbox page the token is the mailbox head, so --since would skip pages: never advised.
+    expect(morePagesLine({ more: true, cursor: null, token: 'head', contract: 2 })).toMatch(/gave no cursor/);
+    expect(morePagesLine({ more: true, cursor: null, token: 'head', contract: 2 })).not.toMatch(/--since/);
     expect(morePagesLine({ more: false, cursor: 'x' })).toBeUndefined();
     // A server without the mailbox pages by token.
     const legacy = await networkInbox(client({ inbox: vi.fn().mockResolvedValue({ ...legacyPage, more: true }) }), {});
     expect(legacy.notice).toMatch(/use --since "t"/);
+  });
+
+  it('does not tell you to run inbox --unread when you just did', async () => {
+    const withFlag = await networkInbox(client({ inbox: vi.fn().mockResolvedValue(mailboxPage()) }), { unread: true });
+    const without = await networkInbox(client({ inbox: vi.fn().mockResolvedValue(mailboxPage()) }), {});
+    expect(withFlag.notice).not.toMatch(/Read them with/);
+    expect(without.notice).toMatch(/Read them with .*inbox --unread/);
   });
 
   it('shows sent entries with each recipient, and a bounce as a bounce, in --brief too', async () => {
@@ -85,6 +95,10 @@ describe('network inbox as a mailbox', () => {
     expect(s).toMatchObject({ id: B, direction: 'sent', recipients: [{ to: 'ghost@agent.test', status: 'rejected' }, { to: 'bob@agent.test', status: 'delivered' }] });
     expect(b).toMatchObject({ id: C, kind: 'bounce', sender: { system: true }, bounce: { sendId: B, to: 'ghost@agent.test', reason: 'no_such_address' } });
     expect(b.untrusted.text).toEqual([]);
+    // The server's free-text detail stays out of the brief; the full output has it.
+    expect(b.bounce).not.toHaveProperty('detail');
+    const full = await networkInbox(client({ inbox: vi.fn().mockResolvedValue(mailboxPage({ view: 'all', messages: [bounce] })) }), { all: true });
+    expect((full.result as any).messages[0].bounce.detail).toBe('d');
   });
 
   describe('against a server without the mailbox', () => {

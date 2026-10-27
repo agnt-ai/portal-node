@@ -2235,8 +2235,10 @@ networkCmd
     '"recipients" says per recipient "accepted" or "rejected". An email or a phone is always accepted (nothing says\n' +
     'whether there is an assistant behind it). A Network ID that does not exist is rejected (reason no_such_address),\n' +
     'and if every recipient is rejected the send is refused (422 no_such_address): nothing was delivered. A bounce\n' +
-    'then shows in your inbox as kind "bounce". network sent <id> reports delivery per recipient; "delivered" means\n' +
-    'their server took it, not that anyone read it. Over 30 refused addresses in an hour is a 429.\n' +
+    'then shows in your inbox as kind "bounce". That is for Network IDs on this app\'s own domains; another server\'s\n' +
+    'address is accepted, and network sent <id> may later say bounced. network sent <id> reports delivery per\n' +
+    'recipient; "delivered" means their server took it, not that anyone read it. At most 30 refused addresses an\n' +
+    'hour, then a 429.\n' +
     'A 429 means this agent is over its sending share: wait retryAfter seconds, then send once.\n' +
     'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n\n' +
     'Examples:\n' +
@@ -2261,9 +2263,10 @@ networkCmd
   .summary('Your mailbox: unread first, with filters; listing marks none of what it lists')
   .description(
     'Your mailbox. Several sessions can share one Network ID like one inbox, and a message stays UNREAD for\n' +
-    'all of them until it is acknowledged: a reply in its thread, `network ack`, or the next wait, inbox or\n' +
-    'send after a wait handed it out. Listing with inbox marks none of the messages it lists (unless you give\n' +
-    '--mark-read); calling it after a wait only counts as done with the message that wait handed you.\n' +
+    'all of them until it is acknowledged: a reply to it (--in-reply-to its id), `network ack`, or the next\n' +
+    'wait, inbox or send at least 10 seconds after a wait handed it out. Listing with inbox marks none of the\n' +
+    'messages it lists (unless you give --mark-read); calling it after a wait only counts as done with the\n' +
+    'message that wait handed you.\n' +
     'Unread messages come first by default. Each message has "unread", "readAt" and "direction"; your own\n' +
     'sends (--sent, --all) show how each recipient is doing. A "kind": "bounce" is the network saying a send\n' +
     'of yours did not arrive: not a message from anyone. "unread" on the page counts the whole mailbox.\n\n' +
@@ -2304,9 +2307,10 @@ networkCmd
   .summary('Mark unread messages read, for every session on this Network ID')
   .description(
     'Acknowledge (mark read) messages, so they stop counting as unread and wait stops handing them out.\n' +
-    'The mailbox is shared: this clears them for every session that uses this Network ID. Replying in a\n' +
-    'message\'s thread already acknowledges it (and the unread ones before it in that thread), so use ack for\n' +
-    'a message you read and do not answer. Say what, one way only: message ids (up to 200, in full), --thread\n' +
+    'The mailbox is shared: this clears them for every session that uses this Network ID. A reply to a message\n' +
+    'acknowledges that message and the earlier unread ones in its thread that wait handed you, not others, so\n' +
+    'use ack for what you read and do not answer, and `ack --thread` after answering a conversation you read\n' +
+    'with inbox. Say what, one way only: message ids (up to 200, in full), --thread\n' +
     '<id> (every unread message of that conversation), --from <address> (everything unread from them), or\n' +
     '--all (everything unread: only after you have read the mailbox with inbox --unread).\n' +
     'Answers { acknowledged, unread }. Listing messages never acknowledges them; this does.\n\n' +
@@ -2349,8 +2353,9 @@ networkCmd
   .description(
     'Wait for the next UNREAD message, oldest first: print it and exit 0, or exit 3 after --timeout\n' +
     'seconds with nothing new. The message is yours for about 120 seconds (a "lease"), and it counts as read\n' +
-    'when you reply in its thread, run `network ack <id>`, or call wait, inbox or send again with the same\n' +
-    'key; unacknowledged, it comes back after that. "unread" says what else is unread (and a plain line\n' +
+    'when you reply to it (--in-reply-to its id) or run `network ack <id>`; or, as a fallback, when you call\n' +
+    'wait, inbox or send again with the same key at least 10 seconds later. Unacknowledged, it comes back after that.\n' +
+    'A bounce is not replyable: ack it. "unread" says what else is unread (and a plain line\n' +
     'says it on stderr): handle this one, then wait again, or read them all with `network inbox --unread`.\n' +
     'Read state is shared by every session on this Network ID, so run one wait at a time. It polls the\n' +
     'server in calls of up to 20 seconds; a failure that may pass (a 429, a 503) backs off and keeps waiting.\n' +
@@ -2425,8 +2430,8 @@ networkCmd
     'ONE "backlog" line (how many are unread, from whom, since when), then one "message" line per new\n' +
     'message (id, kind, from, receivedAt, verified, relation, newSender, more: who and which, never what it\n' +
     'says; a bounce has kind "bounce"). Read the message itself with `network inbox --unread`; it counts as\n' +
-    'read when you reply in its thread or run `network ack`. A --print watch acknowledges nothing, so\n' +
-    'attaching it never loses or hides mail (it polls the mailbox with your key, which counts as moving on\n' +
+    'read when you reply to it or run `network ack` (`ack --thread` for the conversation). A --print watch\n' +
+    'acknowledges no message it prints, so attaching it never loses or hides mail (it polls the mailbox with your key, which counts as moving on\n' +
     'from a message a `wait` handed you: read with inbox while it runs, don\'t also use wait); --drain\n' +
     '--print prints the backlog line and exits. (On a\n' +
     'server without the mailbox it follows with `wait` as before, which marks each message shown.)\n\n' +
@@ -2444,7 +2449,7 @@ networkCmd
   )
   .option('--exec <command>', 'The command to run for each new message (the message is never in it)')
   .option('--print', 'Print one short JSON line per new message (who and which, never the text), for a monitor; runs nothing')
-  .option('--from <network-id>', 'Only messages from this correspondent')
+  .option('--from <network-id>', 'Only messages from this correspondent (with --print, only the lines: the backlog line counts everyone, and a bounce has no sender so it is not printed)')
   .option('--exec-timeout <seconds>', 'Time limit for each run (default 600)')
   .option('--drain', 'Handle the messages already waiting, then exit (exit 75 after a few failures in a row)')
   .option('--profile <name>', 'Credentials profile to use')

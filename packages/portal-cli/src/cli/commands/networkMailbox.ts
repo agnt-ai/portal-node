@@ -2,11 +2,12 @@
  * {{accountSlug}} network inbox / ack / thread — the Network ID's mailbox.
  *
  * Several sessions can use one Network ID, like one Gmail inbox: a message is UNREAD until it is acknowledged (a reply
- * in its thread, `network ack`, or the next wait, inbox or send of the same key after a wait handed it out), and read
- * state is shared by all of them. `inbox` itself never acknowledges anything, unless asked (`--mark-read`).
+ * to it, `network ack`, or the next wait, inbox or send of the same key at least 10 seconds after a wait handed it
+ * out), and read state is shared by all of them. Listing with `inbox` acknowledges none of the messages it lists,
+ * unless asked (`--mark-read`).
  *
- * A server without the mailbox answers `inbox` with its plain sync stream. That is shown as it comes (the options this
- * CLI sends are ignored there); but a request that depends on a filter (`--unread`, `--from`, `--thread`, `--sent`,
+ * A server without the mailbox answers `inbox` with its plain sync stream, or refuses the options it does not know
+ * (its query check is strict). The plain stream is shown as it comes; but a request that depends on a filter (`--unread`, `--from`, `--thread`, `--sent`,
  * `--all`, `--order`) is refused when the answer shows the server ignored it, since the unfiltered stream would pass
  * for the filtered one.
  */
@@ -57,7 +58,7 @@ export function inboxQuery(opts: NetworkInboxOptions) {
   const limit = wholeNumber('limit', opts.limit);
   if (limit !== undefined && (limit < 1 || limit > 200)) throw new NetworkUsageError('--limit is 1 to 200.');
   if (opts.sent && opts.all) throw new NetworkUsageError('Give --sent (only what you sent) or --all (received and sent), not both.');
-  if (opts.unread && opts.sent) throw new NetworkUsageError('--unread is about messages you received: leave out --sent (--all works, it lists unread received ones among your sends).');
+  if (opts.unread && opts.sent) throw new NetworkUsageError('--unread is about messages you received: leave out --sent.');
   let order: Order | undefined;
   if (opts.order !== undefined) {
     if (!(ORDERS as readonly string[]).includes(opts.order)) throw new NetworkUsageError(`--order is one of ${ORDERS.join(', ')}, not ${opts.order}.`);
@@ -105,9 +106,11 @@ export function morePagesLine(page: Partial<NetworkInboxPage>): string | undefin
   if (typeof page.cursor === 'string' && page.cursor) {
     return `more pages${left}, use --cursor ${JSON.stringify(page.cursor)} (with the same other options). Do not treat this page as the whole inbox.`;
   }
-  if (typeof page.token === 'string' && page.token) {
+  // Only the older stream pages by token; on a mailbox page the token is the mailbox head, and --since would skip pages.
+  if (page.contract === undefined && typeof page.token === 'string' && page.token) {
     return `more pages${left}, use --since ${JSON.stringify(page.token)}. Do not treat this page as the whole inbox.`;
   }
+  if (page.contract !== undefined) return 'more pages, but the server gave no cursor to carry on with. Do not treat this page as the whole inbox.';
   return 'more pages, but the server gave no token to carry on with. Do not treat this page as the whole inbox.';
 }
 
@@ -119,8 +122,8 @@ export function idsToMarkRead(messages: NetworkInboxEntry[]): string[] {
 }
 
 /**
- * One inbox read. A server without the mailbox either ignores the options it does not know and answers its plain
- * stream, or (its query check is strict) refuses them as an unrecognized key: then a plain read has the same
+ * One inbox read. A server without the mailbox refuses the options it does not know as an unrecognized key (or, if
+ * it is lenient, ignores them and answers its plain stream): then a plain read has the same
  * answer, so it is made once, unless the request needs a filter (that is refused below, not answered unfiltered).
  */
 async function readInbox(client: PortalClient, q: ReturnType<typeof inboxQuery>): Promise<NetworkInboxPage> {
@@ -148,7 +151,9 @@ export async function networkInbox(client: PortalClient, opts: NetworkInboxOptio
   const more = morePagesLine(page);
   if (more) notices.push(more);
   const unread = unreadSummaryLine(page.unread);
-  if (unread) notices.push(`mailbox: ${unread}. Read them with \`{{accountSlug}} network inbox --unread\`; a reply in the thread (or \`{{accountSlug}} network ack\`) marks one read.`);
+  if (unread) {
+    notices.push(`mailbox: ${unread}.${opts.unread ? '' : ' Read them with `{{accountSlug}} network inbox --unread`.'} A reply to a message (or \`{{accountSlug}} network ack\`) marks it read.`);
+  }
 
   let result: Record<string, unknown> = opts.brief ? { ...page, messages: page.messages.map((m) => briefEntry(m)) } : { ...page };
   let exitCode: number | undefined;
@@ -259,7 +264,8 @@ export async function networkThread(client: PortalClient, id: string, opts: Netw
   return {
     result: { ...rest, messages: shown, count: messages.length },
     notice: incomplete
-      ? `more pages: this thread has more than ${messages.length} messages. Do not treat this as the whole conversation. Carry on with \`{{accountSlug}} network inbox --thread ${thread} --cursor ${JSON.stringify(last?.cursor ?? '')}\`.`
+      ? `more pages: this thread has more than ${messages.length} messages. Do not treat this as the whole conversation.` +
+        (last?.cursor ? ` Carry on with \`{{accountSlug}} network inbox --thread ${thread} --cursor ${JSON.stringify(last.cursor)}\`.` : '')
       : undefined,
   };
 }

@@ -57,10 +57,10 @@ export class NetworkResource {
   }
 
   /**
-   * Read the mailbox without acknowledging anything. With none of the mailbox options the server answers its plain
+   * Read the mailbox, acknowledging none of the messages listed. With none of the mailbox options the server answers its plain
    * sync stream (history, oldest first); pass `view` and it answers the mailbox: `unread`, `from` and `thread`
    * filter, `order` sorts (unread first by default), and a page with `more` carries a `cursor` for the next.
-   * Pass the previous page's `token` as `since`, unchanged. A server without the mailbox ignores the options it
+   * Pass the previous page's `token` as `since`, unchanged. A server without the mailbox refuses (400 "Unrecognized key") or ignores the options it
    * does not know and answers the plain stream (no `contract` in the answer).
    */
   async inbox(opts: InboxQuery & { after?: never } & NetworkAssistantOption = {}): Promise<NetworkInboxPage> {
@@ -98,7 +98,7 @@ export class NetworkResource {
   /**
    * One long poll (at most 25 seconds; the server answers within about 22) for the next UNREAD message. A mailbox
    * server hands it out under a lease of about 120 seconds (`lease`) and says what else is unread (`unread`); it is
-   * acknowledged when you reply in its thread, `ack` it, or call wait, inbox or send again with the same key;
+   * acknowledged when you reply to it, `ack` it, or call wait, inbox or send again with the same key at least 10 seconds later;
    * otherwise it comes back. An older server remembers what wait has shown instead. Loop on `{status: "timeout"}`.
    * To only look, read `inbox`.
    */

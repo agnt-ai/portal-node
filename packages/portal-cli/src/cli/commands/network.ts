@@ -294,10 +294,12 @@ export function waitNotice(got: NetworkWaitResult): string | undefined {
   }
   if (got.lease) {
     const id = idForLine(got.id);
+    const ack = id ? `run \`{{accountSlug}} network ack ${id}\`` : 'run `{{accountSlug}} network ack`';
+    // A bounce is the network talking: there is nothing to reply to.
+    const how = got.kind === 'bounce' ? ack : `reply to it (--in-reply-to its id) or ${ack}`;
     lines.push(
-      'note: this message stays unread until you reply in its thread' +
-      `${id ? `, run \`{{accountSlug}} network ack ${id}\`` : ', run `{{accountSlug}} network ack`'}, or call wait, inbox or send again; ` +
-      'unacknowledged, it comes back from wait after about 2 minutes.',
+      `note: this message stays unread until you ${how}; calling wait, inbox or send again at least 10 seconds later also counts. ` +
+      'Unacknowledged, it comes back from wait after about 2 minutes.',
     );
   }
   return lines.length ? lines.join('\n') : undefined;
@@ -527,7 +529,11 @@ export function briefEntry(entry: NetworkReadableEntry): NetworkBriefEntry {
   if (entry.readAt !== undefined) brief.readAt = entry.readAt;
   if (entry.newSender !== undefined) brief.newSender = entry.newSender;
   if (entry.recipients !== undefined) brief.recipients = entry.recipients;
-  if (entry.kind === 'bounce' && entry.bounce !== undefined) brief.bounce = entry.bounce;
+  // Which send failed, to whom and the reason code; the free-text `detail` stays in the full output.
+  if (entry.kind === 'bounce' && entry.bounce !== undefined) {
+    const { detail: _detail, ...bounce } = entry.bounce;
+    brief.bounce = bounce;
+  }
   return brief;
 }
 
