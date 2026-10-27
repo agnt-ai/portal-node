@@ -178,12 +178,19 @@ jobs:
           # patch version with the same contents. Instead this run reports that
           # version as its result and publishes nothing: the steps below check
           # for /tmp/already-published.
+          # The same commit is not enough on its own: hydration bakes the
+          # account's name (which its owner can rename) into the package, so
+          # the skip also requires npm's latest description, which embeds
+          # {{accountName}}, to equal the freshly hydrated one. A rename
+          # followed by Publish on the same commit therefore still publishes.
           name: Skip if this commit is already published
           command: |
             cd packages/portal-cli
             PKG_NAME=$(node -p "require('./package.json').name")
             PUBLISHED_HEAD=$(npm view "$PKG_NAME" gitHead 2>/dev/null || echo "")
-            if [ -n "$PUBLISHED_HEAD" ] && [ "$PUBLISHED_HEAD" = "$CIRCLE_SHA1" ]; then
+            PUBLISHED_DESC=$(npm view "$PKG_NAME" description 2>/dev/null || echo "")
+            LOCAL_DESC=$(node -p "require('./package.json').description")
+            if [ -n "$PUBLISHED_HEAD" ] && [ "$PUBLISHED_HEAD" = "$CIRCLE_SHA1" ] && [ "$PUBLISHED_DESC" = "$LOCAL_DESC" ]; then
               PUBLISHED=$(npm view "$PKG_NAME" version)
               npm pkg set version="$PUBLISHED"
               touch /tmp/already-published

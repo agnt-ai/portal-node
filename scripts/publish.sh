@@ -50,7 +50,24 @@ for dir in "$@"; do
   if [ "$decision" != publish ]; then
     reason="${decision#skip:}"
     case "$reason" in
-      *"already on npm") echo "$name: $reason" ;;
+      *"already on npm")
+        # Usually this is a merge that did not bump the version, or a re-run, and there is nothing to say.
+        # But the version numbers are shared with CircleCI's publish-account job, which publishes a patch
+        # past npm's latest: if this commit bumped the version to one that job already published from a
+        # different commit, this commit's contents are not on npm, so warn instead of skipping quietly.
+        # (The skip stays: a published version cannot be replaced.)
+        head="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || true)}"
+        published_head="$(npm view "$name@$version" gitHead --registry "$REGISTRY" 2>/dev/null || true)"
+        # The version in the parent commit's package.json (empty when the parent is not available).
+        prev_version="$( (git show "HEAD^:${dir#./}/package.json" 2>/dev/null || true) |
+          node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => { try { console.log(JSON.parse(s).version ?? ""); } catch {} });')"
+        if [ -n "$head" ] && [ "$published_head" != "$head" ] && [ "$prev_version" != "$version" ]; then
+          latest="$(node -p 'JSON.parse(process.argv[1])["dist-tags"]?.latest ?? "unknown"' "$info")"
+          echo "::warning::$name: $version is already on npm, but it was published from commit ${published_head:-unknown}, not from $head, which bumped the version to $version. CircleCI's automatic patch bumps share these version numbers, so this commit's contents are NOT on npm. Bump the version past npm's latest ($latest) to publish them."
+        else
+          echo "$name: $reason"
+        fi
+        ;;
       *) echo "::warning::$name: $reason, not published" ;;
     esac
     continue

@@ -37,6 +37,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
+          # The parent commit lets scripts/publish.sh tell whether this commit bumped the version.
+          fetch-depth: 2
       # npm trusted publishing needs npm 11.5.1 or later; provenance needs a supported Node.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -44,7 +46,11 @@ jobs:
       - run: npm install --global npm@11.19.0
       - run: node scripts/hydrate.mjs --account-slug openassistant --account-name "OpenAssistant"
       # `npm install`, not `npm ci`: no lockfile can exist before hydration (see .circleci/config.yml).
-      - run: npm install --no-audit --no-fund
+      # --ignore-scripts: with no lockfile the tree resolves fresh on every run, and this job holds
+      # id-token: write, so no dependency lifecycle script may run in it (one could request the OIDC token
+      # that can publish @agnt-sdk/openassistant). The flag covers the install only; npm publish still runs
+      # the package's own prepublishOnly.
+      - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run build
       - run: npm test
       - name: The hydrated package is @agnt-sdk/openassistant
