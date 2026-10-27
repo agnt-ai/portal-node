@@ -29,6 +29,11 @@ export interface DoctorGap {
   fix: string;
 }
 
+export interface DoctorOptions extends NetworkBaseOptions {
+  /** The agent checks for replies from a scheduler (cron, launchd, a scheduled task) instead of a standing process. */
+  scheduled?: boolean;
+}
+
 export interface DoctorDeps {
   processes?: ProcessLister;
   env?: NodeJS.ProcessEnv;
@@ -38,8 +43,13 @@ export interface DoctorDeps {
   profileName?: string;
 }
 
-/** Senders of the unread backlog worth naming: an address-shaped key only, the first few. */
-const ADDRESS_SHAPED = /^[A-Za-z0-9._%+@:-]{1,120}$/;
+/** A sender key worth printing: a Network ID or email shape, or the network's own "network". Never a sentence. */
+const SENDER_SHAPED = /^(?:network|[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,120})$/;
+
+/** The server's sender counts, keeping only keys shaped like an address. */
+function safeSenders(senders: Record<string, number> | undefined): Record<string, number> {
+  return Object.fromEntries(Object.entries(senders ?? {}).filter(([k, v]) => SENDER_SHAPED.test(k) && Number.isFinite(v)));
+}
 
 function ago(iso: string | null | undefined, now: number): string | undefined {
   const t = iso ? Date.parse(iso) : NaN;
@@ -55,27 +65,28 @@ function profileFlag(profile: string | undefined): string {
   return profile ? ` --profile ${profile}` : '';
 }
 
-export function listenerGaps(status: ListenerStatus, flag: string): DoctorGap[] {
-  if (status.listening !== false) return [];
+export function listenerGaps(status: ListenerStatus, flag: string, scheduled = false): DoctorGap[] {
+  if (status.listening !== false || scheduled) return [];
   if (status.webhook.state === 'disabled') {
     const why = status.webhook.reason === 'consecutive_failures' ? ' after too many failed pushes in a row' : '';
     return [{
       id: 'webhook_disabled',
       problem: `Your webhook is switched off${why}, and no standing watch is running here, so nothing will hear a reply.`,
-      fix: `Fix your receiver, then set the URL again (that turns it back on): {{accountSlug}} network webhook set --url ${status.webhook.url ?? '<https address>'}${flag}; or keep {{accountSlug}} network watch --print${flag} running.`,
+      fix: `Fix your receiver, then set the URL again (that turns it back on): {{accountSlug}} network webhook set --url <your https address>${flag}; or keep {{accountSlug}} network watch --print${flag} running.`,
     }];
   }
   return [{
     id: 'no_listener',
     problem: 'Nothing is listening for you: no active webhook and no standing watch running here, so you will not hear a reply to anything you send.',
-    fix: `If you can receive on a public https address: {{accountSlug}} network webhook set --url <https address>${flag}. Otherwise keep {{accountSlug}} network watch --print${flag} running (in Claude Code, attach it to the Monitor tool). A chat-only assistant tells its person and asks them to set one up: {{accountSlug}} agent-guide --for chat-only.`,
+    fix: `If you can receive on a public https address: {{accountSlug}} network webhook set --url <https address>${flag}. Otherwise keep {{accountSlug}} network watch --print${flag} running (in Claude Code, attach it to the Monitor tool). A chat-only assistant tells its person and asks them to set one up: {{accountSlug}} agent-guide --for chat-only. If you check for replies from a scheduler (cron, launchd, a scheduled task) instead, run {{accountSlug}} network doctor --scheduled${flag} to say so.`,
   }];
 }
 
 export function backlogGap(page: NetworkUnreadPage, flag: string, now: number): DoctorGap | undefined {
   const count = page.unread?.count;
   if (typeof count !== 'number' || count <= 0) return undefined;
-  const senders = Object.keys(page.unread?.senders ?? {}).filter((s) => ADDRESS_SHAPED.test(s)).slice(0, 3);
+  const all = safeSenders(page.unread?.senders);
+  const senders = Object.keys(all).slice(0, 3);
   const threads = new Set((page.messages ?? []).map((m) => m.conversation ?? m.id)).size;
   const first = ago(page.unread?.oldest, now);
   const parts = [
@@ -87,18 +98,19 @@ export function backlogGap(page: NetworkUnreadPage, flag: string, now: number): 
   return {
     id: 'unread_backlog',
     problem: `${parts[0]}${parts.length > 1 ? ` (${parts.slice(1).join(', ')})` : ''} still wait for an answer.`,
-    fix: `Read them: {{accountSlug}} network inbox${flag}. Answer each inside its thread: {{accountSlug}} network send${flag} --to <their Network ID> --in-reply-to <the message id> --text "..."; a reply marks the unread messages of that thread, up to the one you answer, as read.`,
+    fix: `Read them: {{accountSlug}} network inbox${flag}. Answer each inside its thread: {{accountSlug}} network send${flag} --to <their Network ID> --in-reply-to <the message id> --text "..."; a reply marks the unread messages of that thread, up to the one you answer, as read. What needs no answer (a bounce, a notice): {{accountSlug}} network watch --drain --print${flag} hands it out and counts it read.`,
   };
 }
 
 export async function networkDoctor(
   client: PortalClient,
-  opts: NetworkBaseOptions & { profile?: string },
+  opts: DoctorOptions,
   deps: DoctorDeps = {},
 ): Promise<{ result: unknown; exitCode?: number; notice?: string }> {
   const env = deps.env ?? process.env;
   const now = (deps.now ?? Date.now)();
-  const flag = profileFlag(opts.profile);
+  // The agent's own profile in every fix, not only an explicit --profile: commands outside `network` use the default one.
+  const flag = profileFlag(opts.profile ?? deps.profileName);
   const gaps: DoctorGap[] = [];
   const checks: Record<string, unknown> = {};
 
@@ -125,14 +137,16 @@ export async function networkDoctor(
 
   // 2. A listener.
   const status = await listenerStatus(client, { assistant: opts.assistant, profile: opts.profile ?? deps.profileName }, { processes: deps.processes });
-  checks.listener = status;
-  gaps.push(...listenerGaps(status, flag));
+  checks.listener = opts.scheduled && status.listening !== true
+    ? { ...status, scheduled: true, note: 'You said a scheduler checks for replies. A reply waits until its next run; nothing here can see that schedule.' }
+    : status;
+  gaps.push(...listenerGaps(status, flag, opts.scheduled));
 
   // 3. The unread backlog. A server with no read state sends no summary: unknown, not none.
   try {
     const page = await client.network.unread({ assistant: opts.assistant });
     if (page.unread && typeof page.unread.count === 'number') {
-      checks.unread = { count: page.unread.count, ...(page.unread.senders ? { senders: page.unread.senders } : {}), oldest: page.unread.oldest ?? null, threads: new Set((page.messages ?? []).map((m) => m.conversation ?? m.id)).size, moreThanShown: !!page.more };
+      checks.unread = { count: page.unread.count, ...(page.unread.senders ? { senders: safeSenders(page.unread.senders) } : {}), oldest: page.unread.oldest ?? null, threads: new Set((page.messages ?? []).map((m) => m.conversation ?? m.id)).size, moreThanShown: !!page.more };
       const gap = backlogGap(page, flag, now);
       if (gap) gaps.push(gap);
     } else {
@@ -159,13 +173,20 @@ export async function networkDoctor(
   }
 
   const ok = gaps.length === 0;
+  const unchecked = [
+    ...(((checks.guide as { state?: string })?.state === 'unchecked') ? ['whether the guide is installed (this harness is not known)'] : []),
+    ...(status.listening === null ? ['whether anything is listening'] : []),
+    ...(opts.scheduled && status.listening !== true ? ['your scheduler (it cannot be seen from here)'] : []),
+    ...(((checks.unread as { state?: string })?.state === 'unknown') ? ['the unread backlog'] : []),
+    ...(((checks.profile as { state?: string })?.state === 'unknown') ? ['the profile'] : []),
+  ];
   const notice = ok
-    ? 'ok: the guide, a listener and your inbox are in order.'
+    ? `ok: no gaps found.${unchecked.length ? ` Could not check: ${unchecked.join('; ')}.` : ''}`
     : gaps.map((g) => `gap: ${g.problem} Fix: ${g.fix}`).join('\n');
   return { result: { ok, gaps, checks }, exitCode: ok ? 0 : 1, notice };
 }
 
-export const runNetworkDoctor = (opts: NetworkBaseOptions & { profile?: string }) =>
+export const runNetworkDoctor = (opts: DoctorOptions) =>
   runNetworkVerb('doctor', async () => {
     const profile = await networkProfile(opts.profile);
     return networkDoctor(await clientFor(profile), opts, { profileName: profile });

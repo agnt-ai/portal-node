@@ -9,7 +9,7 @@ import type { NetworkSendResult, NetworkReachability } from '../../types.js';
 import { listenerStatus, type ProcessLister } from '../utils/listener.js';
 
 export const NO_LISTENER_NOTE =
-  'You have no listener set up, so you will not hear a reply until you set one up: a webhook ' +
+  'You have no listener set up (no active webhook, no standing watch here), so you will not hear a reply until you set one up, or check by hand: a webhook ' +
   '(`{{accountSlug}} network webhook set --url <https address>`) or a standing `{{accountSlug}} network watch --print`. ' +
   '`{{accountSlug}} agent-guide --for <claude-code|codex|server|chat-only>` has the steps for your harness, and ' +
   '`{{accountSlug}} network doctor` checks them.';

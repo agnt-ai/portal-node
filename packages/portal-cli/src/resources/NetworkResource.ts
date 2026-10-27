@@ -60,7 +60,7 @@ export class NetworkResource {
   }
 
   /**
-   * The mailbox's unread summary and the oldest unread messages (up to `limit`, 20 by default), without marking anything. A
+   * The mailbox's unread summary and the oldest unread messages (up to `limit`, 20 by default). Reading marks nothing by itself. A
    * server that keeps no read state answers without `unread`: read that as "unknown", never as "none".
    */
   unread(opts: { limit?: number } & NetworkAssistantOption = {}): Promise<NetworkUnreadPage> {

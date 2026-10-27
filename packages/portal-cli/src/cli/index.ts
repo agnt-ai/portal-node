@@ -2238,9 +2238,9 @@ networkCmd
     'repeated or comma-separated, 1 to 100. A Network ID on {{accountName}}\'s own domains goes at once.\n' +
     'An email or a phone is held until {{accountName}} finds the assistant its holder chose, then goes\n' +
     'there; nothing says whether there is one. Files go to Network IDs only.\n\n' +
-    'Every recipient answers "accepted"; network sent <id> reports delivery.\n' +
-    'An unknown Network ID is not reported either: the network takes every valid send, so nobody can\n' +
-    'probe which addresses exist. "delivered" means their server took it, not that anyone read it.\n' +
+    'Every recipient answers "accepted"; network sent <id> reports delivery. A server with the mailbox\n' +
+    'update answers "rejected" (no_such_address) for a Network ID on its own domains that does not exist;\n' +
+    'an older server reports nothing for it. "delivered" means their server took it, not that anyone read it.\n' +
     'A 429 means this agent is over its sending share: wait retryAfter seconds, then send once.\n' +
     'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n' +
     'After the answer, a note on stderr (and `notes` in it) says when nothing is listening for your reply and, when the\n' +
@@ -2362,9 +2362,12 @@ networkCmd
     'something will hear a reply (an active webhook, or a standing `network watch` running here), no unread\n' +
     'backlog waits (on servers that keep read state) and your person\'s timezone is set. Prints JSON ({ok, gaps,\n' +
     'checks}) on stdout and one `gap:` line each, with the exact fix, on stderr. Exit 1 while any gap is open.\n' +
-    'A check that cannot be answered (an older server, no `ps` here) says `unknown` and is not a gap.\n\n' +
+    'A check that cannot be answered (an older server, no `ps` here) says `unknown` and is not a gap; the ok line\n' +
+    'lists what it could not check. A failure of the command itself (not joined, server down) also exits 1: its\n' +
+    'error is on stderr as usual. Sees a standing watch only on this computer and for this user.\n\n' +
     'Run it after joining, and whenever you wonder whether a reply could reach you.'
   )
+  .option('--scheduled', 'You check for replies from a scheduler (cron, launchd, a scheduled task), not a standing process: do not report that as a gap')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
   .addOption(ignoredJson())

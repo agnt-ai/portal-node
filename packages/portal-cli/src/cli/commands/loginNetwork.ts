@@ -105,5 +105,6 @@ export function networkConnected(result: AgentAuthVerifyResult, profileFlag: str
   // The person's own next step: bring their contacts in (links they open themselves).
   const connect = connectContactsStep(result.connectContactsUrl);
   if (connect) lines.push(`Ask your user: ${connect.askUser}`);
+  lines.push(firstCardFrom(result.nextSteps).text);
   return { tellUser, next, lines, extra: { firstCard: firstCardFrom(result.nextSteps).text, conversation: CONVERSATION, stayReachable: STAY_REACHABLE, ...(connect ? { connectContacts: connect } : {}) } };
 }
