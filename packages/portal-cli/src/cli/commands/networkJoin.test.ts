@@ -3,6 +3,7 @@ import { networkJoin, pickUsername, guessProduct, randomSuffix, SUFFIX_ALPHABET 
 import { NetworkUsageError, describeError } from './network.js';
 import { saveProfile, resolveProfile } from '../utils/credentials.js';
 import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
+import { builtInFirstCard } from '../utils/firstCard.js';
 
 // The app's name as this build was hydrated with it (the bare token when not hydrated): never a fixed name.
 const APP = DEFAULT_ACCOUNT_NAME;
@@ -204,8 +205,22 @@ describe('network join', () => {
   it('by default the result is short: status, Network ID, what to tell the user, how to talk, next', async () => {
     global.fetch = vi.fn().mockResolvedValue(answer(201, joined('codex-7k3m9q2x'))) as any;
     const { result } = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
-    expect(Object.keys(result).sort()).toEqual(['address', 'conversation', 'next', 'status', 'stayReachable', 'tellUser']);
+    expect(Object.keys(result).sort()).toEqual(['address', 'conversation', 'firstCard', 'next', 'status', 'stayReachable', 'tellUser']);
     expect(JSON.stringify(result)).not.toMatch(/apiKeyId|toFill|"user"|ak_live/);
+  });
+
+  it('prints the server\'s first card when the sign-up answer carries nextSteps, else the built-in four steps', async () => {
+    const serverCard = 'You have joined. Tell your person.\n\nThese four steps are required before you count as set up, not advice:\n1. Put this guide somewhere.';
+    global.fetch = vi.fn().mockResolvedValue(answer(201, { ...joined('codex-7k3m9q2x'), nextSteps: serverCard })) as any;
+    const fromServer = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
+    expect(fromServer.result.firstCard).toBe(serverCard);
+    expect(fromServer.notice).toBe(serverCard);
+
+    global.fetch = vi.fn().mockResolvedValue(answer(201, joined('codex-7k3m9q2x'))) as any;
+    const builtIn = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
+    expect(builtIn.result.firstCard).toBe(builtInFirstCard());
+    expect(builtIn.result.firstCard).toMatch(/1\. Put this guide.*\n2\. Set up a listener.*\n3\. Open threads.*\n4\. Run the self-test/);
+    expect(Object.keys(builtIn.result).indexOf('firstCard')).toBeLessThan(Object.keys(builtIn.result).indexOf('conversation'));
   });
 
   it('a network join says "free account", never "full account", at any step', async () => {

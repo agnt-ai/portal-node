@@ -17,6 +17,8 @@ import { clientFor } from '../utils/api.js';
 import { networkProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
+import { listenerStatus, reachabilityOf } from '../utils/listener.js';
+import { sendNotes } from './networkHints.js';
 import type { PortalClient } from '../../index.js';
 import type {
   NetworkConnectContactsUrl, NetworkInboxEntry, NetworkSendBody, NetworkUntrusted, NetworkWaitResult, NetworkSender,
@@ -312,7 +314,9 @@ export async function networkWhoami(client: PortalClient, opts: NetworkBaseOptio
   const me = await client.network.whoami({ assistant: opts.assistant });
   // The API's answer, plus the line to tell the user.
   const connect = connectContactsStep(me.connectContactsUrl);
-  return { result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.`, stayReachable: STAY_REACHABLE, ...(connect ? { connectContacts: connect } : {}) } };
+  // Whether anything will hear a reply (a webhook, a standing watch here). Left out when it could not be told.
+  const reachability = await listenerStatus(client, { assistant: opts.assistant, profile: opts.profile }).then(reachabilityOf, () => undefined);
+  return { result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.`, stayReachable: STAY_REACHABLE, ...(reachability ? { reachability } : {}), ...(connect ? { connectContacts: connect } : {}) } };
 }
 
 /**
@@ -716,8 +720,12 @@ export const runNetworkWhoami = (opts: NetworkBaseOptions) =>
 export const runNetworkSend = (opts: NetworkSendOptions) =>
   runNetworkVerb('send', async () => {
     const body = sendBodyFrom(opts); // usage errors before reading credentials
-    const client = await clientFor(await networkProfile(opts.profile));
-    return { result: await client.network.send(body) };
+    const profile = await networkProfile(opts.profile);
+    const client = await clientFor(profile);
+    const result = await client.network.send(body);
+    // Said beside the answer, never instead of it: whether you will hear a reply, and whether they are listening.
+    const notes = await sendNotes(client, result, { assistant: opts.assistant, profile });
+    return { result: notes.length ? { ...result, notes } : result, ...(notes.length ? { notice: notes.join('\n') } : {}) };
   });
 export const runNetworkInbox = (opts: NetworkInboxOptions) =>
   runNetworkVerb('inbox', async () => {
