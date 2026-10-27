@@ -740,6 +740,12 @@ const agentEmailVerb = (profile: string | undefined, fn: (client: PortalClient) 
     if (!AGENT_EMAIL_AVAILABLE) throw agentEmailNotYet();
     return withClient(profile, fn)();
   });
+/** `network agent-email` with no subcommand: the same answer as its subcommands while the server has none. */
+export const runNetworkAgentEmail = (_opts: NetworkBaseOptions) =>
+  runNetworkVerb('agent-email', async () => {
+    if (!AGENT_EMAIL_AVAILABLE) throw agentEmailNotYet();
+    throw new NetworkUsageError('Give a subcommand: network agent-email start, verify or remove.');
+  });
 export const runNetworkAgentEmailStart = (email: string, opts: NetworkBaseOptions) =>
   agentEmailVerb(opts.profile, (c) => networkAgentEmailStart(c, email));
 export const runNetworkAgentEmailVerify = (email: string, code: string, opts: NetworkBaseOptions) =>

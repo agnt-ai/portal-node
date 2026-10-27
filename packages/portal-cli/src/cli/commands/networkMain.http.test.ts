@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -307,6 +307,96 @@ describe('network: the compiled CLI against the API as it answers today, two age
     }
     expect(fake.requests).toEqual([]);
   }, 30_000);
+
+  it('every network verb accepts --json and ignores it: the same JSON, never "unknown option"', async () => {
+    const alice = await joinAs('alice', 'alice-agent', 'alice@example.com');
+    const bob = await joinAs('bob', 'bob-agent', 'bob@example.com');
+
+    // The same answer with and without --json.
+    const who = await cli(['network', 'whoami', '--profile', 'bob']);
+    const whoJson = await cli(['network', 'whoami', '--profile', 'bob', '--json']);
+    expect(whoJson.code, whoJson.stderr).toBe(0);
+    expect(whoJson.json).toEqual(who.json);
+
+    const send = await cli(['network', 'send', '--json', '--profile', 'bob', '--to', alice.address, '--subject', 'Hi', '--text', 'Hello']);
+    expect(send.code, send.stderr).toBe(0);
+    expect(send.json.recipients).toEqual([{ to: alice.address, status: 'accepted' }]);
+    const got = await cli(['network', 'wait', '--profile', 'alice', '--timeout', '30', '--json']);
+    expect(got.code, got.stderr).toBe(0);
+    expect(got.json).toMatchObject({ status: 'message', id: send.json.id });
+    const inbox = await cli(['network', 'inbox', '--profile', 'alice', '--json']);
+    expect(inbox.code, inbox.stderr).toBe(0);
+    expect(inbox.json.messages).toHaveLength(1);
+    // --json is never sent to the server.
+    for (const r of fake.requests) expect(r.query.has('json'), r.path).toBe(false);
+    expect(fake.requests.find((r) => r.path === '/agnt/send')!.body).not.toHaveProperty('json');
+
+    const msgFile = join(home, 'msg.json');
+    await writeFile(msgFile, got.stdout);
+    // Every other verb: whatever it answers (this fake has no route for some), it is JSON, never a refused option.
+    for (const args of [
+      ['network', 'sent', '--profile', 'bob', '--json'],
+      ['network', 'sent', send.json.id, '--profile', 'bob', '--json'],
+      ['network', 'verify', msgFile, '--profile', 'alice', '--json'],
+      ['network', 'block', 'someone@example.net', '--profile', 'alice', '--json'],
+      ['network', 'blocks', '--profile', 'alice', '--json'],
+      ['network', 'unblock', 'someone@example.net', '--profile', 'alice', '--json'],
+      ['network', 'watch', '--drain', '--exec', 'true', '--profile', 'alice', '--json'],
+      ['network', 'webhook', 'show', '--json'], ['network', 'webhook', 'set', '--url', 'https://agent.example.com/push', '--json'],
+      ['network', 'webhook', 'remove', '--json'], ['network', 'webhook', 'test', '--json'],
+      ['network', 'agent-email', '--json'], ['network', 'agent-email', 'start', 'me@example.org', '--json'],
+      ['network', 'agent-email', 'verify', 'me@example.org', '123456', '--json'], ['network', 'agent-email', 'remove', 'me@example.org', '--json'],
+      ['network', 'leave', '--profile', 'bob', '--json'],
+    ]) {
+      const out = await cli(args);
+      const label = args.join(' ');
+      expect(out.stderr, label).not.toMatch(/unknown option/);
+      if (out.code === 0) {
+        // One JSON result, or (watch) one JSON line per event.
+        if (out.json === undefined) for (const line of out.stdout.trim().split('\n')) expect(() => JSON.parse(line), label).not.toThrow();
+      } else {
+        expect(errorOf(out.stderr), label).toMatchObject({ code: expect.any(String) });
+      }
+    }
+    // leave without --confirm still only asks.
+    const ask = await cli(['network', 'leave', '--profile', 'bob', '--json']);
+    expect(ask.code).toBe(2);
+    expect(errorOf(ask.stderr).askUser).toContain(bob.address);
+  }, 90_000);
+
+  it('network agent-email on its own answers "not available yet", with or without --profile', async () => {
+    for (const args of [['network', 'agent-email'], ['network', 'agent-email', '--profile', 'alice'], ['network', 'agent-email', '--profile', 'alice', '--json']]) {
+      const out = await cli(args);
+      expect(out.code, args.join(' ')).toBe(1);
+      expect(out.stdout).toBe('');
+      const error = errorOf(out.stderr);
+      expect(error).toMatchObject({ code: 'not_available_yet', retryable: false });
+      expect(error.message).toMatch(/agent-email` isn't available on .* yet/);
+      expect(error.hint).toMatch(/Nothing was sent or changed.*don't retry/);
+    }
+    // A subcommand still takes its own --profile after its arguments.
+    const sub = await cli(['network', 'agent-email', 'start', 'me@example.org', '--profile', 'alice']);
+    expect(sub.code).toBe(1);
+    expect(errorOf(sub.stderr)).toMatchObject({ code: 'not_available_yet' });
+    expect(fake.requests).toEqual([]);
+  }, 30_000);
+
+  it('the help says what changed in 0.2.1', async () => {
+    const inbox = await cli(['network', 'inbox', '--help']);
+    expect(inbox.stdout).toMatch(/Your own sends are in it too \(sender\.relation "self"\); wait never shows them\./);
+    const send = await cli(['network', 'send', '--help']);
+    expect(send.stdout).toMatch(/An unknown Network ID is not reported/);
+    expect(send.stdout).toMatch(/nobody can\s+probe which addresses exist/);
+    expect(send.stdout).toMatch(/"delivered" means their server took it, not that anyone read it/);
+    // Examples stay on the app's own domain: another domain's address is an email, and is held.
+    expect(send.stdout).toMatch(/--to <name>@<app domain>/);
+    expect(send.stdout).not.toMatch(/example\.(net|org)/);
+    const verify = await cli(['network', 'verify', '--help']);
+    expect(verify.stdout).toMatch(/network wait > msg\.json && \S+ network verify msg\.json/);
+    expect(verify.stdout).toMatch(/one inbox entry/);
+    // --json is accepted but never advertised.
+    for (const out of [inbox, send, verify]) expect(out.stdout).not.toMatch(/--json/);
+  });
 
   it('a route the server does not have is "not available yet", never "the network is off"', async () => {
     await joinAs('alice', 'alice-agent', 'alice@example.com');

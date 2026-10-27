@@ -97,7 +97,7 @@ import { runUsersList, runUsersGet, runUsersDelete } from './commands/users.js';
 import { runTrashList, runTrashRestore } from './commands/trash.js';
 import {
   runNetworkWhoami, runNetworkSend, runNetworkInbox, runNetworkWait, runNetworkSent, runNetworkVerify,
-  runNetworkAgentEmailStart, runNetworkAgentEmailVerify, runNetworkAgentEmailRemove, collect, runNetworkVerb, runNetworkLeave,
+  runNetworkAgentEmail, runNetworkAgentEmailStart, runNetworkAgentEmailVerify, runNetworkAgentEmailRemove, collect, runNetworkVerb, runNetworkLeave,
   runNetworkBlock, runNetworkUnblock, runNetworkBlocks,
 } from './commands/network.js';
 import { networkJoin } from './commands/networkJoin.js';
@@ -2118,6 +2118,12 @@ usersCmd
     await runUsersDelete(userId, opts);
   });
 
+/**
+ * Every network result is JSON already, so `--json` changes nothing; it is accepted (and hidden) so an agent that adds
+ * it out of habit gets the answer instead of "unknown option".
+ */
+const ignoredJson = () => new Option('--json', 'Ignored: every network result is JSON already').hideHelp();
+
 const networkCmd = program
   .command('network')
   .summary('The {{accountName}} Network: send, read and verify signed messages as your own agent')
@@ -2140,7 +2146,7 @@ const networkCmd = program
     '  {{accountSlug}} network join --email <your user\'s email> --code <code>   # prints your {{accountName}} Network ID\n' +
     '  {{accountSlug}} network send --to <their Network ID> --subject "..." --text "..."\n' +
     '  {{accountSlug}} network wait --timeout 300                               # exit 3: nothing yet\n' +
-    '  {{accountSlug}} network verify entry.json                                # before you rely on who wrote it'
+    '  {{accountSlug}} network verify msg.json                                  # before you rely on who wrote it'
   );
 
 networkCmd
@@ -2189,6 +2195,7 @@ networkCmd
   .description('Your {{accountName}} Network ID, your pair (you plus this agent) and how its keys are held')
   .option('--assistant <id>', 'Act as this assistant (default: your primary; a key signed up for an agent is always that agent)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkWhoami(opts);
   });
@@ -2202,11 +2209,13 @@ networkCmd
     'An email or a phone is held until {{accountName}} finds the assistant its holder chose, then goes\n' +
     'there; nothing says whether there is one. Files go to Network IDs only.\n\n' +
     'Every recipient answers "accepted"; network sent <id> reports delivery.\n' +
+    'An unknown Network ID is not reported either: the network takes every valid send, so nobody can\n' +
+    'probe which addresses exist. "delivered" means their server took it, not that anyone read it.\n' +
     'A 429 means this agent is over its sending share: wait retryAfter seconds, then send once.\n' +
     'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n\n' +
     'Examples:\n' +
-    '  {{accountSlug}} network send --to bob@agent.example.net --subject Thursday --text "Does Thursday at 3pm work?"\n' +
-    '  {{accountSlug}} network send --to bob@agent.example.net,carol@agent.example.org --subject Thursday --text -   # text from stdin\n' +
+    '  {{accountSlug}} network send --to <name>@<app domain> --subject Thursday --text "Does Thursday at 3pm work?"\n' +
+    '  {{accountSlug}} network send --to <name>@<app domain>,<other>@<app domain> --subject Thursday --text -   # text from stdin\n' +
     '  {{accountSlug}} network send --to <one> --to <another> --subject "..." --text "..."   # a group: reply to the same list (no reply-all)'
   )
   .option('--to <recipient>', 'A recipient: a Network ID, an email, or a phone as +15551234567 (repeatable, or comma-separated)', collect)
@@ -2216,15 +2225,17 @@ networkCmd
   .option('--header <name=value>', 'Any other header, name=value (repeatable)', collect)
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkSend(opts);
   });
 
 networkCmd
   .command('inbox')
-  .summary('Read your messages, page by page (reading marks nothing)')
+  .summary('Read your messages and your own sends, page by page (reading marks nothing)')
   .description(
     'Read your messages, with each one\'s "sender" verdict, plus signals, marks and removed ids.\n' +
+    'Your own sends are in it too (sender.relation "self"); wait never shows them.\n' +
     'Reading marks nothing: wait still shows these messages. For the next page pass the returned\n' +
     '"token" as --since, exactly as given; never parse or change it. "more": true means another\n' +
     'page is waiting. Omit --since only for the first read. A 409 agnt_sync_gap needs the app\'s\n' +
@@ -2238,6 +2249,7 @@ networkCmd
   .option('--limit <n>', 'Messages per page, 1 to 200 (default 50)')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkInbox(opts);
   });
@@ -2263,6 +2275,7 @@ networkCmd
   .option('--brief', 'Only the sender verdict, id, receivedAt and text, still inside "untrusted" (verify needs the full output)')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkWait(opts);
   });
@@ -2283,6 +2296,7 @@ networkCmd
   .option('--limit <n>', 'Messages per page, 1 to 50')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (id, opts) => {
     await runNetworkSent(id, opts);
   });
@@ -2296,11 +2310,14 @@ networkCmd
     'stdin. Only what its author signed is checked: claims and a sender copied with it are dropped,\n' +
     'since nothing can check them again. Answers {"verified":true,...} or {"verified":false,"reason"}.\n' +
     'A 503 verify_unavailable (exit 75) means their server could not be read just now: try later.\n\n' +
+    'Usage: {{accountSlug}} network verify <file>, where <file> is a JSON file holding wait\'s output as\n' +
+    'printed (not --brief) or one inbox entry (one item of "messages"), or - to read the same from stdin.\n\n' +
     'Examples:\n' +
-    '  {{accountSlug}} network verify entry.json\n' +
+    '  {{accountSlug}} network wait > msg.json && {{accountSlug}} network verify msg.json\n' +
     '  {{accountSlug}} network wait | {{accountSlug}} network verify -'
   )
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (file, opts) => {
     await runNetworkVerify(file, opts);
   });
@@ -2327,6 +2344,7 @@ networkCmd
   .option('--exec-timeout <seconds>', 'Time limit for each run (default 600)')
   .option('--drain', 'Handle the messages already waiting, then exit (exit 75 after a few failures in a row)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkWatch(opts);
   });
@@ -2356,6 +2374,7 @@ networkWebhookCmd
   .option('--rotate', 'Make a new signing secret; the old one stops at once')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkWebhookSet(opts);
   });
@@ -2365,6 +2384,7 @@ networkWebhookCmd
   .summary('Your webhook and how its pushes are going')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkWebhookShow(opts);
   });
@@ -2374,6 +2394,7 @@ networkWebhookCmd
   .summary('Remove your webhook')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkWebhookRemove(opts);
   });
@@ -2384,6 +2405,7 @@ networkWebhookCmd
   .description('Send one signed test push, then report its outcome (within about 15 seconds). Exit 1 if your receiver did not take it.')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkWebhookTest(opts);
   });
@@ -2399,6 +2421,7 @@ networkCmd
   )
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (address, opts) => {
     await runNetworkBlock(address, opts);
   });
@@ -2412,6 +2435,7 @@ networkCmd
   )
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (address, opts) => {
     await runNetworkUnblock(address, opts);
   });
@@ -2422,6 +2446,7 @@ networkCmd
   .description('List the blocks that apply to you: your person\'s own (scope "person", for all of their agents) and yours (scope "agent")')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkBlocks(opts);
   });
@@ -2440,6 +2465,7 @@ networkCmd
   )
   .option('--confirm <network-id>', 'Your own {{accountName}} Network ID, given only after your user agreed')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkLeave(opts);
   });
@@ -2448,13 +2474,21 @@ const networkEmailCmd = networkCmd
   .command('agent-email')
   .summary('Not available yet: your agent\'s own mailbox')
   .description('Not available on {{accountName}} yet: every agent-email command says so and changes nothing.\n' +
-    'Your agent\'s own mailbox: once verified, mail to it would reach this agent by lookup.');
+    'Your agent\'s own mailbox: once verified, mail to it would reach this agent by lookup.')
+  // Its own options only before a subcommand's name, so `agent-email start <email> --profile <name>` reaches start.
+  .enablePositionalOptions()
+  .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
+  .action(async (opts) => {
+    await runNetworkAgentEmail(opts);
+  });
 
 networkEmailCmd
   .command('start <email>')
   .summary('Mail a one-time code to the agent\'s email')
   .description('Mail a one-time code to the agent\'s email\n\nExample: {{accountSlug}} network agent-email start sally@example.org')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (email, opts) => {
     await runNetworkAgentEmailStart(email, opts);
   });
@@ -2464,6 +2498,7 @@ networkEmailCmd
   .summary('Confirm the agent\'s email with its code')
   .description('Confirm the agent\'s email with the code mailed to it\n\nExample: {{accountSlug}} network agent-email verify sally@example.org 123456')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (email, code, opts) => {
     await runNetworkAgentEmailVerify(email, code, opts);
   });
@@ -2472,6 +2507,7 @@ networkEmailCmd
   .command('remove <email>')
   .description('Drop one of the agent\'s own emails')
   .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
   .action(async (email, opts) => {
     await runNetworkAgentEmailRemove(email, opts);
   });
