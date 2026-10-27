@@ -1,0 +1,58 @@
+# Every push to main: hydrate the template as the OpenAssistant account, build and test it, then publish
+# @agnt-sdk/openassistant if packages/portal-cli/package.json's version is not on npm yet and is newer
+# than npm's latest (scripts/publish.sh). A merge that bumps the version publishes it; a merge that does
+# not publishes nothing, so the workflow is safe to re-run.
+#
+# Only OpenAssistant is published here. Every other account's package (and OpenAssistant's too, when
+# someone clicks Publish in its console CLI tab or approves release_builds) is still published by the
+# CircleCI publish-account pipeline that agnt-backend's portalCliPublishController triggers. That job
+# skips publishing when npm's latest was already built from the same commit (.circleci/config.yml,
+# "Skip if this commit is already published"), so a version this workflow published is not published
+# again as a patch bump with the same contents; and this workflow never publishes a version that is not
+# newer than latest, so it never undoes one the CircleCI job published.
+#
+# Publishing authenticates by npm trusted publishing (OIDC), the same as agnt-ai/simon-protocol's publish
+# workflow: no token, and npm shows the package as published by GitHub Actions, with provenance.
+# @agnt-sdk/openassistant needs this repository and this workflow file (publish.yml) added as a trusted
+# publisher on npmjs.com (package Settings, Trusted publishing) before its first automatic publish.
+name: publish
+on:
+  push:
+    branches: [main]
+  # A re-run after a failure, e.g. once the trusted publisher has been added. Publishes only from main.
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+          # The parent commit lets scripts/publish.sh tell whether this commit bumped the version.
+          fetch-depth: 2
+      # npm trusted publishing needs npm 11.5.1 or later; provenance needs a supported Node.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.x
+      - run: npm install --global npm@11.19.0
+      - run: node scripts/hydrate.mjs --account-slug openassistant --account-name "OpenAssistant"
+      # `npm install`, not `npm ci`: no lockfile can exist before hydration (see .circleci/config.yml).
+      # --ignore-scripts: with no lockfile the tree resolves fresh on every run, and this job holds
+      # id-token: write, so no dependency lifecycle script may run in it (one could request the OIDC token
+      # that can publish @agnt-sdk/openassistant). The flag covers the install only; npm publish still runs
+      # the package's own prepublishOnly.
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm run build
+      - run: npm test
+      - name: The hydrated package is @agnt-sdk/openassistant
+        run: test "$(node -p 'require("./packages/portal-cli/package.json").name')" = "@agnt-sdk/openassistant"
+      - run: scripts/publish.sh packages/portal-cli
