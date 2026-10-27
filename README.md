@@ -20,6 +20,8 @@ npm publish -w packages/portal-cli
 
 In production this is driven by a CircleCI pipeline triggered from that account's own "CLI" tab in AGNT's admin console — the account owner clicks a button, the pipeline hydrates + builds + publishes, and the resulting package/binary carries that account's name.
 
+`@agnt-sdk/openassistant` is also published automatically: every merge to main that bumps `packages/portal-cli/package.json`'s version publishes it from GitHub Actions (`.github/workflows/publish.yml`), by npm trusted publishing, with provenance. The CircleCI job skips a commit npm's latest was already published from, so the two never publish the same commit twice.
+
 ## Using a published CLI (end users)
 
 Once published, an end user's own agent authenticates and drives their account entirely via API — no browser, no session:

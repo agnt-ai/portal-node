@@ -170,8 +170,29 @@ jobs:
           name: Install
           command: npm install
       - run:
+          # npm records the commit a version was published from as its gitHead.
+          # When npm's latest was already published from this very commit
+          # (e.g. by .github/workflows/publish.yml, which publishes
+          # @agnt-sdk/openassistant on every version-bump merge to main, or by
+          # an earlier run of this job), publishing again would only add a
+          # patch version with the same contents. Instead this run reports that
+          # version as its result and publishes nothing: the steps below check
+          # for /tmp/already-published.
+          name: Skip if this commit is already published
+          command: |
+            cd packages/portal-cli
+            PKG_NAME=$(node -p "require('./package.json').name")
+            PUBLISHED_HEAD=$(npm view "$PKG_NAME" gitHead 2>/dev/null || echo "")
+            if [ -n "$PUBLISHED_HEAD" ] && [ "$PUBLISHED_HEAD" = "$CIRCLE_SHA1" ]; then
+              PUBLISHED=$(npm view "$PKG_NAME" version)
+              npm pkg set version="$PUBLISHED"
+              touch /tmp/already-published
+              echo "$PKG_NAME@$PUBLISHED was already published from $CIRCLE_SHA1; not publishing again"
+            fi
+      - run:
           name: Bump version past whatever's currently published
           command: |
+            if [ -f /tmp/already-published ]; then exit 0; fi
             cd packages/portal-cli
             PKG_NAME=$(node -p "require('./package.json').name")
             CURRENT=$(npm view "$PKG_NAME" version 2>/dev/null || echo "")
@@ -193,10 +214,13 @@ jobs:
             "
       - run:
           name: Build
-          command: npm run build
+          command: |
+            if [ -f /tmp/already-published ]; then exit 0; fi
+            npm run build
       - run:
           name: Publish to npm
           command: |
+            if [ -f /tmp/already-published ]; then exit 0; fi
             echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
             cd packages/portal-cli
             npm publish
