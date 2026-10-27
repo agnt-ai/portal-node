@@ -259,11 +259,28 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
   return { body: { code: 'client_error', message, status: null, retryable: false }, exitCode: 1 };
 }
 
+/**
+ * One line pointing a joined agent at how to hear replies. A message only reaches an agent while something is
+ * listening, and an agent that ends its turn "waiting" with nothing set up never sees the answer. A push comes first.
+ */
+export const STAY_REACHABLE =
+  'A message only reaches you while something is listening, so never end a turn "waiting for a reply" with nothing set up. ' +
+  'If you can receive on an https address: `{{accountSlug}} network webhook set --url <https address>`. ' +
+  'Otherwise keep `{{accountSlug}} network watch --print` running (in Claude Code, attach it to the Monitor tool). ' +
+  'More: `{{accountSlug}} agent-guide`, "Stay reachable".';
+
+/** Said after a wait that has more behind it: the rest are not lost, but a wait shows one at a time. */
+export const MORE_WAITING =
+  'note: more messages are waiting after this one. Handle it, then run `{{accountSlug}} network wait --timeout 0` again until it exits 3 ' +
+  '(or read them all with `{{accountSlug}} network inbox`). Do not pipe wait through grep or head: that hides this.';
+
 /** Run one verb: its result as JSON on stdout, or its error as JSON on stderr with the matching exit status. */
-export async function runNetworkVerb(verb: string, run: () => Promise<{ result: unknown; exitCode?: number }>): Promise<void> {
+export async function runNetworkVerb(verb: string, run: () => Promise<{ result: unknown; exitCode?: number; notice?: string }>): Promise<void> {
   try {
-    const { result, exitCode } = await run();
+    const { result, exitCode, notice } = await run();
     process.stdout.write(`${JSON.stringify(result ?? null, null, 2)}\n`);
+    // A plain line on stderr, so it is seen where the JSON on stdout is not read (or is cut by a pipe).
+    if (notice) process.stderr.write(`${notice}\n`);
     if (exitCode) process.exitCode = exitCode;
   } catch (err) {
     const { body, exitCode } = describeError(verb, err);
@@ -295,7 +312,7 @@ export async function networkWhoami(client: PortalClient, opts: NetworkBaseOptio
   const me = await client.network.whoami({ assistant: opts.assistant });
   // The API's answer, plus the line to tell the user.
   const connect = connectContactsStep(me.connectContactsUrl);
-  return { result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.`, ...(connect ? { connectContacts: connect } : {}) } };
+  return { result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.`, stayReachable: STAY_REACHABLE, ...(connect ? { connectContacts: connect } : {}) } };
 }
 
 /**
@@ -537,8 +554,9 @@ export async function networkWait(client: PortalClient, opts: NetworkWaitOptions
       continue;
     }
     if (got.status === 'message') {
-      if (!opts.brief) return { result: got };
-      return { result: { status: 'message', more: got.more, ...briefEntry(got) } };
+      const notice = got.more ? MORE_WAITING : undefined;
+      if (!opts.brief) return { result: got, notice };
+      return { result: { status: 'message', more: got.more, ...briefEntry(got) }, notice };
     }
     if (clock.now() >= deadline) break;
     // A call that came back at once must not turn into a tight loop.

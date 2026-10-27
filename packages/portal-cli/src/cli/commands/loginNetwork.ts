@@ -9,7 +9,7 @@ import type {
 } from '../../types.js';
 import type { LoginOptions } from './login.js';
 import { CONVERSATION } from './agentGuide.js';
-import { connectContactsStep } from './network.js';
+import { connectContactsStep, STAY_REACHABLE } from './network.js';
 
 const PURPOSES: AgentSignupPurpose[] = ['account', 'network'];
 /** The server's username rule: lower-case letters, digits and single hyphens, 2 to 28 characters. */
@@ -104,5 +104,5 @@ export function networkConnected(result: AgentAuthVerifyResult, profileFlag: str
   // The person's own next step: bring their contacts in (links they open themselves).
   const connect = connectContactsStep(result.connectContactsUrl);
   if (connect) lines.push(`Ask your user: ${connect.askUser}`);
-  return { tellUser, next, lines, extra: { conversation: CONVERSATION, ...(connect ? { connectContacts: connect } : {}) } };
+  return { tellUser, next, lines, extra: { conversation: CONVERSATION, stayReachable: STAY_REACHABLE, ...(connect ? { connectContacts: connect } : {}) } };
 }

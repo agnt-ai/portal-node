@@ -34,6 +34,8 @@ export interface WatchOptions {
   from?: string;
   execTimeout?: string;
   drain?: boolean;
+  /** Print one short line per new message (who and which), for a monitor; run nothing. */
+  print?: boolean;
 }
 
 export interface ExecResult {
@@ -103,6 +105,12 @@ const realClock: WaitClock = {
 /** One JSON line on stdout. */
 const emitLine = (event: Record<string, unknown>) => process.stdout.write(`${JSON.stringify(event)}\n`);
 
+/** A claimed address as one short plain line: another party's text, so cut to a plain, bounded string. */
+function oneLine(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return value.replace(/[^\x20-\x7e]/g, '?').slice(0, 120);
+}
+
 function wholeSeconds(name: string, value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   if (!/^[0-9]+$/.test(value) || Number(value) < 1) throw new NetworkUsageError(`--${name} takes a whole number of seconds, at least 1.`);
@@ -118,8 +126,10 @@ export async function watchLoop(
   opts: WatchOptions,
   deps: { run?: Runner; clock?: WaitClock; stopped?: () => boolean; emit?: (e: Record<string, unknown>) => void; profile?: string } = {},
 ): Promise<number> {
-  const command = opts.exec?.trim();
-  if (!command) throw new NetworkUsageError('Give --exec "<command>": what to run for each new message. The message reaches it on stdin and in the file at NETWORK_MESSAGE_FILE, never in the command line.');
+  const command = opts.exec?.trim() || undefined;
+  if (!command && !opts.print) {
+    throw new NetworkUsageError('Give --exec "<command>" (what to run for each new message; it gets the message on stdin and in the file at NETWORK_MESSAGE_FILE, never in the command line) or --print (one short line per new message, for a monitor).');
+  }
   const timeoutMs = wholeSeconds('exec-timeout', opts.execTimeout, 600) * 1000;
   const run = deps.run ?? runCommand;
   const clock = deps.clock ?? realClock;
@@ -130,7 +140,7 @@ export async function watchLoop(
   // Failures in a row that may pass. A --drain gives up after DRAIN_MAX_RETRIES of them, so scheduled runs never pile up.
   let failures = 0;
 
-  emit({ event: 'watching', from: opts.from ?? null, drain: !!opts.drain });
+  emit({ event: 'watching', from: opts.from ?? null, drain: !!opts.drain, ...(opts.print ? { print: true, read: '{{accountSlug}} network inbox' } : {}) });
   while (!stopped()) {
     let got: NetworkWaitResult;
     const asked = clock.now();
@@ -159,6 +169,18 @@ export async function watchLoop(
       continue;
     }
     const started = clock.now();
+    // Names the message and who sent it, never what it says: a monitor shows this line to an agent, and what another
+    // party wrote must not ride in on it. The agent reads the message itself (network inbox).
+    if (opts.print) {
+      emit({
+        event: 'message', id: got.id, from: oneLine(got.message?.untrusted?.from), receivedAt: got.receivedAt,
+        verified: got.sender?.verified ?? null, relation: got.sender?.relation ?? null, more: got.more,
+      });
+    }
+    if (!command) {
+      handled++;
+      continue;
+    }
     // The entry as the server gave it, its `sender` verdict included.
     const result = await run(command, { json: JSON.stringify(got), id: got.id, profile: deps.profile }, timeoutMs);
     handled++;

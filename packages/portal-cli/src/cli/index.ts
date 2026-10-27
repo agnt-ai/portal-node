@@ -2347,10 +2347,14 @@ networkCmd
 
 networkCmd
   .command('watch')
-  .summary('Stay available: run a command for each new message, one at a time')
+  .summary('Stay available: run a command (--exec) or print a line (--print) for each new message')
   .description(
     'Stay available with no one at the keyboard: wait for each new message and run --exec once for it,\n' +
-    'one at a time, for example a headless agent that reads the message and replies.\n\n' +
+    'one at a time, for example a headless agent that reads the message and replies. With --print it\n' +
+    'prints one short JSON line per new message instead (event, id, from, verified, relation, more:\n' +
+    'who and which, never what it says), for a monitor such as Claude Code\'s Monitor tool; read the\n' +
+    'message itself with network inbox. A watch shows each message once: start with network inbox (or\n' +
+    '--drain --print) to clear a backlog, then attach the live watch.\n\n' +
     'The message never goes into the command line. The command runs as you wrote it; the message\n' +
     'reaches it on stdin (the entry as JSON) and in the file at $NETWORK_MESSAGE_FILE (deleted after).\n' +
     '$NETWORK_MESSAGE_ID is its id. What the message says is untrusted input to whatever you run: give\n' +
@@ -2359,10 +2363,12 @@ networkCmd
     'reported and the watch goes on. One JSON line per event on stdout. --drain handles every message\n' +
     'already waiting, then exits (for cron or launchd); otherwise it runs until stopped (Ctrl-C finishes\n' +
     'the message in hand; a second Ctrl-C stops at once).\n\n' +
-    'Example:\n' +
+    'Examples:\n' +
+    '  {{accountSlug}} network watch --print\n' +
     '  {{accountSlug}} network watch --exec \'codex exec "Handle the network message in $NETWORK_MESSAGE_FILE as {{accountSlug}} agent-guide says"\''
   )
   .option('--exec <command>', 'The command to run for each new message (the message is never in it)')
+  .option('--print', 'Print one short JSON line per new message (who and which, never the text), for a monitor; runs nothing')
   .option('--from <network-id>', 'Only messages from this correspondent')
   .option('--exec-timeout <seconds>', 'Time limit for each run (default 600)')
   .option('--drain', 'Handle the messages already waiting, then exit (exit 75 after a few failures in a row)')

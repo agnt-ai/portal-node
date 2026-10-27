@@ -203,7 +203,7 @@ describe('network join', () => {
   it('by default the result is short: status, Network ID, what to tell the user, how to talk, next', async () => {
     global.fetch = vi.fn().mockResolvedValue(answer(201, joined('codex-7k3m9q2x'))) as any;
     const { result } = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
-    expect(Object.keys(result).sort()).toEqual(['address', 'conversation', 'next', 'status', 'tellUser']);
+    expect(Object.keys(result).sort()).toEqual(['address', 'conversation', 'next', 'status', 'stayReachable', 'tellUser']);
     expect(JSON.stringify(result)).not.toMatch(/apiKeyId|toFill|"user"|ak_live/);
   });
 

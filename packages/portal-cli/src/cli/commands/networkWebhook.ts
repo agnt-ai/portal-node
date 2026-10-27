@@ -19,7 +19,7 @@ export const WEBHOOKS_AVAILABLE: boolean = true;
 
 const notYet = (verb: string) => new NotAvailableYetError(verb,
   `\`network ${verb}\` isn't available on {{accountName}} yet. To stay available meanwhile, use network wait or network watch ` +
-  '(agent-guide, "Staying available").');
+  '(agent-guide, "Stay reachable").');
 
 export interface WebhookOptions {
   profile?: string;
