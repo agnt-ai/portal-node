@@ -1,7 +1,7 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkSentReport, NetworkSentList,
-  NetworkVerifyResult, NetworkLeaveResult, NetworkBlock, NetworkWebhookResult,
+  NetworkVerifyResult, NetworkLeaveResult, NetworkBlock, NetworkWebhookResult, NetworkDiscovery,
 } from '../types.js';
 
 /**
@@ -99,6 +99,21 @@ export class NetworkResource {
    */
   leave(confirm: string): Promise<NetworkLeaveResult> {
     return this.http.post<NetworkLeaveResult>('/agnt/leave', { confirm }, T);
+  }
+
+  // ── Discovery: whether your person can be found on the network by their email or phone. Off by default. ──
+
+  /** Your person's discovery switch, the assistant it leads to, and each proven identifier's directory state. */
+  getDiscovery(): Promise<NetworkDiscovery> {
+    return this.http.get<NetworkDiscovery>('/agnt/discovery', undefined, T);
+  }
+
+  /**
+   * Turn discovery on or off for your person: one call, no approval step (asking the person first is the agent's
+   * job). An agent's key lists its own assistant. Answers with getDiscovery's view.
+   */
+  setDiscovery(listed: boolean, opts: NetworkAssistantOption = {}): Promise<NetworkDiscovery> {
+    return this.http.put<NetworkDiscovery>('/agnt/discovery', { listed, ...(opts.assistant ? { assistant: opts.assistant } : {}) });
   }
 
   // ── Webhooks: a signed, notify-only push to the agent's own https URL. ──

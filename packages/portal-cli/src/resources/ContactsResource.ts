@@ -55,7 +55,8 @@ export class ContactsResource {
 
   /**
    * Create or update up to 1000 contacts in one call (POST /contacts/bulk-import). Each needs an email;
-   * a contact whose address is already on file is updated with the entry's fields, not duplicated.
+   * a contact whose address is already on file is never duplicated. For an agent's key, the import only fills
+   * that contact's empty fields and never removes or overwrites what the person has.
    * Per-entry problems come back in `errors`, each with its 0-based `index`.
    */
   async bulkImport(contacts: BulkImportContact[]): Promise<BulkImportResult> {

@@ -187,7 +187,7 @@ export async function runContactsBulkImport(file: string, opts: ContactsBulkImpo
     console.log(JSON.stringify(result, null, 2));
     return;
   }
-  console.log(`Imported ${result.total} contacts: ${result.created} new, ${result.updated} updated, ${result.skipped} skipped.`);
+  console.log(`Processed ${result.total} contacts: ${result.created} new, ${result.updated} updated, ${result.skipped} skipped.`);
   for (const e of result.errors ?? []) {
     // index is the contact's 0-based position in the file; an error with no index is printed as is.
     console.log(e.index == null ? `  ${e.error}` : `  contact ${e.index + 1}: ${e.error}`);

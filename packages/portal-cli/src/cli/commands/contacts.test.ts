@@ -201,7 +201,7 @@ describe('runContactsBulkImport, against the API as it answers today', () => {
     expect(clientFor).toHaveBeenCalledWith('work');
     expect(api.requests).toEqual([{ method: 'POST', path: '/contacts/bulk-import', auth: 'Bearer test-key', body: { contacts } }]);
     expect(log.mock.calls.map((c) => c[0])).toEqual([
-      'Imported 3 contacts: 1 new, 1 updated, 1 skipped.',
+      'Processed 3 contacts: 1 new, 1 updated, 1 skipped.',
       '  contact 3: Duplicate email in batch',
     ]);
   });
@@ -219,7 +219,7 @@ describe('runContactsBulkImport, against the API as it answers today', () => {
 
     expect(api.requests).toHaveLength(1);
     expect(api.requests[0].body.contacts).toHaveLength(1000);
-    expect(log).toHaveBeenCalledWith('Imported 1000 contacts: 1000 new, 0 updated, 0 skipped.');
+    expect(log).toHaveBeenCalledWith('Processed 1000 contacts: 1000 new, 0 updated, 0 skipped.');
   });
 
   it('refuses a bad file with exit 2 and what to fix, before any API call', async () => {

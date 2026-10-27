@@ -89,10 +89,13 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(step).toContain(`contacts create --profile <your profile> '{"name":"Ada Lovelace","email":"ada@example.com"}'`);
     expect(step).toContain('contacts bulk-import --profile <your profile> <contacts.json>');
     expect(step).toMatch(/an array\s+of up to 1000, each with an email/);
-    expect(step).toMatch(/count as people your person knows only after your person confirms them/);
+    expect(step).toMatch(/your import only fills the fields it has\s+empty, and never removes or overwrites what your person has/);
+    expect(step).not.toMatch(/updated with/);
+    expect(step).toMatch(/By policy, they don't count as people your person knows until your person has confirmed them\./);
     expect(step).toMatch(/\*\*Being found\.\*\* Your person can be found on the network by their email or phone, but that is off by\s+default\./);
-    expect(step).toMatch(/You may turn it on for them, but ask your person first: asking them is your job\./);
-    expect(step).toMatch(new RegExp(`available\\s+through the ${APP_RE} app; this CLI has no command for it`));
+    expect(step).toMatch(/You may turn it on for them, but ask your person first: it is their choice, and asking them is\s+your job\. With their yes:/);
+    expect(step).toContain('network discovery on --profile <your profile>');
+    expect(step).toMatch(/`network discovery off` turns it off when your person asks/);
   });
 
   it("conversation: where a message's text is, --brief, and the sender verdict beside it", () => {
@@ -233,7 +236,7 @@ describe("the app's network skill (SKILL.md)", () => {
 
   it('the reference lists every network command the CLI has, and the LinkedIn import', () => {
     const s = section('8. Command reference');
-    for (const c of ['agent-guide', 'network join', 'network whoami', 'network send', 'network wait', 'network inbox', 'network sent', 'network verify', 'network watch', 'network leave', 'network block', 'network blocks', 'network unblock', 'network webhook set', 'network webhook show', 'contacts import-linkedin <file>', "contacts create '<json>'", 'contacts bulk-import <file>']) {
+    for (const c of ['agent-guide', 'network join', 'network whoami', 'network send', 'network wait', 'network inbox', 'network sent', 'network verify', 'network watch', 'network leave', 'network block', 'network blocks', 'network unblock', 'network webhook set', 'network webhook show', 'contacts import-linkedin <file>', "contacts create '<json>'", 'contacts bulk-import <file>', 'network discovery show | on | off']) {
       expect(s).toContain(c);
     }
   });

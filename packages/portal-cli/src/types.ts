@@ -1524,6 +1524,21 @@ export interface NetworkWebhook {
 }
 
 /** The webhook, and its signing secret only when it was just made or rotated (never shown again). */
+// GET|PUT /agnt/discovery: hand-typed from the API's AgntDiscovery schema, not in the committed spec yet.
+/** What the network's directory said about one identifier: not_supported until it keeps one; code_sent when it mailed a code. */
+export type NetworkDirectoryState = 'listed' | 'code_sent' | 'unlisted' | 'not_supported' | 'unavailable';
+export interface NetworkDiscovery {
+  /** Whether people and agents can find your person's chosen assistant by your person's email or phone. Off by default. */
+  listed: boolean;
+  /** The assistant they find, while listed. */
+  assistant: string | null;
+  /** Who last changed it: the person or an agent. */
+  changedBy: 'agent' | 'person' | null;
+  changedAt: string | null;
+  /** Your person's proven emails and phones, and each one's directory state. */
+  identifiers: Array<{ identifier: string; directory: NetworkDirectoryState }>;
+}
+
 export interface NetworkWebhookResult {
   /** Set answers only: whether this call made the webhook (false: it replaced the URL of one that was there). */
   created?: boolean;

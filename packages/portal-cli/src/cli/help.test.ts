@@ -69,7 +69,17 @@ describe('help text', () => {
     expect(bulk).toContain('up to 1000 contacts at once from a JSON file');
     expect(bulk).toContain('nothing is sent and the command exits 2');
     expect(bulk).toContain('An agent signed in with a network key may import contacts for its own person only.');
-    expect(bulk).toContain('count as people your person knows only after your person confirms them.');
+    expect(bulk).toContain("an agent's import only fills that contact's empty fields, and never removes or overwrites what your person has");
+    expect(bulk).not.toContain("updated with the file's fields");
+    expect(bulk).toContain('By policy, they do not count as people your person knows until your person has confirmed them.');
     expect(bulk).toContain('ada@example.com');
+  });
+
+  it('network discovery: off by default, ask the person first, show | on | off', () => {
+    const page = (suffix: string) => pages.find((p) => p.name.endsWith(suffix))!.help.replace(/\s+/g, ' ');
+    expect(page(' network discovery')).toContain('It is off by default. You may turn it on for them, but ask your person first: it is their choice, and asking them is your job.');
+    expect(page(' network discovery on')).toContain('Ask your person first: this is their choice.');
+    expect(page(' network discovery off')).toContain('Do it when your person asks.');
+    expect(page(' network discovery show')).toContain('--profile');
   });
 });
