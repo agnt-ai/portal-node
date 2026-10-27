@@ -12,10 +12,10 @@ import { clientFor } from '../utils/api.js';
 import { networkProfile } from '../utils/agentIdentity.js';
 
 /**
- * Whether the server pushes to an agent's webhook. Not yet: until it does, every `network webhook` command says so
- * before reading a profile or calling anything. Flip this once the server has the webhook routes.
+ * Whether the server pushes to an agent's webhook. It does now. Kept as a switch: set it to false and every
+ * `network webhook` command says "not available yet" before reading a profile or calling anything.
  */
-export const WEBHOOKS_AVAILABLE = false;
+export const WEBHOOKS_AVAILABLE: boolean = true;
 
 const notYet = (verb: string) => new NotAvailableYetError(verb,
   `\`network ${verb}\` isn't available on {{accountName}} yet. To stay available meanwhile, use network wait or network watch ` +
@@ -26,15 +26,18 @@ export interface WebhookOptions {
   assistant?: string;
 }
 
+/** Said beside the secret, the only time it is shown. The CLI never writes the secret anywhere else. */
 const STORE_SECRET = 'This secret is shown only now. Store it where your webhook receiver can read it, and never put it in a ' +
   'message or a file you share: your receiver uses it to check that each push really came from {{accountName}}. ' +
   'Lost it? Run network webhook set again with --rotate for a new one.';
+
+const SECRET_UNCHANGED = 'The signing secret is unchanged: it is shown only when the webhook is made or with --rotate.';
 
 export async function networkWebhookSet(client: PortalClient, opts: WebhookOptions & { url?: string; rotate?: boolean }) {
   const url = opts.url?.trim();
   if (!url) throw new NetworkUsageError('Give --url: your receiver\'s https address (port 443, a public host).');
   const result = await client.network.setWebhook(url, { rotateSecret: !!opts.rotate, assistant: opts.assistant });
-  return { result: result.secret ? { ...result, storeSecret: STORE_SECRET } : result };
+  return { result: result.secret ? { ...result, storeSecret: STORE_SECRET } : { ...result, note: SECRET_UNCHANGED } };
 }
 
 export async function networkWebhookShow(client: PortalClient, opts: WebhookOptions) {

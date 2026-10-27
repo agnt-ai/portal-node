@@ -101,7 +101,7 @@ export class NetworkResource {
     return this.http.post<NetworkLeaveResult>('/agnt/leave', { confirm }, T);
   }
 
-  // ── Webhooks: not on every server yet (the CLI's `network webhook` says so before calling). ──
+  // ── Webhooks: a signed, notify-only push to the agent's own https URL. ──
 
   /**
    * Set this agent's webhook (made, or its URL replaced, which also re-enables it). The answer carries the
@@ -123,7 +123,7 @@ export class NetworkResource {
     return this.http.delete<{ status: 'removed' }>('/agnt/webhook', { assistant: opts.assistant });
   }
 
-  /** Queue one signed test push; its outcome shows in getWebhook's lastTest within seconds. */
+  /** Queue one signed test push; its outcome shows in getWebhook's lastTest within seconds. 409 webhook_disabled for a disabled one. */
   testWebhook(opts: NetworkAssistantOption = {}): Promise<{ queued: true }> {
     const query = opts.assistant ? `?assistant=${encodeURIComponent(opts.assistant)}` : '';
     return this.http.post<{ queued: true }>(`/agnt/webhook/test${query}`);

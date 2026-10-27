@@ -41,17 +41,19 @@ describe('network webhook', () => {
     await expect(networkWebhookSet({ network: {} } as any, {})).rejects.toBeInstanceOf(NetworkUsageError);
   });
 
-  it('set shows the secret once, with how to keep it; a replaced URL has no secret and no note', async () => {
+  it('set shows the secret once, with how to keep it; a replaced URL has no secret, only a note', async () => {
     const setWebhook = vi.fn()
-      .mockResolvedValueOnce({ webhook: hook(), secret: 'whsec_test' })
-      .mockResolvedValueOnce({ webhook: hook() });
+      .mockResolvedValueOnce({ created: true, webhook: hook(), secret: 'whsec_test' })
+      .mockResolvedValueOnce({ created: false, webhook: hook() });
     const c = { network: { setWebhook } } as any;
     const made = (await networkWebhookSet(c, { url: ' https://agent.example.test/push ', rotate: false }) as any).result;
     expect(made.secret).toBe('whsec_test');
     expect(made.storeSecret).toMatch(/shown only now.*never put it in a message.*--rotate/);
     expect(setWebhook).toHaveBeenCalledWith('https://agent.example.test/push', { rotateSecret: false, assistant: undefined });
     const replaced = (await networkWebhookSet(c, { url: 'https://agent.example.test/push' }) as any).result;
-    expect(replaced).toEqual({ webhook: hook() });
+    expect(replaced).toEqual({ created: false, webhook: hook(), note: expect.stringMatching(/secret is unchanged.*--rotate/) });
+    expect(replaced).not.toHaveProperty('secret');
+    expect(replaced).not.toHaveProperty('storeSecret');
   });
 
   it('show and remove pass the answer through', async () => {
@@ -104,6 +106,27 @@ describe('network webhook', () => {
     expect(describeError('webhook show', new AgntApiError(404, 'x', 'not_found')).body.hint).toMatch(/no webhook yet/);
     // Setting one on a network that is off is not "no webhook yet".
     expect(describeError('webhook set', new AgntApiError(404, 'Not found', 'not_found')).body.hint).toMatch(/isn't on for this app/);
+  });
+
+  it('show and test tell "no webhook" from a network that is off by the server\'s own words', () => {
+    for (const verb of ['webhook show', 'webhook test']) {
+      expect(describeError(verb, new AgntApiError(404, 'This agent has no webhook', 'not_found')).body.hint).toMatch(/no webhook yet/);
+      expect(describeError(verb, new AgntApiError(404, 'Not found', 'not_found')).body.hint).toMatch(/isn't on for this app/);
+    }
+    expect(describeError('webhook remove', new AgntApiError(404, 'Not found', 'not_found')).body.hint).toMatch(/isn't on for this app/);
+  });
+
+  it('maps the rest of the webhook codes: rate_limited (exit 75), webhook_conflict, pair_bound_key', () => {
+    const limited = describeError('webhook test', new AgntApiError(429, 'too many webhook test calls; try again later', 'rate_limited', { retryAfter: 42 }));
+    expect(limited.exitCode).toBe(75);
+    expect(limited.body).toMatchObject({ code: 'rate_limited', status: 429, retryable: true, retryAfter: 42 });
+    expect(limited.body.hint).toMatch(/webhook changes or test pushes.*retryAfter/);
+    const conflict = describeError('webhook set', new AgntApiError(409, 'changed', 'webhook_conflict'));
+    expect(conflict.exitCode).toBe(1);
+    expect(conflict.body.hint).toMatch(/same command once more/);
+    const disabled = describeError('webhook test', new AgntApiError(409, 'disabled', 'webhook_disabled'));
+    expect(disabled).toMatchObject({ exitCode: 1, body: { code: 'webhook_disabled', status: 409, retryable: false } });
+    expect(describeError('webhook set', new AgntApiError(403, 'own agent only', 'pair_bound_key')).body.hint).toMatch(/Leave out --assistant/);
   });
 
   it('a server with no webhook routes yet says so, never "no webhook yet" or "the network is off"', () => {

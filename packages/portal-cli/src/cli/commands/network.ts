@@ -100,6 +100,9 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
       // Sign-up codes are limited per network address, which many people can share: never about this person.
       return 'Too many codes have been asked for just now. Wait a while (retryAfter seconds when given), then run the same command once.';
     case 'rate_limited':
+      if (verb.startsWith('webhook')) {
+        return 'Too many webhook changes or test pushes just now. Wait retryAfter seconds (a minute if none is given), then run the same command once. Do not retry in a loop.';
+      }
       return 'Over a sending or checking limit. Wait retryAfter seconds (a minute if none is given), then run the same command once. Do not retry in a loop.';
     case 'verify_unavailable':
       return "The author's server could not be read just now. Try the same verify again later.";
@@ -119,8 +122,13 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
       return 'The webhook URL must reach a public host: not a private, loopback or cloud-metadata address, and it must resolve.';
     case 'webhook_disabled':
       return 'The webhook was turned off after too many failed pushes (network webhook show says why). Fix the receiver, then run network webhook set --url again to turn it back on.';
+    case 'webhook_conflict':
+      return 'The webhook changed while it was being set. Run the same command once more.';
     case 'not_found':
-      if (verb === 'webhook show' || verb === 'webhook test') return 'This agent has no webhook yet. Set one: network webhook set --url <https URL>.';
+      // show and test answer "no webhook" in their own words; a bare "Not found" is the network being off.
+      if ((verb === 'webhook show' || verb === 'webhook test') && !/^not found$/i.test((message ?? '').trim())) {
+        return 'This agent has no webhook yet. Set one: network webhook set --url <https URL>.';
+      }
       // Only the per-id form: `network sent` with no id (verb "sent list") is a list, and its 404 means the network is off.
       return verb === 'sent'
         ? 'No message with that id among this agent\'s sends: an unknown id, another agent\'s, or past the hold window.'
