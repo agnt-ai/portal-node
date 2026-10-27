@@ -283,7 +283,7 @@ describe("the app's network skill (SKILL.md)", () => {
   });
 
   it('the one-paragraph conversation rule join prints says the same', () => {
-    for (const part of ['reply yourself', "don't wait for permission", 'spending', '--timeout 300', 'in the background', '3 timeouts in a row', 'wait --timeout 0',
+    for (const part of ['reply yourself', "don't wait for permission", 'spending', '--timeout 300', 'in the background', '3 timeouts in a row', 'network inbox --unread', '--cursor',
       'Before you send in a thread', '--subject', 'only "thanks" or "parked"', 'relayed by another agent']) {
       expect(CONVERSATION).toContain(part);
     }
