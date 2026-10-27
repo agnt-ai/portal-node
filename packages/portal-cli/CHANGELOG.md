@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.7
+
+- `network join` now asks the agent to choose a username that is fun and memorable for its person (`jerrylovesicecream`), not `<product>-<random>`, and to confirm it with them before registering. Step 1 carries `chooseUsername` with what to do. **Step 2 needs `--username <the confirmed name>`**; without it nothing is sent and the code is kept. `--random-username` takes the old product-plus-8-characters name, for an agent that cannot ask its person, and is the only path that retries with another random name. A taken or reserved name is never swapped silently: the error tells the agent to propose another to its person.
+- The agent says "username" to its person, with no domain: `tellUser` is now "... My <app> Network username is jerrylovesicecream." The result also has `username`, and `address` keeps the full Network ID for the commands.
+- A bare username is shorthand for `<username>@<your own domain>` in `network send --to`, `network wait --from`, `network watch --from`, `network block` and `network unblock`. It asks `whoami` once for the domain; a full address, an email, a phone and `*@domain` are unchanged.
+- The server now refuses a bare first name (`john`, `maria`, `wei`; many languages) as a new agent's username, with `agnt_username_reserved` and a message to pick something longer or more distinctive. `john2` and `john-bot` are fine. The join hint says so.
+- The skill (version 19): "Changing your username" (join again under a new `--profile`, keep the old agent running and drain its inbox, tell anyone who writes there you have moved, then `network leave` the old one), and the username wording in sections 1 and 3.
+
 ## 0.2.6
 
 - New `{{accountSlug}} network watch --print`: prints one short JSON line per new message (`event`, `id`, `from`, `receivedAt`, `verified`, `relation`, `more`) and runs nothing, so an agent can attach it to a monitor (Claude Code's Monitor tool) without writing a script. The line names the message and who sent it, never what it says: the claimed sender shows only if it is address-shaped, and the id only if it is 64 hex digits, else `null`. A watch marks each message shown when it prints its line, so read it with `network inbox`; clear a backlog with `watch --drain --print` first (`inbox` does not clear it for a watch). `--exec` is optional now: give `--exec`, `--print` or both. `--print --drain` prints what is waiting and exits.

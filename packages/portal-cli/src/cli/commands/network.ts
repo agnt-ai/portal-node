@@ -152,7 +152,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
     case 'network_scope':
       return `Your key only works for {{accountName}} Network commands and your profile. Everything else in the account is your person's: they can sign in to {{accountName}} to use it.`;
     case 'invalid_match':
-      return 'Give a network address (name@domain), or *@domain to block a whole domain.';
+      return 'Give a username or network address (name@domain), or *@domain to block a whole domain.';
     case 'agnt_blocks_full':
       return 'You have the most blocks allowed. Remove one first: network blocks, then network unblock <address>.';
     case 'confirm_mismatch':
@@ -347,6 +347,24 @@ export interface NetworkSendOptions extends NetworkBaseOptions {
  */
 export const EMAIL_AND_PHONE_RECIPIENTS = true;
 
+/**
+ * A username with no domain, such as jerrylovesicecream (lower- or upper-case; at least one letter, so a bare number
+ * stays a phone mistake). The CLI takes it as shorthand for `<username>@<this agent's own domain>`.
+ */
+const BARE_USERNAME = /^(?=.{2,28}$)(?=.*[a-z])[a-z0-9]+(?:-[a-z0-9]+)*$/i;
+
+/**
+ * Network IDs for the values given, a bare username completed with the domain of this agent's own Network ID
+ * (`whoami`): the app's one served domain. A full address, an email, a phone or `*@domain` is passed on as it is. Asks
+ * `whoami` at most once, and not at all when nothing is bare.
+ */
+export async function withNetworkDomain(client: PortalClient, values: string[], assistant?: string): Promise<string[]> {
+  if (!values.some((v) => BARE_USERNAME.test(v))) return values;
+  const { address } = await client.network.whoami({ assistant });
+  const domain = address.slice(address.lastIndexOf('@') + 1);
+  return values.map((v) => (BARE_USERNAME.test(v) ? `${v.toLowerCase()}@${domain}` : v));
+}
+
 /** name@domain, with a dot in the domain: a Network ID, or an email. */
 const NETWORK_ADDRESS = /^[^\s@:]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
 /** A phone as the server takes it: + and the country code, or tel: (spaces, dots, dashes and brackets allowed). */
@@ -354,6 +372,8 @@ const PHONE = /^(tel:)?\+[0-9][0-9 ().-]{5,}$/i;
 
 /** Why a recipient can't be sent to, or undefined. Only what the server would refuse anyway, said sooner. */
 export function recipientProblem(to: string): string | undefined {
+  // A bare username is completed with this agent's own domain once the client is known (withNetworkDomain).
+  if (BARE_USERNAME.test(to)) return undefined;
   if (!EMAIL_AND_PHONE_RECIPIENTS) {
     if (/^tel:/i.test(to) || (/^\+?[0-9 ().-]+$/.test(to) && to.replace(/[^0-9]/g, '').length >= 6)) {
       return `${to} is a phone number. {{accountName}} sends to network addresses only for now (name@domain, such as a Network ID).`;
@@ -369,7 +389,7 @@ export function recipientProblem(to: string): string | undefined {
     return `${to} is a phone number without its country code: give it as + and the full number, such as +15551234567.`;
   }
   if (NETWORK_ADDRESS.test(to.replace(/^mailto:/i, ''))) return undefined;
-  return `${to} is not a Network ID, an email or a phone: give name@domain, or a phone such as +15551234567.`;
+  return `${to} is not a Network ID, an email or a phone: give a username, name@domain, or a phone such as +15551234567.`;
 }
 
 /** The request body from options; `--text -` reads the text from stdin. */
@@ -415,7 +435,12 @@ export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string =
 }
 
 export async function networkSend(client: PortalClient, opts: NetworkSendOptions) {
-  return { result: await client.network.send(sendBodyFrom(opts)) };
+  return { result: await client.network.send(await completeRecipients(client, sendBodyFrom(opts))) };
+}
+
+/** The body with any bare username in `to` completed with this agent's own domain. */
+export async function completeRecipients(client: PortalClient, body: NetworkSendBody): Promise<NetworkSendBody> {
+  return { ...body, to: await withNetworkDomain(client, body.to, body.assistant) };
 }
 
 // ── --brief ─────────────────────────────────────────────────────────────────
@@ -523,7 +548,7 @@ const realClock: WaitClock = {
  */
 export async function networkWait(client: PortalClient, opts: NetworkWaitOptions, clock: WaitClock = realClock) {
   const timeout = wholeNumber('timeout', opts.timeout) ?? 600;
-  const from = opts.from;
+  const from = opts.from ? (await withNetworkDomain(client, [opts.from.trim()], opts.assistant))[0] : opts.from;
   const started = clock.now();
   const deadline = started + timeout * 1000;
   let backoff = 1;
@@ -649,7 +674,8 @@ export async function networkVerify(client: PortalClient, file: string) {
 // ── blocks ──────────────────────────────────────────────────────────────────
 
 export async function networkBlock(client: PortalClient, match: string, opts: NetworkBaseOptions = {}) {
-  const { block } = await client.network.block(match.trim(), { assistant: opts.assistant });
+  const [full] = await withNetworkDomain(client, [match.trim()], opts.assistant);
+  const { block } = await client.network.block(full, { assistant: opts.assistant });
   const what = block.kind === 'domain' ? `everyone at ${block.match.slice(2)}` : block.match;
   const tellUser = block.scope === 'person'
     ? `I've blocked ${what}: their messages won't reach me or your other agents.`
@@ -658,7 +684,8 @@ export async function networkBlock(client: PortalClient, match: string, opts: Ne
 }
 
 export async function networkUnblock(client: PortalClient, match: string, opts: NetworkBaseOptions = {}) {
-  return { result: await client.network.unblock(match.trim(), { assistant: opts.assistant }) };
+  const [full] = await withNetworkDomain(client, [match.trim()], opts.assistant);
+  return { result: await client.network.unblock(full, { assistant: opts.assistant }) };
 }
 
 export async function networkBlocks(client: PortalClient, opts: NetworkBaseOptions = {}) {
@@ -717,7 +744,7 @@ export const runNetworkSend = (opts: NetworkSendOptions) =>
   runNetworkVerb('send', async () => {
     const body = sendBodyFrom(opts); // usage errors before reading credentials
     const client = await clientFor(await networkProfile(opts.profile));
-    return { result: await client.network.send(body) };
+    return { result: await client.network.send(await completeRecipients(client, body)) };
   });
 export const runNetworkInbox = (opts: NetworkInboxOptions) =>
   runNetworkVerb('inbox', async () => {
