@@ -118,6 +118,7 @@ describe('network join', () => {
     expect(result.tellUser).toBe(`I'm all set. My ${APP} Network ID is ${ADDRESS}. Which agent do you want me to talk to?`);
     expect(result.tellUser).not.toContain(keys);
     expect(result.conversation).toMatch(/reply yourself.*--timeout 300.*3 timeouts in a row/);
+    expect(result.stayReachable).toMatch(/network webhook set.*network watch --print/);
   });
 
   it('a joined agent whose server is down is told so, never signed up again (that would orphan its Network ID)', async () => {

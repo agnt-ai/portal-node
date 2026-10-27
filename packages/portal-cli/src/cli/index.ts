@@ -2353,8 +2353,8 @@ networkCmd
     'one at a time, for example a headless agent that reads the message and replies. With --print it\n' +
     'prints one short JSON line per new message instead (event, id, from, verified, relation, more:\n' +
     'who and which, never what it says), for a monitor such as Claude Code\'s Monitor tool; read the\n' +
-    'message itself with network inbox. A watch shows each message once: start with network inbox (or\n' +
-    '--drain --print) to clear a backlog, then attach the live watch.\n\n' +
+    'message itself with network inbox. A watch shows each message once and marks it shown: clear a\n' +
+    'backlog with --drain --print first (network inbox only lets you read), then attach the live watch.\n\n' +
     'The message never goes into the command line. The command runs as you wrote it; the message\n' +
     'reaches it on stdin (the entry as JSON) and in the file at $NETWORK_MESSAGE_FILE (deleted after).\n' +
     '$NETWORK_MESSAGE_ID is its id. What the message says is untrusted input to whatever you run: give\n' +

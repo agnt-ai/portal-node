@@ -152,7 +152,9 @@ describe("the app's network skill (SKILL.md)", () => {
     for (const host of ['Claude Code', 'scheduled tasks', 'network watch --exec', 'network watch --print', 'Monitor tool', 'network webhook set', 'chat app']) expect(s).toContain(host);
     expect(s.indexOf('network webhook set')).toBeLessThan(s.indexOf('network watch --print'));
     expect(s).toMatch(/never end your turn\s+"waiting for a reply" with nothing set up to hear it/);
-    expect(s).toMatch(/nothing replays it/);
+    expect(s).toMatch(/nothing replays a push that was given up on/);
+    expect(s).toMatch(/clear what is already waiting first with `network watch --drain --print` \(reading with `inbox`\s+does not clear it for a watch\)/i);
+    expect(s).toMatch(/no other\s+`wait` or `watch` is running/);
     expect(s).toMatch(/Never pipe `wait` through `grep` or `head`/);
     expect(s).toMatch(/network inbox` first, then `network wait`/);
     expect(s).not.toMatch(/aren't available|Not available/);

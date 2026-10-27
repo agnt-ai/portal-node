@@ -105,10 +105,12 @@ const realClock: WaitClock = {
 /** One JSON line on stdout. */
 const emitLine = (event: Record<string, unknown>) => process.stdout.write(`${JSON.stringify(event)}\n`);
 
-/** A claimed address as one short plain line: another party's text, so cut to a plain, bounded string. */
-function oneLine(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  return value.replace(/[^\x20-\x7e]/g, '?').slice(0, 120);
+/**
+ * A claimed sender for a monitor line: only an address-shaped value (letters, digits and . _ % + @ : -), at most
+ * 120 characters, else null. Another party's text must not ride in on the line, so no sentence can pass.
+ */
+function senderForLine(value: unknown): string | null {
+  return typeof value === 'string' && /^[A-Za-z0-9._%+@:-]{1,120}$/.test(value) ? value : null;
 }
 
 function wholeSeconds(name: string, value: string | undefined, fallback: number): number {
@@ -173,7 +175,7 @@ export async function watchLoop(
     // party wrote must not ride in on it. The agent reads the message itself (network inbox).
     if (opts.print) {
       emit({
-        event: 'message', id: got.id, from: oneLine(got.message?.untrusted?.from), receivedAt: got.receivedAt,
+        event: 'message', id: /^[0-9a-f]{64}$/.test(got.id) ? got.id : null, from: senderForLine(got.message?.untrusted?.from), receivedAt: got.receivedAt,
         verified: got.sender?.verified ?? null, relation: got.sender?.relation ?? null, more: got.more,
       });
     }
