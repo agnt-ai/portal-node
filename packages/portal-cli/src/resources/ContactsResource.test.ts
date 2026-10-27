@@ -69,4 +69,12 @@ describe('ContactsResource', () => {
     expect(http.post).toHaveBeenCalledWith('/contacts/import/linkedin', { csv });
     expect(result).toEqual(summary);
   });
+  it('bulkImport() posts { contacts } to /contacts/bulk-import and unwraps { bulkImport }', async () => {
+    const summary = { success: true, total: 2, created: 1, updated: 0, skipped: 1, errors: [{ index: 1, email: 'ada@example.com', error: 'Duplicate email in batch' }] };
+    const http = fakeHttp({ post: vi.fn().mockResolvedValue({ ok: true, bulkImport: summary }) });
+    const contacts = [{ email: 'ada@example.com', name: 'Ada Lovelace' }, { email: 'ada@example.com' }];
+    const result = await new ContactsResource(http).bulkImport(contacts);
+    expect(http.post).toHaveBeenCalledWith('/contacts/bulk-import', { contacts });
+    expect(result).toEqual(summary);
+  });
 });

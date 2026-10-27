@@ -26,7 +26,7 @@ import { runMemoriesList, runMemoriesCreate, runMemoriesUpdate, runMemoriesDelet
 import { runChatsList, runChatsGet, runChatsMessages, runChatsProcess, runChatsDelete } from './commands/chats.js';
 import {
   runContactsList, runContactsGet, runContactsCreate, runContactsDelete, runContactsActivity,
-  runContactsImportLinkedIn
+  runContactsImportLinkedIn, runContactsBulkImport
 } from './commands/contacts.js';
 import {
   runCompaniesList, runCompaniesSearch, runCompaniesGet, runCompaniesCreate,
@@ -103,6 +103,7 @@ import {
 import { networkJoin } from './commands/networkJoin.js';
 import { runNetworkWatch } from './commands/networkWatch.js';
 import { runNetworkWebhookSet, runNetworkWebhookShow, runNetworkWebhookRemove, runNetworkWebhookTest } from './commands/networkWebhook.js';
+import { runNetworkDiscoveryShow, runNetworkDiscoveryOn, runNetworkDiscoveryOff } from './commands/networkDiscovery.js';
 import { runAgentGuide } from './commands/agentGuide.js';
 import { ASK_EMAIL, askForCode } from './utils/asks.js';
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
@@ -614,6 +615,27 @@ contactsCmd
   .option('--json', 'Print raw JSON')
   .action(async (body, opts) => {
     await runContactsCreate(body, opts);
+  });
+
+contactsCmd
+  .command('bulk-import <file>')
+  .description(
+    'Create or update up to 1000 contacts at once from a JSON file: an array of objects, each with an email ' +
+    'and any of the fields contacts create takes (name, company, title, phone, tags and so on). A contact whose ' +
+    'email is already on file is never duplicated: an agent\'s import only fills that contact\'s empty fields, and ' +
+    'never removes or overwrites what your person has. The file is checked first: ' +
+    'if it is not a JSON array of 1 to 1000 contacts each with a valid email, nothing is sent and the command ' +
+    'exits 2, listing what to fix.\n\n' +
+    'An agent signed in with a network key may import contacts for its own person only. Contacts an agent adds ' +
+    'are marked as added by the agent. By policy, they do not count as people your person knows until your person ' +
+    'has confirmed them.\n\n' +
+    'Example: {{accountSlug}} contacts bulk-import contacts.json\n' +
+    '  where contacts.json is [{"email":"ada@example.com","name":"Ada Lovelace","company":"Example Co"}]'
+  )
+  .option('--profile <name>', 'Credentials profile to use')
+  .option('--json', 'Print raw JSON')
+  .action(async (file, opts) => {
+    await runContactsBulkImport(file, opts);
   });
 
 contactsCmd
@@ -2416,6 +2438,54 @@ networkWebhookCmd
   .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkWebhookTest(opts);
+  });
+
+const networkDiscoveryCmd = networkCmd
+  .command('discovery')
+  .summary('Whether people can find your person on the network by email or phone (off by default)')
+  .description(
+    'Discovery: whether people and agents can find your person\'s assistant on the network by your ' +
+    'person\'s email or phone. It is off by default. You may turn it on for them, but ask your person ' +
+    'first: it is their choice, and asking them is your job. Your person can also change it in ' +
+    '{{accountName}}. With your key, the assistant people find is you.\n\n' +
+    'Every answer is { listed, assistant, changedBy, changedAt, identifiers }: identifiers are your ' +
+    'person\'s proven emails and phones, each with what the network\'s directory said (listed, ' +
+    'code_sent, unlisted, not_supported or unavailable).'
+  );
+
+networkDiscoveryCmd
+  .command('show')
+  .summary('Whether your person can be found, and by which emails and phones')
+  .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
+  .action(async (opts) => {
+    await runNetworkDiscoveryShow(opts);
+  });
+
+networkDiscoveryCmd
+  .command('on')
+  .summary('Let people find your person by email or phone, after asking them')
+  .description(
+    'Let people and agents find your person\'s assistant by your person\'s email or phone. Ask your ' +
+    'person first: this is their choice. Running it again is harmless.\n\n' +
+    'Example: {{accountSlug}} network discovery on'
+  )
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
+  .action(async (opts) => {
+    await runNetworkDiscoveryOn(opts);
+  });
+
+networkDiscoveryCmd
+  .command('off')
+  .summary('Stop people finding your person by email or phone')
+  .description('Stop people and agents finding your person by email or phone. Do it when your person asks.')
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
+  .action(async (opts) => {
+    await runNetworkDiscoveryOff(opts);
   });
 
 networkCmd

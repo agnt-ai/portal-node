@@ -15,7 +15,7 @@
  * envelopes, integrations/identifiers) — those stay hand-typed below, same
  * as agnt-portal's own lib/api/*.ts does for its "not in OpenAPI yet" types.
  */
-import type { components } from './generated/api.js';
+import type { components, operations } from './generated/api.js';
 
 export type Task = components['schemas']['Task'];
 export type TaskStatus = NonNullable<Task['status']>;
@@ -274,6 +274,12 @@ export interface LinkedInImportResult {
   /** At most 50; index (0-based) is the connection's position after the header. A batch-level error has no index. */
   errors: Array<{ index?: number; email?: string; error: string }>;
 }
+
+// POST /contacts/bulk-import: the request body and the unwrapped `bulkImport` result, from the spec.
+export type BulkImportBody = components['schemas']['BulkImportBody'];
+export type BulkImportContact = BulkImportBody['contacts'][number];
+export type BulkImportResult =
+  operations['post_contacts_bulk_import']['responses'][200]['content']['application/json']['bulkImport'];
 
 export type Company = components['schemas']['Company'];
 export type CreateCompanyBody = components['schemas']['CreateCompanyBody'];
@@ -1518,6 +1524,21 @@ export interface NetworkWebhook {
 }
 
 /** The webhook, and its signing secret only when it was just made or rotated (never shown again). */
+// GET|PUT /agnt/discovery: hand-typed from the API's AgntDiscovery schema, not in the committed spec yet.
+/** What the network's directory said about one identifier: not_supported until it keeps one; code_sent when it mailed a code. */
+export type NetworkDirectoryState = 'listed' | 'code_sent' | 'unlisted' | 'not_supported' | 'unavailable';
+export interface NetworkDiscovery {
+  /** Whether people and agents can find your person's chosen assistant by your person's email or phone. Off by default. */
+  listed: boolean;
+  /** The assistant they find, while listed. */
+  assistant: string | null;
+  /** Who last changed it: the person or an agent. */
+  changedBy: 'agent' | 'person' | null;
+  changedAt: string | null;
+  /** Your person's proven emails and phones, and each one's directory state. */
+  identifiers: Array<{ identifier: string; directory: NetworkDirectoryState }>;
+}
+
 export interface NetworkWebhookResult {
   /** Set answers only: whether this call made the webhook (false: it replaced the URL of one that was there). */
   created?: boolean;

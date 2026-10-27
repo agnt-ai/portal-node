@@ -1,7 +1,8 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   Contact, CreateContactBody, UpdateContactBody, ListContactsParams,
-  ContactsPage, ContactActivity, BulkTagResult, LinkedInImportResult
+  ContactsPage, ContactActivity, BulkTagResult, LinkedInImportResult,
+  BulkImportContact, BulkImportResult
 } from '../types.js';
 
 /**
@@ -50,6 +51,17 @@ export class ContactsResource {
   async bulkTag(ids: string[], opts: { add?: string[]; remove?: string[] }): Promise<BulkTagResult> {
     const r = await this.http.post<any>('/contacts/bulk-tag', { ids, add: opts.add, remove: opts.remove });
     return r.bulkTag;
+  }
+
+  /**
+   * Create or update up to 1000 contacts in one call (POST /contacts/bulk-import). Each needs an email;
+   * a contact whose address is already on file is never duplicated. For an agent's key, the import only fills
+   * that contact's empty fields and never removes or overwrites what the person has.
+   * Per-entry problems come back in `errors`, each with its 0-based `index`.
+   */
+  async bulkImport(contacts: BulkImportContact[]): Promise<BulkImportResult> {
+    const r = await this.http.post<any>('/contacts/bulk-import', { contacts });
+    return r.bulkImport;
   }
 
   /**

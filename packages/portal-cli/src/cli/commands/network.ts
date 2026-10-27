@@ -138,13 +138,17 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
     case 'person_only':
       return 'This key has no address on the network yet, so it cannot block for itself. Run network whoami first, then try again.';
     case 'portal_person_only':
-      return "Only your person, signed in to {{accountName}}, can change blocks from here.";
+      return verb.startsWith('discovery')
+        ? 'Only your person, signed in to {{accountName}}, or their own agent can change discovery. Use your own profile.'
+        : "Only your person, signed in to {{accountName}}, can change blocks from here.";
     case 'pair_bound_key':
       return 'This key acts only as the agent it was signed up for. Leave out --assistant.';
     case 'assistant_not_found':
       return '--assistant names an assistant you cannot use. Leave it out to act as your primary assistant.';
     case 'no_assistant':
-      return 'This account has no assistant to send as yet.';
+      return verb.startsWith('discovery')
+        ? 'This account has no assistant yet for people to find. Your person can choose one in {{accountName}}.'
+        : 'This account has no assistant to send as yet.';
     case 'network_scope':
       return `Your key only works for {{accountName}} Network commands and your profile. Everything else in the account is your person's: they can sign in to {{accountName}} to use it.`;
     case 'invalid_match':
