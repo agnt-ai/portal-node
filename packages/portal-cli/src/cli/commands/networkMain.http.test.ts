@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,11 @@ import { fileURLToPath } from 'node:url';
  * the agent sign-up (POST /portal/auth/agent/start, /verify with purpose and agent, the address minted on the app's own
  * domain, connectContactsUrl) and the network routes (whoami, send, wait, inbox, sent, leave), with the same strict
  * request checks (unknown body or query fields are 400 invalid; wait's timeout is 0 to 25; inbox's numeric `after` is
- * 409) and the same 404 for a route it does not have. A contract fixture: no live backend, no signatures.
+ * 409) and the same 404 for a route it does not have. The webhook routes answer as the API's do (POST /agnt/webhook
+ * { url, rotateSecret?, assistant? } -> { created, webhook, secret? }, GET -> { webhook }, DELETE -> { status: 'removed' },
+ * POST /agnt/webhook/test -> { queued: true }) with its refusals: invalid_url, url_not_public, not_found (no webhook,
+ * or a bare "Not found" when the network is off), webhook_disabled (409), rate_limited (429, Retry-After) and
+ * pair_bound_key (403). A contract fixture: no live backend, no signatures.
  */
 
 const DOMAIN = 'openassistant.test';
@@ -26,6 +30,8 @@ const CONNECT = {
 const USERNAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 interface Agent { key: string; address: string; email: string; left: boolean; shown: Set<string> }
+interface Outcome { at: string; kind: 'message' | 'test'; ok: boolean; httpStatus?: number; error?: string }
+interface Hook { url: string; status: 'active' | 'disabled'; secret: string; consecutiveFailures: number; disabledReason?: string; disabledAt?: string; lastDelivery: Outcome | null; lastTest: Outcome | null; createdAt: string; updatedAt: string }
 interface Stored { id: string; receivedAt: string; from: string; to: string[]; text?: string; headers: Record<string, string>; inReplyTo: string | null }
 
 const hex = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -37,6 +43,9 @@ function fakeApi() {
   const held: Array<{ from: string; to: string }> = [];
   const codes = new Set<string>();
   const requests: Array<{ method: string; path: string; body?: any; query: URLSearchParams }> = [];
+  const hooks = new Map<string, Hook>();
+  const tests = new Map<string, number>();
+  const state = { webhookRoutes: true, networkOff: false, testLimit: 5 };
   let n = 0;
 
   const json = (res: any, status: number, body: unknown) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)); };
@@ -48,6 +57,22 @@ function fakeApi() {
     message: { untrusted: { from: m.from, basis: 'author-signed', content: { to: m.to, parts: m.text === undefined ? [] : [{ type: 'text/plain', data: m.text }], headers: m.headers, inReplyTo: m.inReplyTo } } },
     claims: [], sender: { verified: true, relation: 'external', pairing: null },
   });
+
+  // GET /agnt/webhook's view: never the secret.
+  const view = (h: Hook) => ({
+    url: h.url, status: h.status,
+    ...(h.status === 'disabled' && h.disabledReason ? { disabledReason: h.disabledReason, disabledAt: h.disabledAt } : {}),
+    consecutiveFailures: h.consecutiveFailures, lastDelivery: h.lastDelivery, lastTest: h.lastTest, createdAt: h.createdAt, updatedAt: h.updatedAt,
+  });
+  // The API's URL checks: shape first (invalid_url), then a public host (url_not_public, one answer for every refusal).
+  const urlRefusal = (raw: unknown): string | null => {
+    if (typeof raw !== 'string' || !raw || raw.length > 2048) return 'invalid_url';
+    let u: URL;
+    try { u = new URL(raw); } catch { return 'invalid_url'; }
+    if (u.protocol !== 'https:' || (u.port && u.port !== '443') || u.username || u.password) return 'invalid_url';
+    if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|\[::1\])/.test(u.hostname) || u.hostname.endsWith('.internal')) return 'url_not_public';
+    return null;
+  };
 
   const server = createServer(async (req: IncomingMessage, res) => {
     const url = new URL(req.url!, 'http://127.0.0.1');
@@ -89,6 +114,55 @@ function fakeApi() {
     if (url.pathname.startsWith('/agnt/')) {
       const agent = [...agents.values()].find((a) => `Bearer ${a.key}` === req.headers.authorization && !a.left);
       if (!agent) return refuse(res, 401, 'unauthorized', 'Invalid API key');
+      // The app's network off: every network route is the same bare 404.
+      if (state.networkOff) return refuse(res, 404, 'not_found', 'Not found');
+      if (state.webhookRoutes && url.pathname.startsWith('/agnt/webhook')) {
+        const ownAssistant = `as-${agent.address.split('@')[0]}`;
+        const input = req.method === 'POST' && url.pathname === '/agnt/webhook' ? (body ?? {}) : q;
+        const allowed = req.method === 'POST' && url.pathname === '/agnt/webhook' ? ['url', 'rotateSecret', 'assistant'] : ['assistant'];
+        if (!only(input, allowed)) return refuse(res, 400, 'invalid', 'Unrecognized key');
+        // A key bound to its own agent acts only as it.
+        if (input.assistant !== undefined && input.assistant !== ownAssistant) return refuse(res, 403, 'pair_bound_key', 'This key acts only as its own agent');
+        const hook = hooks.get(agent.address);
+        const now = new Date().toISOString();
+        if (route === 'POST /agnt/webhook') {
+          const refused = urlRefusal(body?.url);
+          if (refused === 'invalid_url') return refuse(res, 400, 'invalid_url', 'The URL must be https');
+          if (refused) return refuse(res, 400, 'url_not_public', 'The URL must reach a public host');
+          const href = new URL(body.url).href;
+          if (!hook) {
+            const secret = `whsec_${hex(`secret-${n++}`)}`;
+            const made: Hook = { url: href, status: 'active', secret, consecutiveFailures: 0, lastDelivery: null, lastTest: null, createdAt: now, updatedAt: now };
+            hooks.set(agent.address, made);
+            return json(res, 200, { created: true, webhook: view(made), secret });
+          }
+          Object.assign(hook, { url: href, status: 'active', consecutiveFailures: 0, disabledReason: undefined, disabledAt: undefined, updatedAt: now });
+          if (body.rotateSecret === true) hook.secret = `whsec_${hex(`secret-${n++}`)}`;
+          return json(res, 200, { created: false, webhook: view(hook), ...(body.rotateSecret === true ? { secret: hook.secret } : {}) });
+        }
+        if (route === 'GET /agnt/webhook') {
+          if (!hook) return refuse(res, 404, 'not_found', 'This agent has no webhook');
+          return json(res, 200, { webhook: view(hook) });
+        }
+        if (route === 'DELETE /agnt/webhook') {
+          hooks.delete(agent.address);
+          return json(res, 200, { status: 'removed' });
+        }
+        if (route === 'POST /agnt/webhook/test') {
+          const count = (tests.get(agent.address) ?? 0) + 1;
+          tests.set(agent.address, count);
+          if (count > state.testLimit) {
+            res.setHeader('Retry-After', '42');
+            return refuse(res, 429, 'rate_limited', 'too many webhook test calls; try again later');
+          }
+          if (!hook) return refuse(res, 404, 'not_found', 'This agent has no webhook');
+          if (hook.status !== 'active') return refuse(res, 409, 'webhook_disabled', 'This webhook is disabled; set its URL again to turn it back on');
+          // The worker's push, at once: the receiver answered 200.
+          const outcome: Outcome = { at: now, kind: 'test', ok: true, httpStatus: 200 };
+          hook.lastTest = outcome; hook.lastDelivery = outcome;
+          return json(res, 200, { queued: true });
+        }
+      }
       if (route === 'GET /agnt/whoami') {
         return json(res, 200, {
           address: agent.address,
@@ -144,7 +218,9 @@ function fakeApi() {
     // The API's own 404 for a route it does not have.
     return json(res, 404, { status: 404, error_code: 'not_found', error: 'Route not found', path: url.pathname });
   });
-  return { server, requests, held };
+  /** The worker turning a hook off after too many failed pushes. */
+  const disable = (address: string) => Object.assign(hooks.get(address)!, { status: 'disabled', disabledReason: 'consecutive_failures', disabledAt: new Date().toISOString(), consecutiveFailures: 20 });
+  return { server, requests, held, hooks, state, disable };
 }
 
 describe('network: the compiled CLI against the API as it answers today, two agents', () => {
@@ -290,10 +366,8 @@ describe('network: the compiled CLI against the API as it answers today, two age
     expect(fake.requests.filter((r) => r.path === '/agnt/send')).toHaveLength(1);
   }, 30_000);
 
-  it('webhook and agent-email say "not available yet", before reading a profile or calling anything', async () => {
+  it('agent-email says "not available yet", before reading a profile or calling anything', async () => {
     for (const args of [
-      ['network', 'webhook', 'set', '--url', 'https://agent.example.com/push'], ['network', 'webhook', 'show'],
-      ['network', 'webhook', 'test'], ['network', 'webhook', 'remove'],
       ['network', 'agent-email', 'start', 'me@example.org'], ['network', 'agent-email', 'verify', 'me@example.org', '123456'],
       ['network', 'agent-email', 'remove', 'me@example.org'],
     ]) {
@@ -403,11 +477,125 @@ describe('network: the compiled CLI against the API as it answers today, two age
     const { PortalClient } = await import('../../index.js');
     const { describeError } = await import('./network.js');
     const client = new PortalClient({ apiUrl, apiKey: 'ak_live_alice-agent' });
+    // A server without the webhook routes.
+    fake.state.webhookRoutes = false;
     const err = await client.network.getWebhook().catch((e: unknown) => e);
     const { body } = describeError('webhook show', err);
     expect(body).toMatchObject({ code: 'not_available_yet', status: 404, retryable: false });
     expect(body.hint).toMatch(/doesn't offer `network webhook show` yet/);
   }, 30_000);
+
+  /** Every file under HOME, read whole: what the CLI wrote to this computer. */
+  async function everythingWritten(dir = home): Promise<string> {
+    let all = '';
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const path = join(dir, e.name);
+      all += e.isDirectory() ? await everythingWritten(path) : await readFile(path, 'utf8');
+    }
+    return all;
+  }
+
+  it('webhook set → show → test → set again → rotate → remove, as the API answers; the secret only on stdout, once', async () => {
+    await joinAs('alice', 'alice-agent', 'alice@example.com');
+    const url = 'https://agent.example.com/network-push';
+
+    // Before any is set: show and test say "no webhook yet", not "the network is off".
+    const none = await cli(['network', 'webhook', 'show', '--profile', 'alice']);
+    expect(none.code).toBe(1);
+    expect(errorOf(none.stderr)).toMatchObject({ code: 'not_found', status: 404, hint: expect.stringMatching(/no webhook yet/) });
+
+    const made = await cli(['network', 'webhook', 'set', '--url', url, '--profile', 'alice']);
+    expect(made.code, made.stderr).toBe(0);
+    expect(made.json).toMatchObject({ created: true, webhook: { url, status: 'active', consecutiveFailures: 0, lastDelivery: null, lastTest: null } });
+    const secret = made.json.secret as string;
+    expect(secret).toMatch(/^whsec_[0-9a-f]{64}$/);
+    expect(made.json.storeSecret).toMatch(/shown only now/);
+    // The request was exactly what the API reads, and the secret went nowhere but stdout.
+    expect(fake.requests.filter((r) => r.method === 'POST' && r.path === '/agnt/webhook').map((r) => r.body)).toEqual([{ url }]);
+    expect(made.stderr).toBe('');
+    expect(made.stdout.split(secret)).toHaveLength(2);
+    expect(await everythingWritten()).not.toContain(secret);
+
+    const shown = await cli(['network', 'webhook', 'show', '--profile', 'alice']);
+    expect(shown.code, shown.stderr).toBe(0);
+    expect(shown.json).toEqual({ webhook: expect.objectContaining({ url, status: 'active' }) });
+    expect(shown.stdout).not.toContain(secret);
+
+    const tested = await cli(['network', 'webhook', 'test', '--profile', 'alice']);
+    expect(tested.code, tested.stderr).toBe(0);
+    expect(tested.json).toMatchObject({ queued: true, delivery: { kind: 'test', ok: true, httpStatus: 200 } });
+    const testCall = fake.requests.find((r) => r.method === 'POST' && r.path === '/agnt/webhook/test')!;
+    expect([...testCall.query.keys()]).toEqual([]);
+
+    // Set again: the same secret, so none is shown; a note says so.
+    const again = await cli(['network', 'webhook', 'set', '--url', `${url}?v=2`, '--profile', 'alice']);
+    expect(again.code, again.stderr).toBe(0);
+    expect(again.json).toMatchObject({ created: false, webhook: { url: `${url}?v=2` }, note: expect.stringMatching(/secret is unchanged/) });
+    expect(again.json).not.toHaveProperty('secret');
+
+    const rotated = await cli(['network', 'webhook', 'set', '--url', url, '--rotate', '--profile', 'alice']);
+    expect(rotated.code, rotated.stderr).toBe(0);
+    expect(rotated.json).toMatchObject({ created: false, secret: expect.stringMatching(/^whsec_/), storeSecret: expect.any(String) });
+    expect(rotated.json.secret).not.toBe(secret);
+    expect(fake.requests.filter((r) => r.method === 'POST' && r.path === '/agnt/webhook').at(-1)!.body).toEqual({ url, rotateSecret: true });
+    expect(await everythingWritten()).not.toContain(rotated.json.secret);
+
+    const removed = await cli(['network', 'webhook', 'remove', '--profile', 'alice']);
+    expect(removed.code, removed.stderr).toBe(0);
+    expect(removed.json).toEqual({ status: 'removed' });
+    // Idempotent.
+    expect((await cli(['network', 'webhook', 'remove', '--profile', 'alice'])).json).toEqual({ status: 'removed' });
+    const gone = await cli(['network', 'webhook', 'test', '--profile', 'alice']);
+    expect(gone.code).toBe(1);
+    expect(errorOf(gone.stderr)).toMatchObject({ code: 'not_found', hint: expect.stringMatching(/no webhook yet/) });
+  }, 60_000);
+
+  it('webhook refusals map to their codes, hints and exit statuses', async () => {
+    const alice = await joinAs('alice', 'alice-agent', 'alice@example.com');
+    const set = (u: string, ...more: string[]) => cli(['network', 'webhook', 'set', '--url', u, '--profile', 'alice', ...more]);
+
+    for (const bad of ['http://agent.example.com/push', 'https://agent.example.com:8443/push', 'https://user:pw@agent.example.com/push']) {
+      const out = await set(bad);
+      expect(out.code, bad).toBe(1);
+      expect(errorOf(out.stderr), bad).toMatchObject({ code: 'invalid_url', status: 400, retryable: false, hint: expect.stringMatching(/https on port 443/) });
+    }
+    const priv = await set('https://10.0.0.5/push');
+    expect(priv.code).toBe(1);
+    expect(errorOf(priv.stderr)).toMatchObject({ code: 'url_not_public', status: 400, hint: expect.stringMatching(/public host/) });
+    expect(fake.hooks.size).toBe(0);
+
+    // --assistant naming another assistant, with a key bound to its own agent.
+    const bound = await set('https://agent.example.com/push', '--assistant', 'as-someone-else');
+    expect(bound.code).toBe(1);
+    expect(errorOf(bound.stderr)).toMatchObject({ code: 'pair_bound_key', status: 403, hint: expect.stringMatching(/Leave out --assistant/) });
+    const own = await set('https://agent.example.com/push', '--assistant', 'as-alice-agent');
+    expect(own.code, own.stderr).toBe(0);
+
+    // Disabled by failed pushes: test is 409 webhook_disabled; setting the URL again turns it back on.
+    fake.disable(alice.address);
+    const shown = await cli(['network', 'webhook', 'show', '--profile', 'alice']);
+    expect(shown.json.webhook).toMatchObject({ status: 'disabled', disabledReason: 'consecutive_failures' });
+    const disabled = await cli(['network', 'webhook', 'test', '--profile', 'alice']);
+    expect(disabled.code).toBe(1);
+    expect(errorOf(disabled.stderr)).toMatchObject({ code: 'webhook_disabled', status: 409, retryable: false, hint: expect.stringMatching(/turn it back on/) });
+    expect((await set('https://agent.example.com/push')).json.webhook.status).toBe('active');
+
+    // Over the test limit: 429 rate_limited, retryable (exit 75), with the server's Retry-After.
+    fake.state.testLimit = 0;
+    const limited = await cli(['network', 'webhook', 'test', '--profile', 'alice']);
+    expect(limited.code).toBe(75);
+    expect(errorOf(limited.stderr)).toMatchObject({ code: 'rate_limited', status: 429, retryable: true, retryAfter: 42, hint: expect.stringMatching(/webhook changes or test pushes/) });
+
+    // The app's network off: a bare 404 on every webhook command is "not on", never "no webhook yet".
+    fake.state.networkOff = true;
+    for (const verb of ['show', 'test', 'remove']) {
+      const out = await cli(['network', 'webhook', verb, '--profile', 'alice']);
+      expect(out.code, verb).toBe(1);
+      expect(errorOf(out.stderr), verb).toMatchObject({ code: 'not_found', hint: expect.stringMatching(/isn't on for this app/) });
+    }
+    const off = await set('https://agent.example.com/push');
+    expect(errorOf(off.stderr)).toMatchObject({ code: 'not_found', hint: expect.stringMatching(/isn't on for this app/) });
+  }, 90_000);
 
   it('login --agent-email is refused before any code is asked for', async () => {
     const out = await cli(['login', '--email', 'alice@example.com', '--purpose', 'network', '--agent-username', 'alice-agent',

@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { createHmac } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { readSkill, skillPath, CONVERSATION } from './agentGuide.js';
 import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
 
@@ -132,19 +134,46 @@ describe("the app's network skill (SKILL.md)", () => {
   it('staying available covers each kind of host', () => {
     const s = section('5. Staying available');
     for (const host of ['Claude Code', 'scheduled tasks', 'network watch --exec', 'network webhook set', 'chat app']) expect(s).toContain(host);
-    expect(s).toMatch(/### Receiving a webhook\s+Not available on .* yet; this is how it will work\./);
-    expect(s).toMatch(/webhooks aren't available on\s+.* yet \(`network webhook` says so\); use `network watch` meanwhile/);
-    expect(s).toMatch(/The secret is shown once/);
+    expect(s).not.toMatch(/aren't available|Not available/);
+    expect(s).toMatch(/### Receiving a webhook\s+- \*\*The secret is shown once,\*\*/);
+    expect(s).toMatch(/The CLI saves it nowhere/);
     expect(s).toMatch(/never carries it/);
-    expect(s).toMatch(/HMAC-SHA256.*keyed with your secret, over the `Network-Webhook-Timestamp` header, a dot, and the raw\s+body/s);
-    expect(s).toMatch(/`network\.message`, or\s+`network\.test`/);
-    expect(s).toMatch(/over the raw bytes, before parsing the JSON, and compare in constant time\.\s+Reject a timestamp more than 300 seconds off, in either direction/);
+    expect(s).toMatch(/`network\.message`, or `network\.test`/);
+    // The body as the server sends it: the delivery id at the top, the message's fields nested under `message`.
+    expect(s).toContain('`{ "type", "id", "address", "message": { "id", "from", "inReplyTo", "receivedAt" }, "sentAt" }`');
+    expect(s).toMatch(/The top-level `id` is the \*\*delivery\*\* id, the same as the `Network-Webhook-Id` header\. It is not\s+the message's id\./);
+    expect(s).toMatch(/nested under `message`: `message\.id`.*`message\.from`, `message\.inReplyTo`/s);
+    expect(s).toMatch(/HMAC-SHA256, keyed with your whole secret, of the `Network-Webhook-Timestamp` header,\s+a dot, and the raw body: `timestamp \+ "\." \+ rawBody`/);
+    expect(s).toMatch(/`v1=` followed by that hex\. Compare the whole string in\s+constant time/);
+    expect(s).toMatch(/more than 300 seconds from now, in either direction/);
     expect(s).toMatch(/Drop repeats\*\* by the `Network-Webhook-Id` header/);
     expect(s).toMatch(/never in the command line/);
     expect(s).toMatch(/\*\*One session per Network ID\.\*\*/);
     expect(s).toMatch(/only one of them uses the network/);
     expect(s).toMatch(/`--profile <name>` on every command and its own sign-up/);
     expect(s).toMatch(/check its `receivedAt` before acting on it/);
+  });
+
+  it("the skill's Node check accepts a push signed as the server signs it, and refuses anything else", () => {
+    const code = section('5. Staying available').match(/```js\n([\s\S]*?)```/)![1];
+    const verifyPush = new Function('require', `${code}\nreturn verifyPush;`)(createRequire(import.meta.url)) as
+      (secret: string, headers: Record<string, string>, rawBody: string) => boolean;
+    // The server's signing: "v1=" and the hex HMAC-SHA256, keyed with the whole secret, of `${timestamp}.${rawBody}`.
+    const sign = (secret: string, ts: string, raw: string) => `v1=${createHmac('sha256', secret).update(`${ts}.${raw}`).digest('hex')}`;
+    const secret = `whsec_${'ab'.repeat(32)}`;
+    const raw = JSON.stringify({ type: 'network.message', id: '65f0c0ffee0000000000abcd', address: 'me@agent.example.com',
+      message: { id: 'f'.repeat(64), from: 'them@agent.example.com', inReplyTo: null, receivedAt: '2026-10-26T12:00:00.000Z' }, sentAt: '2026-10-26T12:00:01.000Z' });
+    const now = String(Math.floor(Date.now() / 1000));
+    const headers = (ts: string, sig: string) => ({ 'network-webhook-timestamp': ts, 'network-webhook-signature': sig });
+    expect(verifyPush(secret, headers(now, sign(secret, now, raw)), raw)).toBe(true);
+    expect(verifyPush(secret, headers(now, sign(secret, now, raw).slice(3)), raw)).toBe(false); // no v1=
+    expect(verifyPush(secret, headers(now, sign('whsec_other', now, raw)), raw)).toBe(false);
+    expect(verifyPush(secret, headers(now, sign(secret, now, raw)), `${raw} `)).toBe(false); // the body changed
+    const old = String(Number(now) - 301);
+    expect(verifyPush(secret, headers(old, sign(secret, old, raw)), raw)).toBe(false);
+    const ahead = String(Number(now) + 301);
+    expect(verifyPush(secret, headers(ahead, sign(secret, ahead, raw)), raw)).toBe(false);
+    expect(verifyPush(secret, {}, raw)).toBe(false);
   });
 
   it('safety: untrusted input, private stays private, verify before it matters, abuse, leave only when asked', () => {
@@ -184,8 +213,8 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/Only the app's operator\. Stop and tell your person\./);
     expect(s).toMatch(new RegExp('\\| `network_scope` \\| Your key only works for ' + APP_RE + ' Network commands and your profile\\. ' +
       "Everything else in the account is your person's\\. \\| Your person: they sign in to " + APP_RE + ' to use it\\.'));
-    expect(s).toMatch(/Elsewhere: the network isn't on for this app\. \| On `sent`, you\. Elsewhere, only the app's operator: stop and tell your person\./);
-    expect(s).toMatch(/\| `not_available_yet` \| .* doesn't have that command yet \(a webhook, the agent's own email\)\. Nothing was sent or changed\. \| Nobody, for now: tell your person it isn't available yet\. Don't retry\. \|/);
+    expect(s).toMatch(/On `webhook show` or `webhook test`: you have no webhook yet\. Elsewhere: the network isn't on for this app\. \| On `sent`, you; on a webhook, you: `network webhook set --url`\. Elsewhere, only the app's operator: stop and tell your person\./);
+    expect(s).toMatch(/\| `not_available_yet` \| .* doesn't have that command yet \(the agent's own email\)\. Nothing was sent or changed\. \| Nobody, for now: tell your person it isn't available yet\. Don't retry\. \|/);
     expect(s).toContain('held_parts_unsupported');
   });
 

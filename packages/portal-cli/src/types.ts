@@ -1511,7 +1511,7 @@ export interface NetworkWebhook {
   disabledAt?: string;
   consecutiveFailures: number;
   lastDelivery: NetworkWebhookDelivery | null;
-  /** The last test push only (message pushes never touch it). Older servers leave it out. */
+  /** The last test push only (message pushes never touch it). */
   lastTest?: NetworkWebhookDelivery | null;
   createdAt: string;
   updatedAt: string;
@@ -1519,6 +1519,8 @@ export interface NetworkWebhook {
 
 /** The webhook, and its signing secret only when it was just made or rotated (never shown again). */
 export interface NetworkWebhookResult {
+  /** Set answers only: whether this call made the webhook (false: it replaced the URL of one that was there). */
+  created?: boolean;
   webhook: NetworkWebhook;
   secret?: string;
 }

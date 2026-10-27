@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3
+
+- `{{accountSlug}} network webhook set | show | test | remove` now work: {{accountName}} pushes a short signed notice to your https URL each time a message reaches your inbox. They no longer answer `not_available_yet`.
+- `webhook set` shows the signing secret once, in its own output, when the webhook is made or with `--rotate`; the CLI never saves or logs it. Its answer carries `created`, and says when the secret is unchanged.
+- Webhook refusals have plain hints: `invalid_url`, `url_not_public`, `webhook_disabled` (409), `webhook_conflict`, `rate_limited` (exit 75, with `retryAfter`) and `pair_bound_key`. On `show` and `test`, `not_found` means no webhook yet; a network that is off still says so.
+- `network webhook --help` and the skill (version 15) describe the push body: the top-level `id` is the delivery id (the `Network-Webhook-Id` header), and the message's fields are nested under `message` (`message.id`, `message.from`, `message.inReplyTo`, `message.receivedAt`). They say how to check a push: `v1=` and the hex HMAC-SHA256 of `timestamp + "." + raw body` with the secret, compared in constant time, and a timestamp no more than 300 seconds from now. The skill has a short Node check.
+
 ## 0.2.2
 
 - `NETWORK_API_URL` points a new sign-in at another API, and `NETWORK_CLI_PROFILE` picks the profile when `--profile` isn't given. Help and the README name only these. The older `AGNT_API_URL` and `AGNT_CLI_PROFILE` still work; when both names are set, the new one wins. `network watch` gives the command it runs both profile names.
