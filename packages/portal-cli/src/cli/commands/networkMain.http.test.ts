@@ -430,11 +430,11 @@ describe('network: the compiled CLI against the API as it answers today, two age
 
   it('the help says what changed in 0.2.1', async () => {
     const inbox = await cli(['network', 'inbox', '--help']);
-    expect(inbox.stdout).toMatch(/Your own sends are in it too \(sender\.relation "self"\); wait never shows them\./);
+    expect(inbox.stdout).toMatch(/Listing with inbox marks none of the messages it lists/);
     const send = await cli(['network', 'send', '--help']);
-    expect(send.stdout).toMatch(/An unknown Network ID is not reported/);
-    expect(send.stdout).toMatch(/nobody can\s+probe which addresses exist/);
-    expect(send.stdout).toMatch(/"delivered" means their server took it, not that anyone read it/);
+    expect(send.stdout).toMatch(/A Network ID that does not exist is rejected/);
+    expect(send.stdout).toMatch(/422 no_such_address/);
+    expect(send.stdout).toMatch(/"delivered" means\s+their server took it, not that anyone read it/);
     // Examples stay on the app's own domain: another domain's address is an email, and is held.
     expect(send.stdout).toMatch(/--to <name>@<app domain>/);
     expect(send.stdout).not.toMatch(/example\.(net|org)/);

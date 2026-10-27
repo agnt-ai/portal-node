@@ -59,8 +59,14 @@ describe("the app's network skill (SKILL.md)", () => {
     const s = section('4. Having a conversation');
     expect(s).toMatch(/answer yourself whenever the answer is within what they asked/);
     expect(s).toMatch(/Replies take minutes, not seconds/);
-    expect(s).toMatch(/`wait` is the one way to hear back/);
-    expect(s).toMatch(/`inbox` is history: it marks nothing as shown/);
+    // wait hands out the next UNREAD message under a lease; it is read by a reply, `ack`, or the next wait, inbox or send.
+    expect(s).toMatch(/`wait` hands you the next UNREAD message/);
+    expect(s).toMatch(/about 120 seconds \(`lease`\)/);
+    expect(s).toMatch(/reply in its thread, run `\S+ network ack <id>`, or call `wait`, `inbox` or `send` again/);
+    expect(s).toMatch(/`inbox` is your mailbox\. It lists unread messages first and marks none of the ones it lists read\s+unless you give it `--mark-read`/);
+    expect(s).not.toMatch(/marks nothing as shown|remembers what it has shown|`inbox` is history/);
+    expect(s).toMatch(/`kind: "bounce"`/);
+    expect(s).toMatch(/`\S+ network thread <message id>`/);
     expect(s).toMatch(/--in-reply-to <its id>/);
     expect(s).toMatch(/after 3 `--timeout 300` waits\s+in a row with nothing/);
     expect(s).toMatch(/\*\*One `wait` at a time\.\*\*/);
@@ -153,10 +159,17 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s.indexOf('network webhook set')).toBeLessThan(s.indexOf('network watch --print'));
     expect(s).toMatch(/never end your turn\s+"waiting for a reply" with nothing set up to hear it/);
     expect(s).toMatch(/nothing replays a push that was given up on/);
-    expect(s).toMatch(/clear what is already waiting first with `network watch --drain --print` \(reading with `inbox`\s+does not clear it for a watch\)/i);
-    expect(s).toMatch(/no other\s+`wait` or `watch` is running/);
-    expect(s).toMatch(/Never pipe `wait` through `grep` or `head`/);
-    expect(s).toMatch(/network inbox` first, then `network wait`/);
+    // watch --print: one backlog line first, then live lines, and it acknowledges nothing.
+    expect(s).toMatch(/prints ONE `backlog` line/);
+    expect(s).toMatch(/The watch acknowledges nothing, so\s+attaching it never hides a message/);
+    expect(s).not.toMatch(/--drain --print|marks a message as shown/);
+    expect(s).toMatch(/no\s+other `wait` or `watch` is running/);
+    expect(s).toMatch(/never\s+pipe `inbox` or `wait` through `grep` or `head`/);
+    expect(s).toMatch(/One page is not the inbox/);
+    expect(s).toMatch(/run `\S+ network inbox\s+--unread` first/);
+    expect(s).toMatch(/Mark read by answering, or by `ack`/);
+    expect(s).toMatch(/A reply in a thread marks the unread messages in it read\s+\(up to the one you answered\)/);
+    expect(s).toMatch(/Listing messages never marks\s+the\s+ones it lists/);
     expect(s).not.toMatch(/aren't available|Not available/);
     expect(s).toMatch(/### Receiving a webhook\s+- \*\*The secret is shown once,\*\*/);
     expect(s).toMatch(/The CLI saves it nowhere/);
@@ -171,10 +184,21 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/more than 300 seconds from now, in either direction/);
     expect(s).toMatch(/Drop repeats\*\* by the `Network-Webhook-Id` header/);
     expect(s).toMatch(/never in the command line/);
-    expect(s).toMatch(/\*\*One session per Network ID\.\*\*/);
-    expect(s).toMatch(/only one of them uses the network/);
+    expect(s).toMatch(/\*\*Several sessions can share one Network ID, like one inbox\.\*\*/);
+    expect(s).toMatch(/read state belongs to that Network ID/);
+    expect(s).toMatch(/Let one\s+session own the standing listener/);
+    expect(s).not.toMatch(/One session per Network ID|only one of them uses the network/);
     expect(s).toMatch(/`--profile <name>` on every command and its own sign-up/);
     expect(s).toMatch(/check its `receivedAt` before acting on it/);
+  });
+
+  it('error table and command reference: no_such_address, ack, thread, the mailbox flags', () => {
+    expect(section('7. When things go wrong')).toMatch(/\| `no_such_address` \(422\) \|.*nothing was delivered/);
+    const ref = section('8. Command reference');
+    expect(ref).toMatch(/network ack <id>\.\.\. \| --thread <id> \| --from <address> \| --all/);
+    expect(ref).toMatch(/network thread <id>/);
+    expect(ref).toMatch(/network inbox \[--unread\]/);
+    expect(ref).toMatch(/`more: true` always comes with a `cursor`/);
   });
 
   it("the skill's Node check accepts a push signed as the server signs it, and refuses anything else", () => {

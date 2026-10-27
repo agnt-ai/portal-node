@@ -26,6 +26,8 @@ import { NetworkUsageError, describeError, plainError, type WaitClock } from './
 import { clientFor } from '../utils/api.js';
 import { networkProfile } from '../utils/agentIdentity.js';
 import { profileEnv } from '../../defaults.js';
+import { followMailbox } from './networkWatchMailbox.js';
+import { senderForLine } from './mailboxFormat.js';
 import type { NetworkWaitResult } from '../../types.js';
 
 export interface WatchOptions {
@@ -105,14 +107,6 @@ const realClock: WaitClock = {
 /** One JSON line on stdout. */
 const emitLine = (event: Record<string, unknown>) => process.stdout.write(`${JSON.stringify(event)}\n`);
 
-/**
- * A claimed sender for a monitor line: only an address-shaped value (letters, digits and . _ % + @ : -), at most
- * 120 characters, else null. Another party's text must not ride in on the line, so no sentence can pass.
- */
-function senderForLine(value: unknown): string | null {
-  return typeof value === 'string' && /^[A-Za-z0-9._%+@:-]{1,120}$/.test(value) ? value : null;
-}
-
 function wholeSeconds(name: string, value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   if (!/^[0-9]+$/.test(value) || Number(value) < 1) throw new NetworkUsageError(`--${name} takes a whole number of seconds, at least 1.`);
@@ -143,6 +137,15 @@ export async function watchLoop(
   let failures = 0;
 
   emit({ event: 'watching', from: opts.from ?? null, drain: !!opts.drain, ...(opts.print ? { print: true, read: '{{accountSlug}} network inbox' } : {}) });
+  // --print alone follows the mailbox: a backlog digest, then one line per new message. Without a mailbox on the
+  // server it answers 'legacy' and the older loop below (on `wait`) runs as it always did.
+  if (opts.print && !command) {
+    const followed = await followMailbox(client, { from: opts.from, drain: opts.drain }, { clock, stopped, emit });
+    if (followed !== 'legacy') {
+      emit({ event: 'stopped', handled: followed });
+      return followed;
+    }
+  }
   while (!stopped()) {
     let got: NetworkWaitResult;
     const asked = clock.now();

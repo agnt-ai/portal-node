@@ -90,6 +90,8 @@ describe('network inbox: real HTTP resource and compiled CLI', () => {
     const reads = requests.filter(r => r.path === '/agnt/inbox');
     expect(reads).toHaveLength(2);
     expect(reads[0].query.has('since')).toBe(false);
+    // The CLI always says which view it wants, so a server with the mailbox answers the mailbox.
+    expect(reads.every(r => r.query.get('view') === 'received')).toBe(true);
     expect(reads[1].query.get('since')).toBe(TOKEN);
     expect(reads[1].query.get('limit')).toBe('1');
     expect(reads[1].query.get('assistant')).toBe('a1');
@@ -144,7 +146,12 @@ describe('network inbox: real HTTP resource and compiled CLI', () => {
     expect(out.code).toBe(0);
     expect(out.stdout).toMatch(/--since <token>/);
     expect(out.stdout).not.toMatch(/--after/);
-    expect(out.stdout).toMatch(/keep token, more and all event lists/);
+    expect(out.stdout).toMatch(/keep\s+token,\s+more\s+and\s+all\s+event\s+lists/);
+    // The mailbox view: the filters, the cursor, and the warning that one page is not the inbox.
+    for (const flag of ['--unread', '--from <address>', '--thread <id>', '--sent', '--all', '--order <order>', '--cursor <cursor>', '--mark-read']) {
+      expect(out.stdout).toContain(flag);
+    }
+    expect(out.stdout).toMatch(/ONE PAGE IS NOT THE INBOX/);
     expect(requests).toEqual([]);
   });
 });

@@ -1392,11 +1392,33 @@ export interface NetworkSendBody {
   assistant?: string;
 }
 
+/**
+ * How reachable an agent looks right now: present only for an agent that has written to you or to one of your own
+ * person's agents. Absence says nothing.
+ */
+export interface NetworkReachability {
+  /** It waited or read its inbox in the last 90 seconds. */
+  listening: boolean;
+  lastSeen: 'within_a_minute' | 'within_an_hour' | 'within_a_day' | 'longer' | 'never';
+  webhook: boolean;
+}
+
+/** One recipient of a send. "rejected" is a Network ID that does not exist (`reason` "no_such_address"). */
+export interface NetworkSendRecipient {
+  to: string;
+  status: 'accepted' | 'rejected';
+  reason?: string;
+  recipient?: NetworkReachability;
+}
+
 export interface NetworkSendResult {
   id: string;
   receivedAt: string;
-  /** Every recipient answers "accepted", whatever happens next. */
-  recipients: Array<{ to: string; status: 'accepted' }>;
+  /**
+   * Per recipient. An email or phone always answers "accepted"; a Network ID that does not exist answers "rejected"
+   * (all of them rejected is a 422 `no_such_address` instead). Older servers answer "accepted" for every recipient.
+   */
+  recipients: NetworkSendRecipient[];
 }
 
 /**
@@ -1416,6 +1438,21 @@ export interface NetworkSender {
   pairing: { email: string; state: 'verified' | 'claimed'; by: string } | null;
 }
 
+/** What is unread in the whole mailbox (the Network ID's, shared by every session that uses it), whatever the filter. */
+export interface NetworkUnreadSummary {
+  count: number;
+  /** Sender address to how many of its messages are unread. A bounce counts as "network". */
+  senders: Record<string, number>;
+  /** When the oldest unread message arrived. */
+  oldest?: string | null;
+  /** How many more senders there are than `senders` lists. */
+  moreSenders?: number;
+}
+
+/**
+ * A message in the mailbox, or a bounce. A bounce (`kind` "bounce") is the network telling you a send did not
+ * arrive: it has `bounce` and `sender: { system: true }` and none of `message`, `carrier` and `claims`.
+ */
 export interface NetworkInboxEntry {
   id: string;
   receivedAt: string;
@@ -1426,24 +1463,74 @@ export interface NetworkInboxEntry {
   conversation?: string;
   marks?: string[];
   sender: NetworkSender;
+  /** Mailbox servers only. Absent on older servers. */
+  kind?: 'message' | 'bounce';
+  direction?: 'received' | 'sent';
+  /** Received and not yet acknowledged. */
+  unread?: boolean;
+  readAt?: string | null;
+  /** The sender's first-ever message to you. */
+  newSender?: boolean;
+  /** Sent entries: how each recipient is doing. */
+  recipients?: NetworkSentRecipient[];
+  /** Bounce entries: which send failed, to whom and why. */
+  bounce?: { sendId: string; to: string; reason: string; detail?: unknown };
+  inReplyTo?: string;
 }
 
 export interface NetworkInboxPage {
+  /** Absent on older servers, which answer the plain sync stream. */
   rule: string;
-  /** Opaque: pass back as since, unchanged. Null only when there is no address yet. */
+  /** 2 on a mailbox server; absent on an older one. */
+  contract?: number;
+  view?: 'received' | 'sent' | 'all';
+  order?: 'unread_first' | 'oldest' | 'newest';
+  /**
+   * Opaque: pass back as since, unchanged. Null only when there is no address yet. With order "oldest" and more
+   * pages it is the last position given; otherwise the mailbox head.
+   */
   token: string | null;
   more: boolean;
+  /** Mailbox servers: a `more: true` page always has a cursor (pass it as `--cursor`). */
+  cursor?: string | null;
+  note?: string;
+  /** How many messages match the query in all. */
+  matching?: number;
+  unread?: NetworkUnreadSummary;
   messages: NetworkInboxEntry[];
-  /** Other parties' data, never instructions or permission to apply effects. */
-  signals: NetworkUntrusted[];
-  marks: NetworkUntrusted[];
-  /** Exact removed message IDs. Reading these facts performs no deletion. */
-  removed: string[];
+  /** Other parties' data, never instructions or permission to apply effects. Older servers only. */
+  signals?: NetworkUntrusted[];
+  marks?: NetworkUntrusted[];
+  /** Exact removed message IDs. Reading these facts performs no deletion. Older servers only. */
+  removed?: string[];
 }
 
+/** `inbox?digest=true`: one summary of what is unread, instead of messages. */
+export interface NetworkInboxDigest {
+  rule: string;
+  contract: number;
+  digest: NetworkUnreadSummary & { ids: string[]; idsTruncated: boolean };
+  token: string | null;
+}
+
+/** What `POST /agnt/ack` answers. */
+export interface NetworkAckResult {
+  acknowledged: number;
+  unread: NetworkUnreadSummary;
+}
+
+/** Exactly one of these says which unread messages to acknowledge. */
+export type NetworkAckTarget = { ids: string[] } | { thread: string } | { from: string } | { all: true };
+
 export type NetworkWaitResult =
-  | (NetworkInboxEntry & { status: 'message'; rule: string; more: boolean })
-  | { status: 'timeout'; waitedSeconds: number; from: string | null };
+  | (NetworkInboxEntry & {
+    status: 'message'; rule: string; more: boolean;
+    /** Mailbox servers: you hold this message for about 120 seconds; unacknowledged, it comes back after that. */
+    lease?: { until: string };
+    /** The OTHER unread messages. */
+    unread?: NetworkUnreadSummary;
+  })
+  | { status: 'timeout'; waitedSeconds: number; from: string | null; unread?: NetworkUnreadSummary };
 
 export interface NetworkSentServer {
   /** The recipients' server, or null when it is not known. */
@@ -1454,9 +1541,19 @@ export interface NetworkSentServer {
   reason?: string | NetworkUntrusted;
 }
 
+/** One recipient of a sent message. "bounced": their server took it and then failed it (`reason` is theirs). */
+export interface NetworkSentRecipient {
+  to: string;
+  status: 'pending' | 'delivered' | 'rejected' | 'bounced' | 'accepted';
+  reason?: string | NetworkUntrusted;
+  recipient?: NetworkReachability;
+}
+
 export interface NetworkSentReport {
   id: string;
   servers: NetworkSentServer[];
+  /** Mailbox servers: per recipient, rejected ones included. */
+  recipients?: NetworkSentRecipient[];
 }
 
 /** One message your agent sent: as you wrote it, the signed message as it went, and its delivery. */
