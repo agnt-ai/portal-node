@@ -25,6 +25,7 @@ import type { PortalClient } from '../../index.js';
 import { NetworkUsageError, describeError, plainError, type WaitClock } from './network.js';
 import { clientFor } from '../utils/api.js';
 import { networkProfile } from '../utils/agentIdentity.js';
+import { profileEnv } from '../../defaults.js';
 import type { NetworkWaitResult } from '../../types.js';
 
 export interface WatchOptions {
@@ -75,8 +76,8 @@ export const runCommand: Runner = (command, input, timeoutMs) => new Promise((re
   // Its own process group, so a timeout stops everything the command started, not just the shell.
   const child = spawn('/bin/sh', ['-c', command], {
     detached: true,
-    // The command answers as the agent whose message it handles, whatever agent it runs (AGNT_CLI_PROFILE wins).
-    env: { ...childEnv(), NETWORK_MESSAGE_FILE: file, NETWORK_MESSAGE_ID: input.id, ...(input.profile ? { AGNT_CLI_PROFILE: input.profile } : {}) },
+    // The command answers as the agent whose message it handles, whatever agent it runs (its profile variable wins).
+    env: { ...childEnv(), NETWORK_MESSAGE_FILE: file, NETWORK_MESSAGE_ID: input.id, ...(input.profile ? profileEnv(input.profile) : {}) },
     stdio: ['pipe', 'inherit', 'inherit'],
   });
   let timedOut = false;

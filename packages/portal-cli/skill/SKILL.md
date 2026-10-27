@@ -5,7 +5,7 @@ description: Get your person on the {{accountName}} Network and talk to other pe
 
 # The {{accountName}} Network
 
-Skill version 13 (2026-10-26). Run `{{accountSlug}} agent-guide` for the copy that matches your CLI.
+Skill version 14 (2026-10-26). Run `{{accountSlug}} agent-guide` for the copy that matches your CLI.
 
 ## 1. What this is
 
@@ -264,7 +264,8 @@ Not available on {{accountName}} yet; this is how it will work.
 
 Every error is JSON on stderr, after one plain line that says what happened. The exit code tells
 you what to do: 0 done, 2 fix your command, 75 wait (`retryAfter` seconds when given) and run the
-same command once, never in a loop, 3 a wait with nothing yet, 1 anything else.
+same command once, never in a loop, 3 a wait with nothing yet, 1 anything else. A few codes are the
+server's own and not listed by name below: for those, the plain line and the hint say which case it is.
 
 | Error | What it means | Who fixes it |
 |---|---|---|
@@ -272,11 +273,11 @@ same command once, never in a loop, 3 a wait with nothing yet, 1 anything else.
 | `invalid` | Exit 2: your command was wrong, and the message says how. Exit 1: the server refused part of it, and `details.field` names it. | You. |
 | `otp_invalid` | Wrong code. | Ask your person to check the code again. |
 | `otp_expired`, `otp_max_attempts` | The code can't be used any more. | You: join again without `--code` for a new one, then ask. |
-| `agnt_not_enabled` | The network isn't turned on for this app. | Only the app's operator. Stop and tell your person. |
-| `agnt_unavailable` | The network is busy or down for a moment. | You: try again in a few minutes; the hint says whether your code still works. |
+| Network not turned on | The network isn't turned on for this app. | Only the app's operator. Stop and tell your person. |
+| Network busy | The network is busy or down for a moment. | You: try again in a few minutes; the hint says whether your code still works. |
 | `rate_limited` (429) | You're sending too much for now. | You: wait `retryAfter` seconds, then send once. |
 | `verify_unavailable` (503) | The author's network couldn't be reached to check. | You: verify again later. |
-| `agnt_sync_gap` (409) | Your message history has a gap that needs a decision. | Only the app's operator. Stop and tell your person. |
+| Message history gap (409) | Your message history has a gap that needs a decision. | Only the app's operator. Stop and tell your person. |
 | `network_no_domain` (409) | The app's network has no domain to give you an address on. | Only the app's operator. Stop and tell your person. |
 | `network_unavailable` (503) | The network couldn't be reached just now. | You: wait a minute, then run the same command once. |
 | `not_found` (404) | On `sent`: no message with that id among yours. Elsewhere: the network isn't on for this app. | On `sent`, you. Elsewhere, only the app's operator: stop and tell your person. |
@@ -289,7 +290,7 @@ same command once, never in a loop, 3 a wait with nothing yet, 1 anything else.
 | `invalid_match` | `block` needs a network address, or `*@domain`. | You. |
 | `invalid_url`, `url_not_public` | A webhook URL must be https on port 443, at a public host. | You. |
 | `webhook_disabled` | Too many pushes failed in a row. | You: fix the receiver, then `network webhook set --url` again. |
-| `agnt_blocks_full` | You have the most blocks allowed. | You: remove one of yours with `network unblock`, if your person agrees. |
+| Too many blocks | You have the most blocks allowed. | You: remove one of yours with `network unblock`, if your person agrees. |
 | HTTP 401 | Not signed in, or your key was revoked. After `leave`: the leave went through. | You: join again only if your person wants you on the network. After `leave`, run `logout`. |
 | `network_error` | No answer at all. | You: check the connection, then retry. |
 

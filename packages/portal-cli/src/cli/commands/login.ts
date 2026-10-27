@@ -183,7 +183,7 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
         { status, hint }, retry ? 75 : 1);
     }
     const askUser = askForCode(email);
-    // Step 2 must reach the same API, also when AGNT_API_URL chose it: the printed command can run without that variable.
+    // Step 2 must reach the same API, also when NETWORK_API_URL (or AGNT_API_URL) chose it: the printed command can run without that variable.
     const next = finishCommand({ ...opts, apiUrl: apiUrl !== DEFAULT_API_URL ? apiUrl : opts.apiUrl });
     const sentAt = new Date().toISOString();
     const findCode = findCodeHint(email, sentAt);

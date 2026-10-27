@@ -8,7 +8,9 @@ import {
   resolveDefaultAccountName,
   resolveApiUrl,
   apiUrlProblem,
-  apiUrlWarning
+  apiUrlWarning,
+  envProfileName,
+  profileEnv
 } from './defaults.js';
 
 describe('defaults', () => {
@@ -30,6 +32,20 @@ describe('defaults', () => {
     expect(resolveApiUrl({})).toBe('https://api.agnt.ai');
     expect(resolveApiUrl({ AGNT_API_URL: ' ' })).toBe('https://api.agnt.ai');
     expect(resolveApiUrl({ AGNT_API_URL: 'https://api.test.example' })).toBe('https://api.test.example');
+  });
+
+  it('NETWORK_API_URL overrides the default API URL, and wins over the older AGNT_API_URL', () => {
+    expect(resolveApiUrl({ NETWORK_API_URL: 'https://api.new.example' })).toBe('https://api.new.example');
+    expect(resolveApiUrl({ NETWORK_API_URL: 'https://api.new.example', AGNT_API_URL: 'https://api.old.example' })).toBe('https://api.new.example');
+    expect(resolveApiUrl({ NETWORK_API_URL: ' ', AGNT_API_URL: 'https://api.old.example' })).toBe('https://api.old.example');
+    expect(resolveApiUrl({ NETWORK_API_URL: ' ' })).toBe('https://api.agnt.ai');
+  });
+
+  it('a profile from NETWORK_CLI_PROFILE, else AGNT_CLI_PROFILE; a child gets both names', () => {
+    expect(envProfileName({})).toBeUndefined();
+    expect(envProfileName({ AGNT_CLI_PROFILE: 'old' })).toBe('old');
+    expect(envProfileName({ NETWORK_CLI_PROFILE: 'new', AGNT_CLI_PROFILE: 'old' })).toBe('new');
+    expect(profileEnv('p')).toEqual({ NETWORK_CLI_PROFILE: 'p', AGNT_CLI_PROFILE: 'p' });
   });
 
   // isHydrated is tested against literal fixture strings, not the module's

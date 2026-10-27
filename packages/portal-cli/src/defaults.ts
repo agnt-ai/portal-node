@@ -13,12 +13,31 @@ export const DEFAULT_ACCOUNT_SLUG = '{{accountSlug}}';
 export const DEFAULT_ACCOUNT_NAME = '{{accountName}}';
 export const DEFAULT_API_URL = 'https://api.agnt.ai';
 
+/** The variable that points a new sign-in at another API, as help and docs name it. */
+export const API_URL_ENV = 'NETWORK_API_URL';
+/** The variable that picks the profile when --profile isn't given, as help and docs name it. */
+export const PROFILE_ENV = 'NETWORK_CLI_PROFILE';
+// The names before 0.2.2. Still read (after the new ones) so existing setups keep working; never shown.
+const LEGACY_API_URL_ENV = 'AGNT_API_URL';
+const LEGACY_PROFILE_ENV = 'AGNT_CLI_PROFILE';
+
 /**
- * The API a new sign-in or saved key talks to: AGNT_API_URL when set (for example a test environment),
- * else DEFAULT_API_URL. A profile keeps the URL it was saved with, so later commands follow it.
+ * The API a new sign-in or saved key talks to: NETWORK_API_URL (or the older AGNT_API_URL) when set, for
+ * example a test environment, else DEFAULT_API_URL. A profile keeps the URL it was saved with, so later
+ * commands follow it.
  */
 export function resolveApiUrl(env: NodeJS.ProcessEnv = process.env): string {
-  return env.AGNT_API_URL?.trim() || DEFAULT_API_URL;
+  return env[API_URL_ENV]?.trim() || env[LEGACY_API_URL_ENV]?.trim() || DEFAULT_API_URL;
+}
+
+/** The profile named by NETWORK_CLI_PROFILE (or the older AGNT_CLI_PROFILE), or undefined when neither is set. */
+export function envProfileName(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env[PROFILE_ENV] || env[LEGACY_PROFILE_ENV] || undefined;
+}
+
+/** The environment that makes a child process use this profile, under both names so any CLI version follows it. */
+export function profileEnv(profile: string): Record<string, string> {
+  return { [PROFILE_ENV]: profile, [LEGACY_PROFILE_ENV]: profile };
 }
 
 /** Why an API URL can't be used, or undefined. https only; plain http only for a server on this computer. */

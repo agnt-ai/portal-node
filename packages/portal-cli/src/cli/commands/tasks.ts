@@ -3,7 +3,7 @@ import type { PortalClient } from '../../index.js';
 
 /**
  * `--assistant` is documented (and consistently used, e.g. `login --account`,
- * `tasks create ... --assistant travel@agnt.ai` in this command's own help
+ * `tasks create ... --assistant travel@example.com` in this command's own help
  * text) as an email address, but POST /tasks requires an assistant ObjectId —
  * passing the raw email straight through hits a Mongoose CastError server-
  * side ("Cast to ObjectId failed for value ... at path assistant"). Resolve

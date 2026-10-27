@@ -18,6 +18,7 @@ describe('credentials', () => {
     fakeHome = await mkdtemp(join(tmpdir(), 'portal-cli-test-'));
     vi.resetModules();
     delete process.env.AGNT_CLI_PROFILE;
+    delete process.env.NETWORK_CLI_PROFILE;
   });
 
   afterEach(async () => {
@@ -36,6 +37,15 @@ describe('credentials', () => {
     expect(await resolveProfileName()).toBe('default');
     process.env.AGNT_CLI_PROFILE = 'staging';
     expect(await resolveProfileName()).toBe('staging');
+  });
+
+  it('resolveProfileName: NETWORK_CLI_PROFILE names the profile, and wins over the older AGNT_CLI_PROFILE', async () => {
+    const { resolveProfileName } = await import('./credentials.js');
+    process.env.NETWORK_CLI_PROFILE = 'work';
+    expect(await resolveProfileName()).toBe('work');
+    process.env.AGNT_CLI_PROFILE = 'staging';
+    expect(await resolveProfileName()).toBe('work');
+    expect(await resolveProfileName('explicit')).toBe('explicit');
   });
 
   it('resolveProfile throws a helpful error when no credentials file exists yet', async () => {

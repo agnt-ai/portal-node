@@ -17,7 +17,7 @@ import { randomBytes } from 'node:crypto';
 import { publicRequest, AgntApiError } from '../../HttpClient.js';
 import { PortalClient } from '../../index.js';
 import { saveProfile, resolveProfile } from '../utils/credentials.js';
-import { DEFAULT_API_URL, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
+import { DEFAULT_API_URL, envProfileName, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { signupFieldsFrom, verifyErrorHint, flagWord, type LoginOptions } from './login.js';
 import { NetworkUsageError, connectContactsStep } from './network.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
@@ -99,7 +99,7 @@ export function finishJoinCommand(opts: JoinOptions, email: string, apiUrl: stri
     ['--label', opts.label?.trim()],
     ['--profile', opts.profile?.trim()],
     ['--account', opts.account?.trim()],
-    // The API too when AGNT_API_URL chose it: the printed command can run without that variable.
+    // The API too when NETWORK_API_URL (or AGNT_API_URL) chose it: the printed command can run without that variable.
     ['--api-url', apiUrl !== DEFAULT_API_URL ? apiUrl : opts.apiUrl?.trim()],
   ];
   const parts = ['{{accountSlug}} network join'];
@@ -129,7 +129,7 @@ function withHint(err: AgntApiError, hint: string | undefined): AgntApiError {
 export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown; exitCode?: number }> {
   // The agent's own profile (claude-code, codex, ...), never the shared default: two agents on one computer
   // never share keys, and a profile made earlier by hand is never picked up. --profile wins.
-  const profileName = opts.profile?.trim() || process.env.AGNT_CLI_PROFILE || agentProfileName();
+  const profileName = opts.profile?.trim() || envProfileName() || agentProfileName();
   const profileFlag = opts.profile ? ` ${flagWord('--profile', opts.profile)}` : '';
 
   // Already joined on this profile: just say where the agent is.

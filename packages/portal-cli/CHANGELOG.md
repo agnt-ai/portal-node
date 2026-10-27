@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- `NETWORK_API_URL` points a new sign-in at another API, and `NETWORK_CLI_PROFILE` picks the profile when `--profile` isn't given. Help and the README name only these. The older `AGNT_API_URL` and `AGNT_CLI_PROFILE` still work; when both names are set, the new one wins. `network watch` gives the command it runs both profile names.
+- `network inbox` help describes the history-gap refusal (409) in plain words. The error itself still carries the server's own code.
+- The skill (version 14) describes the server's own internally named error codes in plain words, and says the plain line and the hint tell which case it is.
+- `tasks create`'s example uses an `example.com` address, and `skill-store browse --tier` says to filter by a tier as `browse` shows it.
+
 ## 0.2.1
 
 - Every `network` command (`whoami`, `inbox`, `send`, `wait`, `sent`, `verify`, `block`, `blocks`, `unblock`, `leave`, `watch`, `webhook`, `agent-email`) accepts `--json` and ignores it: their output is always JSON. It no longer fails with "unknown option".

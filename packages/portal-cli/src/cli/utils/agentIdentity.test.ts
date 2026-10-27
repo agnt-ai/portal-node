@@ -18,6 +18,8 @@ describe('agent identity', () => {
   it('network commands use --profile, then AGNT_CLI_PROFILE, then the agent\'s own profile once it exists', async () => {
     expect(await networkProfile('work', { CLAUDECODE: '1' })).toBe('work');
     expect(await networkProfile(undefined, { CLAUDECODE: '1', AGNT_CLI_PROFILE: 'x' })).toBe('x');
+    expect(await networkProfile(undefined, { CLAUDECODE: '1', NETWORK_CLI_PROFILE: 'y' })).toBe('y');
+    expect(await networkProfile(undefined, { CLAUDECODE: '1', NETWORK_CLI_PROFILE: 'y', AGNT_CLI_PROFILE: 'x' })).toBe('y');
     expect(await networkProfile(undefined, { CLAUDECODE: '1' })).toBe('claude-code');
   });
 
