@@ -5,6 +5,7 @@
  */
 
 import { listProfileNames } from './credentials.js';
+import { envProfileName } from '../../defaults.js';
 
 /** The agent product: "Claude Code", "Codex", "Cursor", or "Agent" when unknown. */
 export function guessProduct(env: NodeJS.ProcessEnv = process.env): string {
@@ -29,14 +30,15 @@ export class NotJoinedError extends Error {
 }
 
 /**
- * The profile an agnt command uses: --profile when given, else AGNT_CLI_PROFILE, else, for a detected agent
+ * The profile a network command uses: --profile when given, else NETWORK_CLI_PROFILE (or AGNT_CLI_PROFILE), else, for a detected agent
  * (Claude Code, Codex, Cursor), its own profile, refused with NotJoinedError until it has joined. With no
  * agent detected: the "agent" profile when one joined under it, else undefined, leaving the usual default
  * (for scripts) to the caller.
  */
 export async function networkProfile(explicit?: string, env: NodeJS.ProcessEnv = process.env): Promise<string | undefined> {
   if (explicit) return explicit;
-  if (env.AGNT_CLI_PROFILE) return env.AGNT_CLI_PROFILE;
+  const fromEnv = envProfileName(env);
+  if (fromEnv) return fromEnv;
   const own = agentProfileName(env);
   const names = await listProfileNames().catch(() => [] as string[]);
   if (names.includes(own)) return own;

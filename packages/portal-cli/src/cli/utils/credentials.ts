@@ -23,6 +23,8 @@
  * something else with --profile.
  */
 
+import { envProfileName } from '../../defaults.js';
+
 export interface Profile {
   apiUrl: string;
   apiKey: string;
@@ -166,7 +168,8 @@ export async function setDefaultProfileName(name: string): Promise<void> {
 }
 
 /**
- * Resolve which profile to use: explicit name > AGNT_CLI_PROFILE env var >
+ * Resolve which profile to use: explicit name > NETWORK_CLI_PROFILE (or the
+ * older AGNT_CLI_PROFILE) env var >
  * persisted default (set by the first-ever login/configure, or `profiles
  * use`) > the literal string 'default' as a last resort (e.g. nothing has
  * ever been saved yet, so resolveProfile's own not-found error is what
@@ -174,7 +177,8 @@ export async function setDefaultProfileName(name: string): Promise<void> {
  */
 export async function resolveProfileName(explicit?: string): Promise<string> {
   if (explicit) return explicit;
-  if (process.env.AGNT_CLI_PROFILE) return process.env.AGNT_CLI_PROFILE;
+  const fromEnv = envProfileName();
+  if (fromEnv) return fromEnv;
   const persisted = await getDefaultProfileName();
   return persisted || 'default';
 }

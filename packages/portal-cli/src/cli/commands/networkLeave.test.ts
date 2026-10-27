@@ -95,6 +95,7 @@ describe('runNetworkLeave', () => {
     process.exitCode = undefined;
     vi.stubEnv('CLAUDECODE', '1');
     vi.stubEnv('AGNT_CLI_PROFILE', '');
+    vi.stubEnv('NETWORK_CLI_PROFILE', '');
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); process.exitCode = undefined; });
 

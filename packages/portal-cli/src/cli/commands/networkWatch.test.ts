@@ -142,10 +142,10 @@ describe('the command runner (a real shell)', () => {
     expect(readFileSync(join(dir, 'args'), 'utf8')).toBe('\n'); // no arguments: the message is not on the command line
   });
 
-  it('the command answers as the watching agent: AGNT_CLI_PROFILE is its profile', async () => {
-    const result = await runCommand(`printf '%s' "$AGNT_CLI_PROFILE" > ${dir}/profile`, { json: '{}', id: ID, profile: 'claude-code' }, 10_000);
+  it('the command answers as the watching agent: NETWORK_CLI_PROFILE (and the older AGNT_CLI_PROFILE) is its profile', async () => {
+    const result = await runCommand(`printf '%s %s' "$NETWORK_CLI_PROFILE" "$AGNT_CLI_PROFILE" > ${dir}/profile`, { json: '{}', id: ID, profile: 'claude-code' }, 10_000);
     expect(result.exitCode).toBe(0);
-    expect(readFileSync(join(dir, 'profile'), 'utf8')).toBe('claude-code');
+    expect(readFileSync(join(dir, 'profile'), 'utf8')).toBe('claude-code claude-code');
   });
 
   it('a command over its time limit is stopped with everything it started', async () => {

@@ -210,7 +210,7 @@ program
   .option('--code <code>', 'The one-time code your user got by email (step 2)')
   .option('--label <label>', 'The API key\'s name, as your person sees it among their keys (default: your product, e.g. "Claude Code")')
   .option('--profile <name>', 'Credentials profile to save under (default: "default")')
-  .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
+  .option('--api-url <url>', 'Override the API base URL (or set NETWORK_API_URL)')
   .option('--purpose <account|network>', 'What the sign-up is for: "account" (a full account) or "network" (the {{accountName}} Network only). Required by apps with the {{accountName}} Network on')
   .option('--timezone <tz>', 'The person\'s IANA timezone, e.g. "America/New_York". Never replaces one they set themselves')
   .option('--first-name <name>', 'The person\'s first name')
@@ -270,7 +270,7 @@ program
   .description('Save an API key you already have to ~/.{{accountSlug}}/credentials (like `aws configure --profile`)')
   .requiredOption('--api-key <key>', 'API key (ak_live_...)')
   .option('--profile <name>', 'Profile name', 'default')
-  .option('--api-url <url>', 'API base URL (default: AGNT_API_URL, else the production API)')
+  .option('--api-url <url>', 'API base URL (default: NETWORK_API_URL, else the production API)')
   .option('--account <slug>', 'Account slug of the app')
   .action(async (opts) => {
     await runConfigure(opts);
@@ -284,7 +284,7 @@ profilesCmd
   .command('list')
   .description(
     'List configured profiles (name, account, API URL — never the key itself).\n' +
-    'The active one (from --profile / AGNT_CLI_PROFILE, or "default") is marked with *.\n\n' +
+    'The active one (from --profile / NETWORK_CLI_PROFILE, or "default") is marked with *.\n\n' +
     'Example: {{accountSlug}} profiles list'
   )
   .option('--json', 'Print raw JSON')
@@ -295,7 +295,7 @@ profilesCmd
 profilesCmd
   .command('use <name>')
   .description(
-    'Set the persisted default profile — used whenever --profile / AGNT_CLI_PROFILE\n' +
+    'Set the persisted default profile — used whenever --profile / NETWORK_CLI_PROFILE\n' +
     'aren\'t given. The first profile you ever create becomes this automatically;\n' +
     'use this to switch it later.\n\n' +
     'Example: {{accountSlug}} profiles use work'
@@ -329,7 +329,7 @@ tasksCmd
 
 tasksCmd
   .command('create <title>')
-  .description('Create a new task\n\nExample: {{accountSlug}} tasks create "Book a flight to SF" --assistant travel@agnt.ai --message "Depart Friday, return Sunday"')
+  .description('Create a new task\n\nExample: {{accountSlug}} tasks create "Book a flight to SF" --assistant travel@example.com --message "Depart Friday, return Sunday"')
   .requiredOption('--assistant <email>', 'Assistant to assign the task to')
   .option('--description <text>', 'Task description')
   .option('--message <text>', 'Send an initial message right after creating (equivalent to `tasks message` right after)')
@@ -1576,7 +1576,7 @@ const skillStoreCmd = program
 skillStoreCmd
   .command('browse')
   .description('Browse the marketplace\n\nExample: {{accountSlug}} skill-store browse --tier community --search notion')
-  .option('--tier <tier>', 'Filter by tier: agnt, official, or community')
+  .option('--tier <tier>', 'Filter by tier, as browse shows it in brackets (e.g. official or community)')
   .option('--kind <kind>', 'Filter by skill kind')
   .option('--search <text>', 'Search by name/description')
   .option('--page <n>', 'Page number')
@@ -2183,7 +2183,7 @@ networkCmd
   .option('--timezone <tz>', 'IANA timezone (default: this computer\'s)')
   .option('--label <label>', 'The key\'s name, as your person sees it among their keys (default: your product)')
   .option('--profile <name>', 'Profile to save under (default: named after you, e.g. claude-code)')
-  .option('--api-url <url>', 'Override the API base URL (or set AGNT_API_URL)')
+  .option('--api-url <url>', 'Override the API base URL (or set NETWORK_API_URL)')
   .option('--account <slug>', 'Account slug of the app (default: the one this CLI was published for)')
   .option('--json', 'The full result: profile, purpose and the sign-up response (never the key)')
   .action(async (opts) => {
@@ -2238,8 +2238,8 @@ networkCmd
     'Your own sends are in it too (sender.relation "self"); wait never shows them.\n' +
     'Reading marks nothing: wait still shows these messages. For the next page pass the returned\n' +
     '"token" as --since, exactly as given; never parse or change it. "more": true means another\n' +
-    'page is waiting. Omit --since only for the first read. A 409 agnt_sync_gap needs the app\'s\n' +
-    'operator: stop and tell your person.\n\n' +
+    'page is waiting. Omit --since only for the first read. A 409 saying your message history has a\n' +
+    'gap needs the app\'s operator: stop and tell your person.\n\n' +
     'Examples: {{accountSlug}} network inbox\n' +
     '          {{accountSlug}} network inbox --since "<the returned token>"'
   )

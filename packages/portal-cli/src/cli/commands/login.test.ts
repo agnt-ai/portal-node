@@ -264,6 +264,7 @@ describe('runLogin against a mocked API', () => {
     mockFetch(signupResponse);
     vi.stubEnv('CLAUDECODE', '1');
     vi.stubEnv('AGNT_CLI_PROFILE', '');
+    vi.stubEnv('NETWORK_CLI_PROFILE', '');
     await runLogin({ email: 'person@example.com', account: 'acme', code: '123456', label: 't', apiUrl: 'https://api.example.test',
       purpose: 'network', agentUsername: 'sally' });
     const out = JSON.parse(stdout.join(''));
@@ -348,6 +349,20 @@ describe('runLogin against a mocked API', () => {
   it('step 1 carries an API chosen by AGNT_API_URL into the step-2 command', async () => {
     mockFetch({ ok: true }, 200);
     vi.stubEnv('AGNT_API_URL', 'https://api.test.example');
+    try {
+      await runLogin({ email: 'p@example.com', account: 'acme' });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    const out = JSON.parse(stdout.join(''));
+    expect(out.next).toMatch(/--api-url https:\/\/api\.test\.example --code <the code>$/);
+    // The code goes somewhere other than the default API: say so, in the output the agent reads.
+    expect(out).toMatchObject({ apiUrl: 'https://api.test.example', warning: expect.stringMatching(/not the default API/) });
+  });
+
+  it('step 1 carries an API chosen by NETWORK_API_URL into the step-2 command', async () => {
+    mockFetch({ ok: true }, 200);
+    vi.stubEnv('NETWORK_API_URL', 'https://api.test.example');
     try {
       await runLogin({ email: 'p@example.com', account: 'acme' });
     } finally {

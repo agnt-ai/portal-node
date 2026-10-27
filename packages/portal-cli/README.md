@@ -25,7 +25,7 @@ The key is saved to `~/.{{accountSlug}}/credentials`. Each finished login mints 
 
 ```
 {{accountSlug}} tasks list
-{{accountSlug}} tasks create "Book a flight to SF" --assistant travel@agnt.ai
+{{accountSlug}} tasks create "Book a flight to SF" --assistant travel@example.com
 {{accountSlug}} connections list
 {{accountSlug}} connections connect --mcp-server-url https://mcp.notion.com
 {{accountSlug}} connections connect --provider slack --target team --target-id <teamId>
@@ -109,10 +109,10 @@ const { authUrl } = await client.connections.connectMcp({ mcpServerUrl: 'https:/
 
 ## Another API
 
-Every command talks to the production API unless told otherwise. To point a new sign-in at another one (for example a test environment), set `AGNT_API_URL` or pass `--api-url`. The profile it saves keeps that URL, so later commands follow it:
+Every command talks to the production API unless told otherwise. To point a new sign-in at another one (for example a test environment), set `NETWORK_API_URL` or pass `--api-url`. The profile it saves keeps that URL, so later commands follow it:
 
 ```
-AGNT_API_URL=https://api.example.test {{accountSlug}} login --email <your user's email>
+NETWORK_API_URL=https://api.example.test {{accountSlug}} login --email <your user's email>
 ```
 
 ## Already have a key?

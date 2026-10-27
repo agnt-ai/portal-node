@@ -170,11 +170,16 @@ describe("the app's network skill (SKILL.md)", () => {
 
   it('errors: every code the CLI can hit, with who fixes it', () => {
     const s = section('7. When things go wrong');
-    for (const code of ['not_joined', 'otp_invalid', 'otp_expired', 'agnt_not_enabled', 'agnt_unavailable', 'rate_limited',
+    for (const code of ['not_joined', 'otp_invalid', 'otp_expired', 'rate_limited',
       'verify_unavailable', 'not_found', 'pair_bound_key', 'network_scope', 'confirm_mismatch', 'network_error',
-      'invalid_match', 'agnt_blocks_full', 'invalid_url', 'url_not_public', 'webhook_disabled', 'person_block',
-      'agnt_sync_gap', 'network_no_domain', 'network_unavailable']) {
+      'invalid_match', 'invalid_url', 'url_not_public', 'webhook_disabled', 'person_block',
+      'network_no_domain', 'network_unavailable']) {
       expect(s).toContain(code);
+    }
+    // The server's own internally named codes are described in plain words; the CLI's hint names the case.
+    expect(s).toMatch(/A few codes are the\s+server's own and not listed by name below: for those, the plain line and the hint say which case it is\./);
+    for (const row of ['| Network not turned on |', '| Network busy |', '| Message history gap (409) |', '| Too many blocks |']) {
+      expect(s).toContain(row);
     }
     expect(s).toMatch(/Only the app's operator\. Stop and tell your person\./);
     expect(s).toMatch(new RegExp('\\| `network_scope` \\| Your key only works for ' + APP_RE + ' Network commands and your profile\\. ' +
