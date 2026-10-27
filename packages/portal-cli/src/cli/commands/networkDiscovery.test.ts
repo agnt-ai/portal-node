@@ -18,9 +18,11 @@ import { PortalClient } from '../../index.js';
  *   DELETE /agnt/discovery/identifiers?identifier=&assistant=      { identifier, directory: 'unlisted' }.
  */
 function fakeDiscoveryApi() {
-  const state = { listed: false, changedBy: null as null | 'agent' | 'person', changedAt: null as null | string, networkOff: false, assistant: 'as_agent' as string | null, foreignKey: false, notAgent: false, taken: false, code: '123456' };
+  const state = { listed: false, changedBy: null as null | 'agent' | 'person', changedAt: null as null | string, networkOff: false, assistant: 'as_agent' as string | null, foreignKey: false, notAgent: false, taken: false, directoryDown: false, code: '123456' };
   const requests: Array<{ method: string; path: string; body?: any }> = [];
   const identifiers = ['mailto:person@example.com', 'tel:+15555550100'];
+  /** As the directory stores it: mailto:<email> or tel:<+phone>. */
+  const normalized = (id: string) => (/^(mailto|tel):/.test(id) ? id : id.includes('@') ? `mailto:${id}` : `tel:${id}`);
   const json = (res: any, status: number, body: unknown) => {
     res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body));
   };
@@ -43,11 +45,11 @@ function fakeDiscoveryApi() {
       const identifier = req.method === 'POST' ? body?.identifier : new URL(req.url!, 'http://x').searchParams.get('identifier');
       if (state.notAgent) return refuse(res, 403, 'agent_only', 'Your own emails and phones are listed by the discovery switch');
       if (req.method === 'POST' && state.taken) return refuse(res, 409, 'identifier_taken', 'Someone else in this app holds that identifier');
-      return json(res, 200, { identifier, directory: req.method === 'POST' ? 'code_sent' : 'unlisted' });
+      return json(res, 200, { identifier: normalized(identifier), directory: req.method === 'POST' ? (state.directoryDown ? 'unavailable' : 'code_sent') : 'unlisted' });
     }
     if (path === '/agnt/discovery/confirm' && req.method === 'POST') {
       if (body?.code !== state.code) return refuse(res, 400, 'bad_code', 'That is not the code the directory sent, or it expired');
-      return json(res, 200, { identifier: body.identifier, directory: 'listed' });
+      return json(res, 200, { identifier: normalized(body.identifier), directory: state.directoryDown ? 'unavailable' : 'listed' });
     }
     if (req.url !== '/agnt/discovery') return json(res, 404, { status: 404, error: 'Not found' });
     if (req.method === 'GET') return json(res, 200, view());
@@ -129,20 +131,34 @@ describe('network discovery, against the API as it answers today', () => {
   it("add asks the directory to send a code to the agent's own email, and says what to run next", async () => {
     const { result } = await networkDiscoveryAdd(client, 'sally@example.org', {}) as any;
     expect(api.requests).toEqual([{ method: 'POST', path: '/agnt/discovery/identifiers', body: { identifier: 'sally@example.org' } }]);
-    expect(result).toMatchObject({ identifier: 'sally@example.org', directory: 'code_sent', next: expect.stringMatching(/ network discovery confirm sally@example\.org <the code>$/) });
-    expect(result.askUser).toMatch(/one-time code went to sally@example\.org/);
+    expect(result).toMatchObject({ identifier: 'mailto:sally@example.org', directory: 'code_sent', next: expect.stringMatching(/ network discovery confirm mailto:sally@example\.org <the code>$/) });
+    expect(result.askUser).toMatch(/one-time code went to mailto:sally@example\.org/);
+  });
+
+  it('the next command keeps the profile and assistant add was run with', async () => {
+    const { result } = await networkDiscoveryAdd(client, '+15555550100', { profile: 'me', assistant: 'as_agent' }) as any;
+    expect(result.next).toMatch(/ network discovery confirm --profile me --assistant as_agent tel:\+15555550100 <the code>$/);
+  });
+
+  it('a directory that did not take it says nothing was listed, for add and for confirm', async () => {
+    api.state.directoryDown = true;
+    const added = (await networkDiscoveryAdd(client, 'sally@example.org', {}) as any).result;
+    expect(added).toMatchObject({ directory: 'unavailable', note: expect.stringMatching(/did not list it just now/) });
+    expect(added.next).toBeUndefined();
+    const confirmed = (await networkDiscoveryConfirm(client, 'sally@example.org', '123456', {}) as any).result;
+    expect(confirmed).toMatchObject({ directory: 'unavailable', note: expect.stringMatching(/did not list it just now/) });
   });
 
   it('confirm sends the code, and the answer is listed; --assistant goes in the body only when given', async () => {
     const { result } = await networkDiscoveryConfirm(client, 'sally@example.org', '123456', { assistant: 'as_agent' }) as any;
     expect(api.requests).toEqual([{ method: 'POST', path: '/agnt/discovery/confirm', body: { identifier: 'sally@example.org', code: '123456', assistant: 'as_agent' } }]);
-    expect(result).toEqual({ identifier: 'sally@example.org', directory: 'listed' });
+    expect(result).toEqual({ identifier: 'mailto:sally@example.org', directory: 'listed' });
   });
 
   it('remove drops it: DELETE with the identifier in the query', async () => {
     const { result } = await networkDiscoveryRemove(client, '+15555550100', {}) as any;
     expect(api.requests).toEqual([{ method: 'DELETE', path: '/agnt/discovery/identifiers?identifier=%2B15555550100' }]);
-    expect(result).toEqual({ identifier: '+15555550100', directory: 'unlisted' });
+    expect(result).toEqual({ identifier: 'tel:+15555550100', directory: 'unlisted' });
   });
 
   it('refusals of the identifier commands come back with a plain hint', async () => {

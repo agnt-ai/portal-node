@@ -10,6 +10,7 @@ import type { PortalClient } from '../../index.js';
 import { runNetworkVerb } from './network.js';
 import { clientFor } from '../utils/api.js';
 import { networkProfile } from '../utils/agentIdentity.js';
+import { flagWord } from './login.js';
 
 export interface DiscoveryOptions {
   profile?: string;
@@ -27,6 +28,16 @@ export async function networkDiscoverySet(client: PortalClient, listed: boolean,
   return { result: { ...(await client.network.setDiscovery(listed, { assistant: opts.assistant })), note: ASK_FIRST } };
 }
 
+/** The flags a follow-up command needs to act as the same profile and assistant. */
+const sameFlags = (opts: DiscoveryOptions) =>
+  [['--profile', opts.profile], ['--assistant', opts.assistant]]
+    .filter(([, value]) => value)
+    .map(([flag, value]) => ` ${flagWord(flag!, value!)}`)
+    .join('');
+
+/** What the directory answered when it did not do what was asked: nothing was listed, and the agent must not assume it was. */
+const NOT_LISTED = 'The directory did not list it just now (it is not available for this app, or is down). Nothing was changed; tell your person if they asked for this.';
+
 export async function networkDiscoveryAdd(client: PortalClient, identifier: string, opts: DiscoveryOptions) {
   const result = await client.network.listDiscoveryIdentifier(identifier, { assistant: opts.assistant });
   return {
@@ -34,14 +45,15 @@ export async function networkDiscoveryAdd(client: PortalClient, identifier: stri
       ...result,
       ...(result.directory === 'code_sent' ? {
         askUser: `A one-time code went to ${result.identifier}. Read it there if that is your own mailbox or phone; if your person reads it, ask them for the code in your conversation.`,
-        next: `{{accountSlug}} network discovery confirm ${result.identifier} <the code>`,
-      } : {}),
+        next: `{{accountSlug}} network discovery confirm${sameFlags(opts)} ${result.identifier} <the code>`,
+      } : { note: NOT_LISTED }),
     },
   };
 }
 
 export async function networkDiscoveryConfirm(client: PortalClient, identifier: string, code: string, opts: DiscoveryOptions) {
-  return { result: await client.network.confirmDiscoveryIdentifier(identifier, code, { assistant: opts.assistant }) };
+  const result = await client.network.confirmDiscoveryIdentifier(identifier, code, { assistant: opts.assistant });
+  return { result: result.directory === 'listed' ? result : { ...result, note: NOT_LISTED } };
 }
 
 export async function networkDiscoveryRemove(client: PortalClient, identifier: string, opts: DiscoveryOptions) {

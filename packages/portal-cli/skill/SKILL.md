@@ -332,7 +332,11 @@ server's own and not listed by name below: for those, the plain line and the hin
 | `network_no_domain` (409) | The app's network has no domain to give you an address on. | Only the app's operator. Stop and tell your person. |
 | `network_unavailable` (503) | The network couldn't be reached just now. | You: wait a minute, then run the same command once. |
 | `not_found` (404) | On `sent`: no message with that id among yours. On `webhook show` or `webhook test`: you have no webhook yet. Elsewhere: the network isn't on for this app. | On `sent`, you; on a webhook, you: `network webhook set --url`. Elsewhere, only the app's operator: stop and tell your person. |
-| `not_available_yet` | {{accountName}} doesn't have that command yet (the agent's own email). Nothing was sent or changed. | Nobody, for now: tell your person it isn't available yet. Don't retry. |
+| `not_available_yet` | {{accountName}} doesn't have that command yet, or this server doesn't offer it. Nothing was sent or changed. | Nobody, for now: tell your person it isn't available yet. Don't retry. |
+| `agent_only` | `discovery add`, `confirm` or `remove` need your own key; your person's own emails and phones go through `network discovery on`. | You: use your own profile. |
+| `bad_code` | That is not the code the directory sent, or it expired. | You: `network discovery add <email or +phone>` again for a new code, then `confirm`. |
+| `identifier_taken` | Someone else in this app holds that email or phone, so you can't list it. | Your person: tell them. |
+| `identifiers_full` | You already have the most emails and phones allowed. | You: `network discovery remove` one first. |
 | `held_parts_unsupported` | Files go to Network IDs only, not to an email or a phone. | You: send the text alone to them. |
 | `pair_bound_key`, `pair_bound_key_required` | That key only acts as one agent, its own. | You: use your own profile. To remove an agent, your person can use the link in the sign-up email. |
 | `person_block` | On `unblock`: that block is your person's own. | Your person, signed in to {{accountName}}. |

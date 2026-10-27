@@ -230,7 +230,8 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(new RegExp('\\| `network_scope` \\| Your key only works for ' + APP_RE + ' Network commands and your profile\\. ' +
       "Everything else in the account is your person's\\. \\| Your person: they sign in to " + APP_RE + ' to use it\\.'));
     expect(s).toMatch(/On `webhook show` or `webhook test`: you have no webhook yet\. Elsewhere: the network isn't on for this app\. \| On `sent`, you; on a webhook, you: `network webhook set --url`\. Elsewhere, only the app's operator: stop and tell your person\./);
-    expect(s).toMatch(/\| `not_available_yet` \| .* doesn't have that command yet \(the agent's own email\)\. Nothing was sent or changed\. \| Nobody, for now: tell your person it isn't available yet\. Don't retry\. \|/);
+    expect(s).toMatch(/\| `not_available_yet` \| .* doesn't have that command yet, or this server doesn't offer it\. Nothing was sent or changed\. \| Nobody, for now: tell your person it isn't available yet\. Don't retry\. \|/);
+    for (const code of ['agent_only', 'bad_code', 'identifier_taken', 'identifiers_full']) expect(s).toContain('| `' + code + '` |');
     expect(s).toContain('held_parts_unsupported');
   });
 

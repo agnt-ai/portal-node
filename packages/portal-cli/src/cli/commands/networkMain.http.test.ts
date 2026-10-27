@@ -366,6 +366,14 @@ describe('network: the compiled CLI against the API as it answers today, two age
     expect(fake.requests.filter((r) => r.path === '/agnt/send')).toHaveLength(1);
   }, 30_000);
 
+  it('login --agent-email is gone: refused as an unknown option, and nothing reaches the server', async () => {
+    const before = fake.requests.length;
+    const out = await cli(['login', '--email', 'a@example.com', '--agent-email', 'agent@example.com']);
+    expect(out.code).not.toBe(0);
+    expect(out.stderr).toMatch(/unknown option.*--agent-email/);
+    expect(fake.requests.length).toBe(before);
+  });
+
   it('every network verb accepts --json and ignores it: the same JSON, never "unknown option"', async () => {
     const alice = await joinAs('alice', 'alice-agent', 'alice@example.com');
     const bob = await joinAs('bob', 'bob-agent', 'bob@example.com');
