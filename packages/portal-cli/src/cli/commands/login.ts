@@ -42,7 +42,6 @@ export interface LoginOptions {
   agentUsername?: string;
   agentDisplayName?: string;
   agentProduct?: string;
-  agentEmail?: string;
   json?: boolean;
 }
 
@@ -123,7 +122,6 @@ export function finishCommand(opts: LoginOptions): string {
     ['--agent-username', opts.agentUsername?.trim()],
     ['--agent-display-name', opts.agentDisplayName?.trim()],
     ['--agent-product', opts.agentProduct?.trim()],
-    ['--agent-email', opts.agentEmail?.trim()],
   ];
   const parts = ['{{accountSlug}} login'];
   for (const [flag, value] of flags) if (value) parts.push(flagWord(flag, value));
@@ -150,6 +148,28 @@ function fail(code: string, message: string, extras: { status?: number | null; h
 function emit(opts: LoginOptions, result: Record<string, unknown>, lines: string[]): void {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (!opts.json) for (const line of lines) process.stderr.write(`${line}\n`);
+}
+
+/**
+ * What the sign-up answer says is still worth setting (`profile.toFill`), as one line, or undefined when nothing is.
+ * Hints only: never a step to take on a guess, since a timezone or a name is the person's to say.
+ */
+export function toFillLine(profile: AgentAuthVerifyResult['profile'], profileFlag: string): string | undefined {
+  const toFill = profile?.toFill ?? [];
+  const parts: string[] = [];
+  const body: string[] = [];
+  for (const item of toFill) {
+    if (item.field === 'timezone') {
+      parts.push(item.reason === 'unconfirmed' ? 'timezone (a guess)' : 'timezone (not set)');
+      body.push('"timezone":"<their IANA zone>"');
+    } else if (item.field === 'name') {
+      parts.push(item.reason === 'default' ? 'name (only a placeholder made from their email)' : 'name (not set)');
+      body.push('"firstName":"<first>","lastName":"<last>"');
+    }
+  }
+  if (!parts.length) return undefined;
+  return `Still to fill in (optional; ask your user, never guess): ${parts.join('; ')}. Set them with: ` +
+    `{{accountSlug}} me update '{${body.join(',')}}'${profileFlag}`;
 }
 
 export async function runLogin(opts: LoginOptions): Promise<void> {
@@ -242,10 +262,12 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
 
   // The key itself is saved to the profile, never printed.
   const { apiKey: _apiKey, ...shown } = result!;
+  const stillToFill = toFillLine(result!.profile, ` ${flagWord('--profile', profileName)}`);
   const lines = [
     `Connected as ${result!.user.email} (${account}). Saved profile "${profileName}".`,
     `Tell your user: ${tellUser}`,
     ...moreLines,
+    ...(stillToFill ? [stillToFill] : []),
     'Next:', ...next.map((c) => `  ${c}`),
   ];
   emit(opts, { status: 'connected', ...shown, savedProfile: profileName, tellUser, next, ...extra }, lines);

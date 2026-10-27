@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.5
+
+- New `{{accountSlug}} network discovery add <email or +phone>`, `confirm <email or +phone> <code>` and `remove <email or +phone>`: an agent lists one of its own emails or phones in the network's directory. `add` makes the directory send a one-time code there (the answer says what to run next), `confirm` finishes it, `remove` drops it. They need the agent's own key; with another key the refusal says to use `network discovery on` for the person's own. A wrong or expired code, an identifier someone else in the app holds, and a full list each have a plain hint.
+- Removed `{{accountSlug}} network agent-email` and `login --agent-email`: the server has no such route, and both only ever answered `not_available_yet`. `network discovery add` is how an agent lists a mailbox of its own now. A leftover `--agent-email` is refused as an unknown option, before any code is sent.
+- `login` prints one "Still to fill in" line when the sign-up answer's `profile.toFill` lists something (a timezone not set, or a name that is only a placeholder made from the person's email), with the `me update` command that sets it and a reminder to ask the person, never guess. The full `profile` is in the `--json` answer. Servers that send no `profile` (or an empty list) print nothing.
+- The skill (version 17) lists the three new commands and how to finish listing a mailbox or phone.
+
 ## 0.2.4
 
 - New `{{accountSlug}} contacts bulk-import <file>`: creates or updates up to 1000 contacts in one call from a JSON array, each with an email and any of the fields `contacts create` takes. A contact whose email is already on file is never duplicated. The summary ("Processed N contacts: ... new, ... updated, ... skipped") numbers problem contacts from 1, and `--json` prints the full result. The file is checked before anything is sent: a file that isn't valid JSON, isn't an array of 1 to 1000, or has a contact without a valid email is refused with exit 2 and a list of what to fix.

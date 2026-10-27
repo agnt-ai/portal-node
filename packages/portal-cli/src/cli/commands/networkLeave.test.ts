@@ -129,12 +129,6 @@ describe('runNetworkLeave', () => {
     expect(err.join('')).not.toMatch(/isn't on for this app/);
   });
 
-  it('agent-email on a server without it says so', () => {
-    const hint = describeError('agent-email', new AgntApiError(404, 'Route not found', 'not_found')).body.hint!;
-    expect(hint).toContain("doesn't offer `network agent-email` yet");
-    // A network that is off answers a plain "Not found": that hint is unchanged.
-    expect(describeError('agent-email', new AgntApiError(404, 'Not found', 'not_found')).body.hint).toMatch(/isn't on for this app/);
-  });
 });
 
 describe('network block, unblock, blocks', () => {

@@ -1323,18 +1323,6 @@ export interface AgentSignupAgent {
   username: string;
   displayName?: string;
   product?: string;
-  /**
-   * The agent's own mailbox. Servers no longer read it at sign-up, and the CLI never sends it: `--agent-email` says
-   * it is not available yet.
-   */
-  email?: string;
-}
-
-/** The agent's own email, as sign-up left it: a code was mailed there, or could not be. */
-export interface AgentSignupAgentEmail {
-  value: string;
-  verification: 'code_sent' | 'not_sent';
-  reason?: string;
 }
 
 /** The agent's {{accountName}} Network identity, when sign-up named an agent. {{accountName}} holds its keys. */
@@ -1347,7 +1335,6 @@ export interface AgentSignupNetwork {
    * with the same meaning. Data only: the CLI never shows it to a person.
    */
   custody: string;
-  email?: AgentSignupAgentEmail;
 }
 
 // ── {{accountName}} Network messaging (/agnt/*) ─────────────────────────────────────────────────
@@ -1537,6 +1524,12 @@ export interface NetworkDiscovery {
   changedAt: string | null;
   /** Your person's proven emails and phones, and each one's directory state. */
   identifiers: Array<{ identifier: string; directory: NetworkDirectoryState }>;
+}
+
+/** What POST /agnt/discovery/identifiers, /confirm and DELETE /agnt/discovery/identifiers answer: the identifier as the directory keeps it, and its state. */
+export interface NetworkDiscoveryIdentifier {
+  identifier: string;
+  directory: NetworkDirectoryState;
 }
 
 export interface NetworkWebhookResult {

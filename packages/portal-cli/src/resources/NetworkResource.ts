@@ -1,7 +1,7 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkSentReport, NetworkSentList,
-  NetworkVerifyResult, NetworkLeaveResult, NetworkBlock, NetworkWebhookResult, NetworkDiscovery,
+  NetworkVerifyResult, NetworkLeaveResult, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
 } from '../types.js';
 
 /**
@@ -116,6 +116,24 @@ export class NetworkResource {
     return this.http.put<NetworkDiscovery>('/agnt/discovery', { listed, ...(opts.assistant ? { assistant: opts.assistant } : {}) });
   }
 
+  /**
+   * An agent lists one of its OWN emails or phones in the directory: a one-time code goes there (`directory` is
+   * `code_sent`). Needs the agent's own key; your person's identifiers are listed by the switch instead (403 `agent_only`).
+   */
+  listDiscoveryIdentifier(identifier: string, opts: NetworkAssistantOption = {}): Promise<NetworkDiscoveryIdentifier> {
+    return this.http.post<NetworkDiscoveryIdentifier>('/agnt/discovery/identifiers', { identifier, ...(opts.assistant ? { assistant: opts.assistant } : {}) }, T);
+  }
+
+  /** The code the directory sent to that identifier. `listed` once it is yours; a wrong or expired code is 400 `bad_code`. */
+  confirmDiscoveryIdentifier(identifier: string, code: string, opts: NetworkAssistantOption = {}): Promise<NetworkDiscoveryIdentifier> {
+    return this.http.post<NetworkDiscoveryIdentifier>('/agnt/discovery/confirm', { identifier, code, ...(opts.assistant ? { assistant: opts.assistant } : {}) }, T);
+  }
+
+  /** An agent drops one of its own listed emails or phones. Answers `unlisted`. */
+  unlistDiscoveryIdentifier(identifier: string, opts: NetworkAssistantOption = {}): Promise<NetworkDiscoveryIdentifier> {
+    return this.http.delete<NetworkDiscoveryIdentifier>('/agnt/discovery/identifiers', { identifier, assistant: opts.assistant }, T);
+  }
+
   // ── Webhooks: a signed, notify-only push to the agent's own https URL. ──
 
   /**
@@ -163,22 +181,5 @@ export class NetworkResource {
   /** Remove a block. Idempotent: `removed` says whether there was one. An agent can't remove its person's own (403 person_block). */
   unblock(match: string, opts: NetworkAssistantOption = {}): Promise<{ removed: boolean }> {
     return this.http.delete<{ removed: boolean }>('/agnt/blocks', { match, assistant: opts.assistant }, T);
-  }
-
-  // ── The agent's own email: not on every server yet (the CLI's `network agent-email` says so before calling). ──
-
-  /** Mail a one-time code to the agent's own email. Needs the agent's own key (from sign-up). */
-  startAgentEmail(email: string): Promise<{ ok: true }> {
-    return this.http.post<{ ok: true }>('/agnt/agent-email/start', { email });
-  }
-
-  /** Confirm the agent's own email with the code mailed to it; it then reaches this agent by lookup. */
-  verifyAgentEmail(email: string, code: string): Promise<{ ok: true; identifier: { type: 'email'; value: string; verified: true } }> {
-    return this.http.post('/agnt/agent-email/verify', { email, code });
-  }
-
-  /** Drop one of the agent's own emails. */
-  removeAgentEmail(email: string): Promise<{ ok: true; removed: boolean }> {
-    return this.http.delete('/agnt/agent-email', { email });
   }
 }

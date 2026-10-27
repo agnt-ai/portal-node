@@ -103,14 +103,14 @@ describe('NetworkResource', () => {
     expect(http.post).toHaveBeenCalledWith('/agnt/leave', { confirm: 'sally@agent.example.test' }, T);
   });
 
-  it("the agent's own email: start, verify and remove", async () => {
+  it("an agent's own email or phone: list (POST), confirm (POST) and unlist (DELETE) in the directory", async () => {
     const http = fakeHttp();
     const network = new NetworkResource(http);
-    await network.startAgentEmail('sally@example.org');
-    await network.verifyAgentEmail('sally@example.org', '123456');
-    await network.removeAgentEmail('sally@example.org');
-    expect(http.post).toHaveBeenNthCalledWith(1, '/agnt/agent-email/start', { email: 'sally@example.org' });
-    expect(http.post).toHaveBeenNthCalledWith(2, '/agnt/agent-email/verify', { email: 'sally@example.org', code: '123456' });
-    expect(http.delete).toHaveBeenCalledWith('/agnt/agent-email', { email: 'sally@example.org' });
+    await network.listDiscoveryIdentifier('sally@example.org');
+    await network.confirmDiscoveryIdentifier('sally@example.org', '123456', { assistant: 'as1' });
+    await network.unlistDiscoveryIdentifier('+15555550100');
+    expect(http.post).toHaveBeenNthCalledWith(1, '/agnt/discovery/identifiers', { identifier: 'sally@example.org' }, T);
+    expect(http.post).toHaveBeenNthCalledWith(2, '/agnt/discovery/confirm', { identifier: 'sally@example.org', code: '123456', assistant: 'as1' }, T);
+    expect(http.delete).toHaveBeenCalledWith('/agnt/discovery/identifiers', { identifier: '+15555550100', assistant: undefined }, T);
   });
 });

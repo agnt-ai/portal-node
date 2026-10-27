@@ -5,7 +5,7 @@
 
 import type { AgntApiError } from '../../HttpClient.js';
 import type {
-  AgentAuthVerifyFields, AgentAuthVerifyResult, AgentSignupAgent, AgentSignupAgentEmail, AgentSignupPurpose,
+  AgentAuthVerifyFields, AgentAuthVerifyResult, AgentSignupAgent, AgentSignupPurpose,
 } from '../../types.js';
 import type { LoginOptions } from './login.js';
 import { CONVERSATION } from './agentGuide.js';
@@ -26,10 +26,6 @@ export function networkSignupFields(opts: LoginOptions): { fields: AgentAuthVeri
     fields.purpose = purpose as AgentSignupPurpose;
   }
 
-  // The agent's own mailbox is not taken at sign-up any more, and there is no other way to verify it yet.
-  if (opts.agentEmail?.trim()) {
-    return { error: "--agent-email isn't available on {{accountName}} yet: leave it out. Other agents reach yours at its Network ID." };
-  }
   const agentGiven = [opts.agentUsername, opts.agentDisplayName, opts.agentProduct].some((v) => v?.trim());
   if (agentGiven) {
     const username = opts.agentUsername?.trim().toLowerCase();
@@ -86,26 +82,6 @@ export function networkVerifyHint(err: AgntApiError, again: string): string | un
   return undefined;
 }
 
-interface AgentEmailOutcome {
-  value: string;
-  verification: AgentSignupAgentEmail['verification'];
-  reason?: string;
-  next: string;
-  ask?: string;
-}
-
-/** The agent's own email after sign-up: never a prompt, just the next command. */
-function agentEmailOutcome(agentEmail: AgentSignupAgentEmail, profileFlag: string): AgentEmailOutcome {
-  if (agentEmail.verification === 'not_sent') {
-    return { ...agentEmail, next: `{{accountSlug}} network agent-email start ${agentEmail.value}${profileFlag}` };
-  }
-  return {
-    ...agentEmail,
-    next: `{{accountSlug}} network agent-email verify ${agentEmail.value} <the code>${profileFlag}`,
-    ask: `A one-time code went to your own mailbox, ${agentEmail.value}. Read it there; if your user reads that mailbox, ask them for it in your conversation.`,
-  };
-}
-
 /**
  * What login says once a sign-up gave the agent its {{accountName}} Network ID; undefined when it gave none.
  * `profileFlag` always names the saved profile: the network commands never fall back to the default one.
@@ -125,11 +101,8 @@ export function networkConnected(result: AgentAuthVerifyResult, profileFlag: str
     `{{accountSlug}} network wait${profileFlag}`,
   ];
   const lines: string[] = [];
-  const agentEmail = agnt.email ? agentEmailOutcome(agnt.email, profileFlag) : undefined;
-  if (agentEmail?.ask) lines.push(agentEmail.ask, `Then run: ${agentEmail.next}`);
-  else if (agentEmail) lines.push(`The code for ${agentEmail.value} could not be sent${agentEmail.reason ? ` (${agentEmail.reason})` : ''}. To send it again: ${agentEmail.next}`);
   // The person's own next step: bring their contacts in (links they open themselves).
   const connect = connectContactsStep(result.connectContactsUrl);
   if (connect) lines.push(`Ask your user: ${connect.askUser}`);
-  return { tellUser, next, lines, extra: { conversation: CONVERSATION, ...(agentEmail ? { agentEmail } : {}), ...(connect ? { connectContacts: connect } : {}) } };
+  return { tellUser, next, lines, extra: { conversation: CONVERSATION, ...(connect ? { connectContacts: connect } : {}) } };
 }

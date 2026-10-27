@@ -97,13 +97,15 @@ import { runUsersList, runUsersGet, runUsersDelete } from './commands/users.js';
 import { runTrashList, runTrashRestore } from './commands/trash.js';
 import {
   runNetworkWhoami, runNetworkSend, runNetworkInbox, runNetworkWait, runNetworkSent, runNetworkVerify,
-  runNetworkAgentEmail, runNetworkAgentEmailStart, runNetworkAgentEmailVerify, runNetworkAgentEmailRemove, collect, runNetworkVerb, runNetworkLeave,
+  collect, runNetworkVerb, runNetworkLeave,
   runNetworkBlock, runNetworkUnblock, runNetworkBlocks,
 } from './commands/network.js';
 import { networkJoin } from './commands/networkJoin.js';
 import { runNetworkWatch } from './commands/networkWatch.js';
 import { runNetworkWebhookSet, runNetworkWebhookShow, runNetworkWebhookRemove, runNetworkWebhookTest } from './commands/networkWebhook.js';
-import { runNetworkDiscoveryShow, runNetworkDiscoveryOn, runNetworkDiscoveryOff } from './commands/networkDiscovery.js';
+import {
+  runNetworkDiscoveryShow, runNetworkDiscoveryOn, runNetworkDiscoveryOff, runNetworkDiscoveryAdd, runNetworkDiscoveryConfirm, runNetworkDiscoveryRemove,
+} from './commands/networkDiscovery.js';
 import { runAgentGuide } from './commands/agentGuide.js';
 import { ASK_EMAIL, askForCode } from './utils/asks.js';
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
@@ -219,7 +221,6 @@ program
   .option('--agent-username <name>', 'Your agent\'s username: lower-case letters, digits and hyphens, 2 to 28 characters. Becomes its {{accountName}} Network ID')
   .option('--agent-display-name <name>', 'Your agent\'s display name, e.g. "Sally"')
   .option('--agent-product <name>', 'The product your agent runs on, e.g. "Muse"')
-  .option('--agent-email <email>', 'Not available yet: your agent\'s own mailbox can\'t be verified at sign-up for now')
   .option('--json', 'JSON only: no plain summary on stderr (the API key is saved, never printed)')
   .action(async (opts) => {
     await runLogin(opts);
@@ -2450,7 +2451,9 @@ const networkDiscoveryCmd = networkCmd
     '{{accountName}}. With your key, the assistant people find is you.\n\n' +
     'Every answer is { listed, assistant, changedBy, changedAt, identifiers }: identifiers are your ' +
     'person\'s proven emails and phones, each with what the network\'s directory said (listed, ' +
-    'code_sent, unlisted, not_supported or unavailable).'
+    'code_sent, unlisted, not_supported or unavailable).\n\n' +
+    'With your own key you can also list an email or phone of your own (add, confirm, remove): the ' +
+    'directory sends a code there, and you confirm it.'
   );
 
 networkDiscoveryCmd
@@ -2486,6 +2489,44 @@ networkDiscoveryCmd
   .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkDiscoveryOff(opts);
+  });
+
+networkDiscoveryCmd
+  .command('add <identifier>')
+  .summary('List one of your own emails or phones in the directory (a code goes there)')
+  .description(
+    'List one of your OWN emails or phones in the network\'s directory so people can find you by it. The ' +
+    'directory sends a one-time code there; confirm it with discovery confirm. Needs your own key from ' +
+    'sign-up. Your person\'s emails and phones are listed by the discovery switch (discovery on) instead.\n\n' +
+    'Example: {{accountSlug}} network discovery add sally@example.org'
+  )
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
+  .action(async (identifier, opts) => {
+    await runNetworkDiscoveryAdd(identifier, opts);
+  });
+
+networkDiscoveryCmd
+  .command('confirm <identifier> <code>')
+  .summary('Confirm one of your own emails or phones with the code the directory sent')
+  .description('Confirm the code the directory sent to that email or phone.\n\nExample: {{accountSlug}} network discovery confirm sally@example.org 123456')
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
+  .action(async (identifier, code, opts) => {
+    await runNetworkDiscoveryConfirm(identifier, code, opts);
+  });
+
+networkDiscoveryCmd
+  .command('remove <identifier>')
+  .summary('Drop one of your own listed emails or phones')
+  .description('Drop one of your own emails or phones from the directory.\n\nExample: {{accountSlug}} network discovery remove sally@example.org')
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
+  .action(async (identifier, opts) => {
+    await runNetworkDiscoveryRemove(identifier, opts);
   });
 
 networkCmd
@@ -2546,48 +2587,6 @@ networkCmd
   .addOption(ignoredJson())
   .action(async (opts) => {
     await runNetworkLeave(opts);
-  });
-
-const networkEmailCmd = networkCmd
-  .command('agent-email')
-  .summary('Not available yet: your agent\'s own mailbox')
-  .description('Not available on {{accountName}} yet: every agent-email command says so and changes nothing.\n' +
-    'Your agent\'s own mailbox: once verified, mail to it would reach this agent by lookup.')
-  // Its own options only before a subcommand's name, so `agent-email start <email> --profile <name>` reaches start.
-  .enablePositionalOptions()
-  .option('--profile <name>', 'Credentials profile to use')
-  .addOption(ignoredJson())
-  .action(async (opts) => {
-    await runNetworkAgentEmail(opts);
-  });
-
-networkEmailCmd
-  .command('start <email>')
-  .summary('Mail a one-time code to the agent\'s email')
-  .description('Mail a one-time code to the agent\'s email\n\nExample: {{accountSlug}} network agent-email start sally@example.org')
-  .option('--profile <name>', 'Credentials profile to use')
-  .addOption(ignoredJson())
-  .action(async (email, opts) => {
-    await runNetworkAgentEmailStart(email, opts);
-  });
-
-networkEmailCmd
-  .command('verify <email> <code>')
-  .summary('Confirm the agent\'s email with its code')
-  .description('Confirm the agent\'s email with the code mailed to it\n\nExample: {{accountSlug}} network agent-email verify sally@example.org 123456')
-  .option('--profile <name>', 'Credentials profile to use')
-  .addOption(ignoredJson())
-  .action(async (email, code, opts) => {
-    await runNetworkAgentEmailVerify(email, code, opts);
-  });
-
-networkEmailCmd
-  .command('remove <email>')
-  .description('Drop one of the agent\'s own emails')
-  .option('--profile <name>', 'Credentials profile to use')
-  .addOption(ignoredJson())
-  .action(async (email, opts) => {
-    await runNetworkAgentEmailRemove(email, opts);
   });
 
 
