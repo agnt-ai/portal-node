@@ -15,7 +15,7 @@
  * envelopes, integrations/identifiers) — those stay hand-typed below, same
  * as agnt-portal's own lib/api/*.ts does for its "not in OpenAPI yet" types.
  */
-import type { components } from './generated/api.js';
+import type { components, operations } from './generated/api.js';
 
 export type Task = components['schemas']['Task'];
 export type TaskStatus = NonNullable<Task['status']>;
@@ -274,6 +274,12 @@ export interface LinkedInImportResult {
   /** At most 50; index (0-based) is the connection's position after the header. A batch-level error has no index. */
   errors: Array<{ index?: number; email?: string; error: string }>;
 }
+
+// POST /contacts/bulk-import: the request body and the unwrapped `bulkImport` result, from the spec.
+export type BulkImportBody = components['schemas']['BulkImportBody'];
+export type BulkImportContact = BulkImportBody['contacts'][number];
+export type BulkImportResult =
+  operations['post_contacts_bulk_import']['responses'][200]['content']['application/json']['bulkImport'];
 
 export type Company = components['schemas']['Company'];
 export type CreateCompanyBody = components['schemas']['CreateCompanyBody'];

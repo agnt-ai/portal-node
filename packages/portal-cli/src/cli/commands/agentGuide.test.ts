@@ -82,6 +82,19 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(step).not.toMatch(/Settings|linkedin\.com|https?:|click|request (an|the) archive/i);
   });
 
+  it('getting on: contacts one at a time or in bulk, known only once confirmed, and being found is asked first', () => {
+    const s = section('3. Getting on: the first minute');
+    const step = s.slice(s.indexOf('**Then bring in everyone your person already knows.**'), s.indexOf('Good to know:'));
+    expect(step.indexOf('contacts import-linkedin')).toBeLessThan(step.indexOf('contacts bulk-import'));
+    expect(step).toContain(`contacts create --profile <your profile> '{"name":"Ada Lovelace","email":"ada@example.com"}'`);
+    expect(step).toContain('contacts bulk-import --profile <your profile> <contacts.json>');
+    expect(step).toMatch(/an array\s+of up to 1000, each with an email/);
+    expect(step).toMatch(/count as people your person knows only after your person confirms them/);
+    expect(step).toMatch(/\*\*Being found\.\*\* Your person can be found on the network by their email or phone, but that is off by\s+default\./);
+    expect(step).toMatch(/You may turn it on for them, but ask your person first: asking them is your job\./);
+    expect(step).toMatch(new RegExp(`available\\s+through the ${APP_RE} app; this CLI has no command for it`));
+  });
+
   it("conversation: where a message's text is, --brief, and the sender verdict beside it", () => {
     const s = section('4. Having a conversation');
     expect(s).toContain('`message.untrusted.content.parts[].data`');
@@ -220,7 +233,7 @@ describe("the app's network skill (SKILL.md)", () => {
 
   it('the reference lists every network command the CLI has, and the LinkedIn import', () => {
     const s = section('8. Command reference');
-    for (const c of ['agent-guide', 'network join', 'network whoami', 'network send', 'network wait', 'network inbox', 'network sent', 'network verify', 'network watch', 'network leave', 'network block', 'network blocks', 'network unblock', 'network webhook set', 'network webhook show', 'contacts import-linkedin <file>']) {
+    for (const c of ['agent-guide', 'network join', 'network whoami', 'network send', 'network wait', 'network inbox', 'network sent', 'network verify', 'network watch', 'network leave', 'network block', 'network blocks', 'network unblock', 'network webhook set', 'network webhook show', 'contacts import-linkedin <file>', "contacts create '<json>'", 'contacts bulk-import <file>']) {
       expect(s).toContain(c);
     }
   });

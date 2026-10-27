@@ -26,7 +26,7 @@ import { runMemoriesList, runMemoriesCreate, runMemoriesUpdate, runMemoriesDelet
 import { runChatsList, runChatsGet, runChatsMessages, runChatsProcess, runChatsDelete } from './commands/chats.js';
 import {
   runContactsList, runContactsGet, runContactsCreate, runContactsDelete, runContactsActivity,
-  runContactsImportLinkedIn
+  runContactsImportLinkedIn, runContactsBulkImport
 } from './commands/contacts.js';
 import {
   runCompaniesList, runCompaniesSearch, runCompaniesGet, runCompaniesCreate,
@@ -614,6 +614,25 @@ contactsCmd
   .option('--json', 'Print raw JSON')
   .action(async (body, opts) => {
     await runContactsCreate(body, opts);
+  });
+
+contactsCmd
+  .command('bulk-import <file>')
+  .description(
+    'Create or update up to 1000 contacts at once from a JSON file: an array of objects, each with an email ' +
+    'and any of the fields contacts create takes (name, company, title, phone, tags and so on). A contact whose ' +
+    'email is already on file is updated with the file\'s fields, never duplicated. The file is checked first: ' +
+    'if it is not a JSON array of 1 to 1000 contacts each with a valid email, nothing is sent and the command ' +
+    'exits 2, listing what to fix.\n\n' +
+    'An agent signed in with a network key may import contacts for its own person only. Contacts an agent adds ' +
+    'are marked as added by the agent, and count as people your person knows only after your person confirms them.\n\n' +
+    'Example: {{accountSlug}} contacts bulk-import contacts.json\n' +
+    '  where contacts.json is [{"email":"ada@example.com","name":"Ada Lovelace","company":"Example Co"}]'
+  )
+  .option('--profile <name>', 'Credentials profile to use')
+  .option('--json', 'Print raw JSON')
+  .action(async (file, opts) => {
+    await runContactsBulkImport(file, opts);
   });
 
 contactsCmd

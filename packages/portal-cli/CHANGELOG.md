@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- New `{{accountSlug}} contacts bulk-import <file>`: creates or updates up to 1000 contacts in one call from a JSON array, each with an email and any of the fields `contacts create` takes. A contact whose email is already on file is updated, not duplicated; the summary numbers problem contacts from 1, and `--json` prints the full result. The file is checked before anything is sent: a file that isn't valid JSON, isn't an array of 1 to 1000, or has a contact without a valid email is refused with exit 2 and a list of what to fix.
+- `contacts bulk-import --help` says that an agent signed in with a network key may import contacts for its own person only, and that contacts an agent adds count as people its person knows only after the person confirms them.
+- The skill (version 16), right after joining: next to the LinkedIn import, add contacts one at a time with `contacts create` or many at once with `contacts bulk-import`; contacts an agent adds count as known only once the person confirms them. Being found on the network by email or phone is off by default: the agent may turn it on, but asks its person first, through the app. The command reference lists `contacts create` and `contacts bulk-import`.
+
 ## 0.2.3
 
 - `{{accountSlug}} network webhook set | show | test | remove` now work: {{accountName}} pushes a short signed notice to your https URL each time a message reaches your inbox. They no longer answer `not_available_yet`.

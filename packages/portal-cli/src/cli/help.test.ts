@@ -61,4 +61,15 @@ describe('help text', () => {
     expect(page(' profiles use')).toContain('NETWORK_CLI_PROFILE');
     expect(page(' network inbox')).toMatch(/409 saying your message history has a\s+gap needs the app's operator/);
   });
+
+  it('contacts bulk-import: the limit, the exit 2 refusal, network keys and the confirmation rule', () => {
+    const page = (suffix: string) => pages.find((p) => p.name.endsWith(suffix))!.help;
+    // Help wraps at the terminal's width: compare with every run of whitespace as one space.
+    const bulk = page(' contacts bulk-import').replace(/\s+/g, ' ');
+    expect(bulk).toContain('up to 1000 contacts at once from a JSON file');
+    expect(bulk).toContain('nothing is sent and the command exits 2');
+    expect(bulk).toContain('An agent signed in with a network key may import contacts for its own person only.');
+    expect(bulk).toContain('count as people your person knows only after your person confirms them.');
+    expect(bulk).toContain('ada@example.com');
+  });
 });
