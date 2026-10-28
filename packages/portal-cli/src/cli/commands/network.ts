@@ -17,11 +17,12 @@ import { clientFor } from '../utils/api.js';
 import { networkProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
-import { listenerStatus, reachabilityOf, within, HINT_DEADLINE_MS } from '../utils/listener.js';
+import { deliveryLine, unreadSummaryLine, idForLine } from './mailboxFormat.js';
+import { listenerStatus, reachabilityOf, within, HINT_DEADLINE_MS, type ProcessLister } from '../utils/listener.js';
 import { sendNotes } from './networkHints.js';
 import type { PortalClient } from '../../index.js';
 import type {
-  NetworkConnectContactsUrl, NetworkInboxEntry, NetworkSendBody, NetworkUntrusted, NetworkWaitResult, NetworkSender,
+  NetworkConnectContactsUrl, NetworkInboxEntry, NetworkSendBody, NetworkUntrusted, NetworkWaitResult, NetworkSender, NetworkSentRecipient, NetworkSendRecipient,
 } from '../../types.js';
 
 export const EXIT_USAGE = 2;
@@ -33,7 +34,7 @@ export const WAIT_CALL_SECONDS = 20;
 /** The longest pause between wait calls after a failure that may pass. */
 const WAIT_MAX_BACKOFF_SECONDS = 30;
 
-const HEX64 = /^[0-9a-f]{64}$/;
+export const HEX64 = /^[0-9a-f]{64}$/;
 const HEADER_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 /** Headers the app writes itself, or the protocol reserves. The server refuses them too; this only says so sooner. */
 const RESERVED_HEADERS = new Set(['for', 'pairing', 'succession', 'critical']);
@@ -175,6 +176,8 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
       return 'This connection was not granted the {{accountName}} Network.';
     case 'invalid':
       return 'The server refused part of the request; details.field names it.';
+    case 'no_such_address':
+      return 'None of those Network IDs exists, so nothing was delivered (details.recipients names each). Check the spelling with whoever gave it to you; do not retry the same address.';
     case 'held_parts_unsupported':
       return 'Files go to Network IDs only for now, not to an email or a phone. Send the text alone to them.';
     case 'part_not_uploaded':
@@ -271,10 +274,44 @@ export const STAY_REACHABLE =
   'Otherwise keep `{{accountSlug}} network watch --print` running (in Claude Code, attach it to the Monitor tool). ' +
   'More: `{{accountSlug}} agent-guide`, "Stay reachable".';
 
-/** Said after a wait that has more behind it: the rest are not lost, but a wait shows one at a time. */
+/** Said after a wait on a server without the mailbox that has more behind the message it returned. */
 export const MORE_WAITING =
   'note: more messages are waiting after this one. Handle it, then run `{{accountSlug}} network wait --timeout 0` again until it exits 3 ' +
   '(or read them all with `{{accountSlug}} network inbox`). Do not pipe wait through grep or head: that hides this.';
+
+/**
+ * The plain lines after a wait that returned a message, on a mailbox server: what else is unread, and that this
+ * message stays unread (and comes back) until it is acknowledged. Lines are built from checked values only.
+ */
+export function waitNotice(got: NetworkWaitResult): string | undefined {
+  if (got.status !== 'message') return undefined;
+  const lines: string[] = [];
+  if (got.unread !== undefined) {
+    const others = unreadSummaryLine(got.unread, { other: true });
+    if (others) {
+      lines.push(`note: ${others}. After this one, run \`{{accountSlug}} network wait --timeout 0\` for the next, or see them all with \`{{accountSlug}} network inbox --unread\`. Do not pipe wait through grep or head: that hides this.`);
+    }
+  } else if (got.more) {
+    lines.push(MORE_WAITING);
+  }
+  if (got.lease) {
+    const id = idForLine(got.id);
+    const ack = id ? `run \`{{accountSlug}} network ack ${id}\`` : 'run `{{accountSlug}} network ack`';
+    // A bounce is the network talking: there is nothing to reply to.
+    const how = got.kind === 'bounce' ? ack : `reply to it (--in-reply-to its id) or ${ack}`;
+    lines.push(
+      `note: this message stays unread until you ${how}; calling wait, inbox or send again at least 10 seconds later also counts. ` +
+      'Unacknowledged, it comes back from wait after about 2 minutes.',
+    );
+  }
+  return lines.length ? lines.join('\n') : undefined;
+}
+
+/** What a wait that timed out says when the mailbox still holds unread messages (a `--from` wait, or ones on lease). */
+export function timeoutNotice(unread: unknown): string | undefined {
+  const line = unreadSummaryLine(unread as never);
+  return line ? `note: nothing new to hand out, but ${line}. Read them with \`{{accountSlug}} network inbox --unread\`.` : undefined;
+}
 
 /** Run one verb: its result as JSON on stdout, or its error as JSON on stderr with the matching exit status. */
 export async function runNetworkVerb(verb: string, run: () => Promise<{ result: unknown; exitCode?: number; notice?: string }>): Promise<void> {
@@ -297,7 +334,7 @@ export function plainError(body: NetworkCliErrorBody): string {
   return `error: ${body.message}${field}${body.hint ? ` ${body.hint}` : ''}`;
 }
 
-function wholeNumber(name: string, value: string | undefined): number | undefined {
+export function wholeNumber(name: string, value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (!/^[0-9]+$/.test(value)) throw new NetworkUsageError(`--${name} takes a whole number, not ${value}.`);
   return Number(value);
@@ -438,8 +475,12 @@ export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string =
   return body;
 }
 
-export async function networkSend(client: PortalClient, opts: NetworkSendOptions) {
-  return { result: await client.network.send(await completeRecipients(client, sendBodyFrom(opts))) };
+export async function networkSend(client: PortalClient, opts: NetworkSendOptions, deps: { profile?: string; processes?: ProcessLister } = {}) {
+  const result = await client.network.send(await completeRecipients(client, sendBodyFrom(opts)));
+  // Said beside the answer, never instead of it: whether you will hear a reply, whether they are listening, and
+  // which recipient was rejected. sendNotes is the one place that says each, so nothing is printed twice.
+  const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile: deps.profile }, { processes: deps.processes }), HINT_DEADLINE_MS, [] as string[]);
+  return { result: notes.length ? { ...result, notes } : result, ...(notes.length ? { notice: notes.join('\n') } : {}) };
 }
 
 /** The body with any bare username in `to` completed with this agent's own domain. */
@@ -456,6 +497,16 @@ export interface NetworkBriefEntry {
   sender?: NetworkSender;
   conversation?: string;
   marks?: string[];
+  /** Mailbox servers: "bounce" is the network saying a send of yours did not arrive; it is not a message. */
+  kind?: 'message' | 'bounce';
+  direction?: 'received' | 'sent';
+  unread?: boolean;
+  readAt?: string | null;
+  newSender?: boolean;
+  /** Sent entries: each recipient's delivery status. */
+  recipients?: NetworkSentRecipient[];
+  /** Bounce entries: which send failed, to whom and why. */
+  bounce?: { sendId: string; to: string; reason: string; detail?: unknown };
   untrusted: {
     from: string;
     basis: string;
@@ -497,33 +548,19 @@ export function briefEntry(entry: NetworkReadableEntry): NetworkBriefEntry {
   if (u.invisible?.length) brief.untrusted.invisible = u.invisible;
   if (entry.conversation !== undefined) brief.conversation = entry.conversation;
   if (entry.marks !== undefined) brief.marks = entry.marks;
-  return brief;
-}
-
-// ── inbox ───────────────────────────────────────────────────────────────────
-
-export interface NetworkInboxOptions extends NetworkBaseOptions {
-  since?: string;
-  /** Accepted only to give legacy callers an explicit refusal. Never sent to the API. */
-  after?: string;
-  limit?: string;
-  brief?: boolean;
-}
-
-function inboxQuery(opts: NetworkInboxOptions) {
-  if ('after' in opts) throw new NetworkUsageError('inbox takes --since, the token the previous page gave, unchanged. There is no --after.');
-  if (opts.since !== undefined && (typeof opts.since !== 'string' || opts.since.length === 0)) {
-    throw new NetworkUsageError('--since must be the nonempty token from the previous page, unchanged.');
+  // Mailbox fields, as the server gave them. A bounce is shown as a bounce: what failed, to whom, why.
+  if (entry.kind !== undefined) brief.kind = entry.kind;
+  if (entry.direction !== undefined) brief.direction = entry.direction;
+  if (entry.unread !== undefined) brief.unread = entry.unread;
+  if (entry.readAt !== undefined) brief.readAt = entry.readAt;
+  if (entry.newSender !== undefined) brief.newSender = entry.newSender;
+  if (entry.recipients !== undefined) brief.recipients = entry.recipients;
+  // Which send failed, to whom and the reason code; the free-text `detail` stays in the full output.
+  if (entry.kind === 'bounce' && entry.bounce !== undefined) {
+    const { detail: _detail, ...bounce } = entry.bounce;
+    brief.bounce = bounce;
   }
-  const limit = wholeNumber('limit', opts.limit);
-  if (limit !== undefined && (limit < 1 || limit > 200)) throw new NetworkUsageError('--limit is 1 to 200.');
-  return { since: opts.since, limit, assistant: opts.assistant };
-}
-
-export async function networkInbox(client: PortalClient, opts: NetworkInboxOptions) {
-  const page = await client.network.inbox(inboxQuery(opts));
-  if (!opts.brief) return { result: page };
-  return { result: { ...page, messages: page.messages.map((m) => briefEntry(m)) } };
+  return brief;
 }
 
 // ── wait ────────────────────────────────────────────────────────────────────
@@ -545,9 +582,9 @@ const realClock: WaitClock = {
 };
 
 /**
- * Wait up to --timeout seconds (600 by default) for the next message wait has not shown, by repeated
- * server waits of at most WAIT_CALL_SECONDS each. The server remembers what wait has shown; there is no
- * cursor. A failure that may pass (a 429, a 503, no answer) does not end it: it backs off (Retry-After
+ * Wait up to --timeout seconds (600 by default) for the next unread message, by repeated server waits of at
+ * most WAIT_CALL_SECONDS each. A mailbox server hands out the next UNREAD message under a lease; an older one
+ * remembers what wait has shown. There is no cursor. A failure that may pass (a 429, a 503, no answer) does not end it: it backs off (Retry-After
  * when given) and keeps waiting until the deadline. Never two calls less than a second apart.
  */
 export async function networkWait(client: PortalClient, opts: NetworkWaitOptions, clock: WaitClock = realClock) {
@@ -559,6 +596,7 @@ export async function networkWait(client: PortalClient, opts: NetworkWaitOptions
   let polled = false;
   // The last call's failure, while the server keeps failing: reported instead of a quiet timeout.
   let failing: unknown;
+  let lastTimeout: NetworkWaitResult | undefined;
 
   for (;;) {
     const remainingMs = deadline - clock.now();
@@ -583,10 +621,17 @@ export async function networkWait(client: PortalClient, opts: NetworkWaitOptions
       continue;
     }
     if (got.status === 'message') {
-      const notice = got.more ? MORE_WAITING : undefined;
+      const notice = waitNotice(got);
       if (!opts.brief) return { result: got, notice };
-      return { result: { status: 'message', more: got.more, ...briefEntry(got) }, notice };
+      return {
+        result: {
+          status: 'message', more: got.more, ...briefEntry(got),
+          ...(got.lease ? { lease: got.lease } : {}), ...(got.unread ? { unread: got.unread } : {}),
+        },
+        notice,
+      };
     }
+    lastTimeout = got;
     if (clock.now() >= deadline) break;
     // A call that came back at once must not turn into a tight loop.
     const elapsed = clock.now() - callStarted;
@@ -597,9 +642,12 @@ export async function networkWait(client: PortalClient, opts: NetworkWaitOptions
   // Out of time while the server was failing: say so, rather than report a quiet timeout.
   if (failing) throw failing;
 
+  // A mailbox server says what is still unread even when nothing new came: a timeout is not "nothing for you".
+  const unread = lastTimeout?.status === 'timeout' ? lastTimeout.unread : undefined;
   return {
-    result: { status: 'timeout', waitedSeconds: Math.round((clock.now() - started) / 1000), from: from ?? null },
+    result: { status: 'timeout', waitedSeconds: Math.round((clock.now() - started) / 1000), from: from ?? null, ...(unread ? { unread } : {}) },
     exitCode: EXIT_WAIT_TIMEOUT,
+    notice: timeoutNotice(unread),
   };
 }
 
@@ -620,7 +668,9 @@ export async function networkSent(client: PortalClient, id: string | undefined, 
   }
   if (opts.after !== undefined || opts.limit !== undefined) throw new NetworkUsageError('--after and --limit page the list: leave out the id to use them.');
   if (!HEX64.test(id)) throw new NetworkUsageError('sent takes a message id: 64 lower-case hex digits, as send answered it.');
-  return { result: await client.network.sent(id, { assistant: opts.assistant }) };
+  const report = await client.network.sent(id, { assistant: opts.assistant });
+  const line = deliveryLine(report.recipients);
+  return { result: report, notice: line ? `delivery: ${line}` : undefined };
 }
 
 // ── verify ──────────────────────────────────────────────────────────────────
@@ -749,18 +799,9 @@ export const runNetworkWhoami = (opts: NetworkBaseOptions) =>
   });
 export const runNetworkSend = (opts: NetworkSendOptions) =>
   runNetworkVerb('send', async () => {
-    const body = sendBodyFrom(opts); // usage errors before reading credentials
+    sendBodyFrom(opts); // usage errors before reading credentials
     const profile = await networkProfile(opts.profile);
-    const client = await clientFor(profile);
-    const result = await client.network.send(await completeRecipients(client, body));
-    // Said beside the answer, never instead of it: whether you will hear a reply, and whether they are listening.
-    const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile }), HINT_DEADLINE_MS, [] as string[]);
-    return { result: notes.length ? { ...result, notes } : result, ...(notes.length ? { notice: notes.join('\n') } : {}) };
-  });
-export const runNetworkInbox = (opts: NetworkInboxOptions) =>
-  runNetworkVerb('inbox', async () => {
-    inboxQuery(opts); // Refuse invalid flags even when no profile exists; never touch the network first.
-    return networkInbox(await clientFor(await networkProfile(opts.profile)), opts);
+    return networkSend(await clientFor(profile), opts, { profile });
   });
 export const runNetworkWait = (opts: NetworkWaitOptions) =>
   runNetworkVerb('wait', withClient(opts.profile, (c) => networkWait(c, opts)));

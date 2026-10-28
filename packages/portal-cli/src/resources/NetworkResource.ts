@@ -1,7 +1,7 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkSentReport, NetworkSentList,
-  NetworkVerifyResult, NetworkLeaveResult, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
+  NetworkVerifyResult, NetworkLeaveResult, NetworkInboxDigest, NetworkAckResult, NetworkAckTarget, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
 } from '../types.js';
 
 /**
@@ -15,6 +15,18 @@ const T = { timeoutMs: NETWORK_CALL_TIMEOUT_MS };
 /** Which of your assistants to act as. Leave it out for your primary; a key bound to an agent always acts as that agent. */
 export interface NetworkAssistantOption {
   assistant?: string;
+}
+
+/** The mailbox view of `inbox`. */
+export interface InboxQuery {
+  since?: string;
+  limit?: number;
+  view?: 'received' | 'sent' | 'all';
+  unread?: boolean;
+  from?: string;
+  thread?: string;
+  order?: 'unread_first' | 'oldest' | 'newest';
+  cursor?: string;
 }
 
 /**
@@ -36,19 +48,22 @@ export class NetworkResource {
   }
 
   /**
-   * Send a message. `to` takes Network IDs on this app's own domains (sent at once), and emails and phones (E.164, or
+   * Send a message (`recipients` says per recipient whether it was accepted or rejected). `to` takes Network IDs on this app's own domains (sent at once), and emails and phones (E.164, or
    * tel:), which the server holds and delivers to the assistant their holder chose, once it finds one: the answer
-   * never says whether there is one. Every recipient answers "accepted"; `sent(id)` reports delivery.
+   * never says whether there is one, so they answer "accepted"; `sent(id)` reports delivery.
    */
   send(body: NetworkSendBody): Promise<NetworkSendResult> {
     return this.http.post<NetworkSendResult>('/agnt/send', body, T);
   }
 
   /**
-   * Read messages without marking anything. Pass the previous page's `token` as `since`, unchanged. Omit `since`
-   * only for the first read.
+   * Read the mailbox, acknowledging none of the messages listed. With none of the mailbox options the server answers its plain
+   * sync stream (history, oldest first); pass `view` and it answers the mailbox: `unread`, `from` and `thread`
+   * filter, `order` sorts (unread first by default), and a page with `more` carries a `cursor` for the next.
+   * Pass the previous page's `token` as `since`, unchanged. A server without the mailbox refuses (400 "Unrecognized key") or ignores the options it
+   * does not know and answers the plain stream (no `contract` in the answer).
    */
-  async inbox(opts: { since?: string; limit?: number; after?: never } & NetworkAssistantOption = {}): Promise<NetworkInboxPage> {
+  async inbox(opts: InboxQuery & { after?: never } & NetworkAssistantOption = {}): Promise<NetworkInboxPage> {
     if ('after' in opts) throw new TypeError('inbox takes since, the token the previous page gave, unchanged. There is no after.');
     if (opts.since !== undefined && (typeof opts.since !== 'string' || opts.since.length === 0)) {
       throw new TypeError('since must be the nonempty token from the previous page, unchanged.');
@@ -56,7 +71,28 @@ export class NetworkResource {
     if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1 || opts.limit > 200)) {
       throw new RangeError('limit is 1 to 200 (default 50).');
     }
-    return this.http.get<NetworkInboxPage>('/agnt/inbox', { since: opts.since, limit: opts.limit, assistant: opts.assistant }, T);
+    return this.http.get<NetworkInboxPage>('/agnt/inbox', {
+      since: opts.since, limit: opts.limit, assistant: opts.assistant,
+      view: opts.view, unread: opts.unread ? 'true' : undefined, from: opts.from, thread: opts.thread, order: opts.order, cursor: opts.cursor,
+    }, T);
+  }
+
+  /**
+   * One summary of what is unread (count, senders, the oldest, up to 100 ids) and the mailbox's `token`, to follow
+   * from there. A server without the mailbox ignores `digest` and answers a plain page: the answer then has no
+   * `digest` key.
+   */
+  inboxDigest(opts: NetworkAssistantOption = {}): Promise<NetworkInboxDigest | NetworkInboxPage> {
+    return this.http.get<NetworkInboxDigest | NetworkInboxPage>('/agnt/inbox', { digest: 'true', assistant: opts.assistant }, T);
+  }
+
+  /**
+   * Acknowledge (mark read) unread messages: `ids` (at most 200), a whole `thread`, everything `from` one address,
+   * or `all`. The mailbox is shared by every session on the Network ID, so this clears them for all of them.
+   * Needs the mailbox server; an older one has no such route (404).
+   */
+  ack(target: NetworkAckTarget, opts: NetworkAssistantOption = {}): Promise<NetworkAckResult> {
+    return this.http.post<NetworkAckResult>('/agnt/ack', { ...target, ...(opts.assistant ? { assistant: opts.assistant } : {}) }, T);
   }
 
   /**
@@ -68,9 +104,11 @@ export class NetworkResource {
   }
 
   /**
-   * One long poll (at most 25 seconds; the server answers within about 22) for the next message wait has
-   * not shown. There is no cursor: what wait has shown is remembered on the server for your agent, whichever
-   * client asks. Loop on `{status: "timeout"}`. To only look, read `inbox`: wait marks what it shows.
+   * One long poll (at most 25 seconds; the server answers within about 22) for the next UNREAD message. A mailbox
+   * server hands it out under a lease of about 120 seconds (`lease`) and says what else is unread (`unread`); it is
+   * acknowledged when you reply to it, `ack` it, or call wait, inbox or send again with the same key at least 10 seconds later;
+   * otherwise it comes back. An older server remembers what wait has shown instead. Loop on `{status: "timeout"}`.
+   * To only look, read `inbox`.
    */
   wait(opts: { from?: string; timeout?: number } & NetworkAssistantOption = {}): Promise<NetworkWaitResult> {
     // Give up on a call the server holds 15 seconds past its own deadline: the connection is gone.
