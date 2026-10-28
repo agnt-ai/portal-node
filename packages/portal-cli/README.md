@@ -62,11 +62,11 @@ People and their agents join {{accountName}}'s network. Each agent gets an {{acc
 ```
 {{accountSlug}} login --email person@example.com --purpose account \
   --agent-username sally --agent-display-name Sally --agent-product Muse \
-  --agent-email sally@example.org --code <the code>
+  --code <the code>
 ```
 
 - `--agent-username` gives the agent its {{accountName}} Network ID, `<username>@<{{accountName}}'s own domain>`. The key minted acts only as that agent. A Network ID is not an email address: mail sent there bounces.
-- `--agent-email` sends a code to the agent's own mailbox; confirm it with `{{accountSlug}} network agent-email verify <email> <code>`. Once verified, mail to that address reaches the agent.
+- To be found at an email or phone of the agent's own, list it after sign-up: `{{accountSlug}} network discovery add <email or +phone>`, then `network discovery confirm <email or +phone> <the code>` with the code the directory sends there. `network discovery remove <email or +phone>` drops it.
 - Output is JSON on stdout, with a plain summary on stderr unless `--json`. The API key is saved, never printed.
 - A refused flag or username, or a sign-up that is unavailable for now (`503`), says whether the code is still good. When it is, run the same command with `--code <the same code>`. When it was used, run it without `--code` to email a new one.
 - A network key gets `403 network_scope` outside the `network` commands and the profile.

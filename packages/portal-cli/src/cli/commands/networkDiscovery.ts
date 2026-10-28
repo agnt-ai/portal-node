@@ -2,12 +2,15 @@
  * {{accountSlug}} network discovery show|on|off: whether people and agents can find your person on the network by
  * their email or phone. Off by default. Turning it on is one call with no approval step, so asking the person first
  * is the agent's job.
+ *
+ * add|confirm|remove: an agent lists one of its OWN emails or phones the same way (a code goes there; confirm it).
  */
 
 import type { PortalClient } from '../../index.js';
 import { runNetworkVerb } from './network.js';
 import { clientFor } from '../utils/api.js';
 import { networkProfile } from '../utils/agentIdentity.js';
+import { flagWord } from './login.js';
 
 export interface DiscoveryOptions {
   profile?: string;
@@ -25,9 +28,47 @@ export async function networkDiscoverySet(client: PortalClient, listed: boolean,
   return { result: { ...(await client.network.setDiscovery(listed, { assistant: opts.assistant })), note: ASK_FIRST } };
 }
 
+/** The flags a follow-up command needs to act as the same profile and assistant. */
+const sameFlags = (opts: DiscoveryOptions) =>
+  [['--profile', opts.profile], ['--assistant', opts.assistant]]
+    .filter(([, value]) => value)
+    .map(([flag, value]) => ` ${flagWord(flag!, value!)}`)
+    .join('');
+
+/** What the directory answered when it did not do what was asked: nothing was listed, and the agent must not assume it was. */
+const NOT_LISTED = 'The directory did not list it just now (it is not available for this app, or is down). Nothing was changed; tell your person if they asked for this.';
+
+export async function networkDiscoveryAdd(client: PortalClient, identifier: string, opts: DiscoveryOptions) {
+  const result = await client.network.listDiscoveryIdentifier(identifier, { assistant: opts.assistant });
+  return {
+    result: {
+      ...result,
+      ...(result.directory === 'code_sent' ? {
+        askUser: `A one-time code went to ${result.identifier}. Read it there if that is your own mailbox or phone; if your person reads it, ask them for the code in your conversation.`,
+        next: `{{accountSlug}} network discovery confirm${sameFlags(opts)} ${result.identifier} <the code>`,
+      } : { note: NOT_LISTED }),
+    },
+  };
+}
+
+export async function networkDiscoveryConfirm(client: PortalClient, identifier: string, code: string, opts: DiscoveryOptions) {
+  const result = await client.network.confirmDiscoveryIdentifier(identifier, code, { assistant: opts.assistant });
+  return { result: result.directory === 'listed' ? result : { ...result, note: NOT_LISTED } };
+}
+
+export async function networkDiscoveryRemove(client: PortalClient, identifier: string, opts: DiscoveryOptions) {
+  return { result: await client.network.unlistDiscoveryIdentifier(identifier, { assistant: opts.assistant }) };
+}
+
 const withProfile = (verb: string, opts: DiscoveryOptions, fn: (client: PortalClient) => Promise<{ result: unknown; exitCode?: number }>) =>
   runNetworkVerb(verb, async () => fn(await clientFor(await networkProfile(opts.profile))));
 
 export const runNetworkDiscoveryShow = (opts: DiscoveryOptions) => withProfile('discovery show', opts, (c) => networkDiscoveryShow(c));
 export const runNetworkDiscoveryOn = (opts: DiscoveryOptions) => withProfile('discovery on', opts, (c) => networkDiscoverySet(c, true, opts));
 export const runNetworkDiscoveryOff = (opts: DiscoveryOptions) => withProfile('discovery off', opts, (c) => networkDiscoverySet(c, false, opts));
+export const runNetworkDiscoveryAdd = (identifier: string, opts: DiscoveryOptions) =>
+  withProfile('discovery add', opts, (c) => networkDiscoveryAdd(c, identifier, opts));
+export const runNetworkDiscoveryConfirm = (identifier: string, code: string, opts: DiscoveryOptions) =>
+  withProfile('discovery confirm', opts, (c) => networkDiscoveryConfirm(c, identifier, code, opts));
+export const runNetworkDiscoveryRemove = (identifier: string, opts: DiscoveryOptions) =>
+  withProfile('discovery remove', opts, (c) => networkDiscoveryRemove(c, identifier, opts));

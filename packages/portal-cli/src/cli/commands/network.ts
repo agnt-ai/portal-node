@@ -179,13 +179,14 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
       return 'A file part names bytes this agent has not uploaded yet. Upload it first, then send again.';
     case 'invalid_email':
       return 'Give a mailbox you read, not an {{accountName}} Network ID: a Network ID is not an email address.';
-    case 'otp_invalid':
-      return 'Wrong code. Run the same command with the right code.';
-    case 'otp_expired':
-    case 'otp_max_attempts':
-      return 'That code can no longer be used. Get a new one: {{accountSlug}} network agent-email start <email>.';
-    case 'agnt_identifier_taken':
-      return 'That email already belongs to someone in this app.';
+    case 'agent_only':
+      return "Your person's own emails and phones are listed by the discovery switch (network discovery on). Only an agent's own key lists or drops its own.";
+    case 'bad_code':
+      return "That is not the code the directory sent, or it expired. Run network discovery add <identifier> again for a new one, then confirm it.";
+    case 'identifier_taken':
+      return 'Someone else in this app holds that email or phone, so you cannot list it. Tell your person.';
+    case 'identifiers_full':
+      return 'You have the most emails and phones allowed. Drop one first: network discovery remove <identifier>.';
   }
   if (status === 401) {
     return verb === 'leave'
@@ -627,37 +628,6 @@ export async function networkVerify(client: PortalClient, file: string) {
   return { result: await client.network.verify(readVerifyInput(file)) };
 }
 
-// ── the agent's own email ───────────────────────────────────────────────────
-
-/**
- * Whether the server verifies an agent's own mailbox. Not yet: sign-up no longer takes one, and the way an agent lists
- * its own mailbox is still being decided. Until then `network agent-email` says so, without calling anything.
- */
-export const AGENT_EMAIL_AVAILABLE = false;
-
-const agentEmailNotYet = () => new NotAvailableYetError('agent-email',
-  "`network agent-email` isn't available on {{accountName}} yet: your own mailbox can't be verified here for now. " +
-  'Other agents reach you at your Network ID (network whoami).');
-
-export async function networkAgentEmailStart(client: PortalClient, email: string) {
-  const result = await client.network.startAgentEmail(email);
-  return {
-    result: {
-      ...result,
-      askUser: `A one-time code went to ${email}. Read it there if that is your own mailbox; if your person reads it, ask them for the code in your conversation.`,
-      next: `{{accountSlug}} network agent-email verify ${email} <the code>`,
-    },
-  };
-}
-
-export async function networkAgentEmailVerify(client: PortalClient, email: string, code: string) {
-  return { result: await client.network.verifyAgentEmail(email, code) };
-}
-
-export async function networkAgentEmailRemove(client: PortalClient, email: string) {
-  return { result: await client.network.removeAgentEmail(email) };
-}
-
 // ── blocks ──────────────────────────────────────────────────────────────────
 
 export async function networkBlock(client: PortalClient, match: string, opts: NetworkBaseOptions = {}) {
@@ -746,24 +716,6 @@ export const runNetworkVerify = (file: string, opts: NetworkBaseOptions) =>
     const client = await clientFor(await networkProfile(opts.profile));
     return { result: await client.network.verify(message) };
   });
-/** The agent-email commands, or the plain "not available yet" while the server has none. */
-const agentEmailVerb = (profile: string | undefined, fn: (client: PortalClient) => Promise<{ result: unknown; exitCode?: number }>) =>
-  runNetworkVerb('agent-email', async () => {
-    if (!AGENT_EMAIL_AVAILABLE) throw agentEmailNotYet();
-    return withClient(profile, fn)();
-  });
-/** `network agent-email` with no subcommand: the same answer as its subcommands while the server has none. */
-export const runNetworkAgentEmail = (_opts: NetworkBaseOptions) =>
-  runNetworkVerb('agent-email', async () => {
-    if (!AGENT_EMAIL_AVAILABLE) throw agentEmailNotYet();
-    throw new NetworkUsageError('Give a subcommand: network agent-email start, verify or remove.');
-  });
-export const runNetworkAgentEmailStart = (email: string, opts: NetworkBaseOptions) =>
-  agentEmailVerb(opts.profile, (c) => networkAgentEmailStart(c, email));
-export const runNetworkAgentEmailVerify = (email: string, code: string, opts: NetworkBaseOptions) =>
-  agentEmailVerb(opts.profile, (c) => networkAgentEmailVerify(c, email, code));
-export const runNetworkAgentEmailRemove = (email: string, opts: NetworkBaseOptions) =>
-  agentEmailVerb(opts.profile, (c) => networkAgentEmailRemove(c, email));
 export const runNetworkBlock = (match: string, opts: NetworkBaseOptions) =>
   runNetworkVerb('block', withClient(opts.profile, (c) => networkBlock(c, match, opts)));
 export const runNetworkUnblock = (match: string, opts: NetworkBaseOptions) =>

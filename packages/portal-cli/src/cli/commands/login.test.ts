@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { signupFieldsFrom, verifyErrorHint, verifyExitCode, finishCommand, tellUserConnected, runLogin } from './login.js';
+import { signupFieldsFrom, verifyErrorHint, verifyExitCode, finishCommand, tellUserConnected, runLogin, toFillLine } from './login.js';
 import { saveProfile } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
 import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
@@ -31,11 +31,6 @@ describe('signupFieldsFrom', () => {
       timezone: 'America/New_York', firstName: 'Ada', lastName: 'Lovelace', purpose: 'account',
       agent: { username: 'sally', displayName: 'Sally', product: 'Muse' },
     } });
-  });
-
-  it("--agent-email is not available yet: refused before any code is asked for, never sent", () => {
-    const read = signupFieldsFrom({ email: 'p@example.com', purpose: 'network', agentUsername: 'sally', agentEmail: 'sally@example.org' });
-    expect(read).toEqual({ error: expect.stringMatching(/--agent-email isn't available on .* yet: leave it out/) });
   });
 
   it('refuses before any code is requested: a bad purpose, an agent with no purpose, network with no agent, a bad username', () => {
@@ -251,7 +246,6 @@ describe('runLogin against a mocked API', () => {
     expect(out.apiKey).toBeUndefined();
     expect(out).toMatchObject({ status: 'connected', purpose: 'network', savedProfile: 'default', agnt: { address: 'sally@agent.example.test' } });
     expect(out.tellUser).toMatch(/sally@agent\.example\.test/);
-    expect(out.agentEmail).toBeUndefined();
     expect(out.connectContacts.urls).toEqual(currentSignupResponse.connectContactsUrl);
     expect(out.connectContacts.askUser).toContain('https://portal.example.test/connections?connect=google');
     const text = stderr.join('');
@@ -268,7 +262,7 @@ describe('runLogin against a mocked API', () => {
     await runLogin({ email: 'person@example.com', account: 'acme', code: '123456', label: 't', apiUrl: 'https://api.example.test',
       purpose: 'network', agentUsername: 'sally' });
     const out = JSON.parse(stdout.join(''));
-    const network = [...out.next, ...(out.agentEmail ? [out.agentEmail.next] : [])].filter((c: string) => / network /.test(c));
+    const network = out.next.filter((c: string) => / network /.test(c));
     expect(network.length).toBeGreaterThanOrEqual(3);
     for (const c of network) expect(c).toMatch(/ --profile default(\s|$)/);
     // Each one resolves to that profile even under Claude Code, where a bare command would look for "claude-code".
@@ -431,5 +425,23 @@ describe('runLogin against a mocked API', () => {
     await expect(runLogin({ email: 'p@example.com', account: 'acme', agentUsername: 'sally' })).rejects.toThrow('exit 2');
     expect(fetchMock).not.toHaveBeenCalled();
     exit.mockRestore();
+  });
+});
+
+describe('toFillLine: what sign-up says is still worth setting', () => {
+  const tz = { value: null, confirmed: false, source: 'none' as const };
+  it('says nothing when there is nothing, or the server sent no profile', () => {
+    expect(toFillLine(undefined, ' --profile p')).toBeUndefined();
+    expect(toFillLine({ timezone: { ...tz, value: 'Europe/Paris', confirmed: true, source: 'existing' }, toFill: [] }, '')).toBeUndefined();
+  });
+
+  it('names each field, as a hint to ask the person about, with the one command that sets it', () => {
+    const line = toFillLine({
+      timezone: tz,
+      toFill: [{ field: 'timezone', reason: 'missing', set: 'PATCH /profile' }, { field: 'name', reason: 'default', set: 'PATCH /profile' }],
+    }, ' --profile claude-code')!;
+    expect(line).toContain('timezone (not set); name (only a placeholder made from their email)');
+    expect(line).toContain('ask your user, never guess');
+    expect(line).toContain(`me update '{"timezone":"<their IANA zone>","firstName":"<first>","lastName":"<last>"}' --profile claude-code`);
   });
 });

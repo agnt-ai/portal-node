@@ -366,21 +366,13 @@ describe('network: the compiled CLI against the API as it answers today, two age
     expect(fake.requests.filter((r) => r.path === '/agnt/send')).toHaveLength(1);
   }, 30_000);
 
-  it('agent-email says "not available yet", before reading a profile or calling anything', async () => {
-    for (const args of [
-      ['network', 'agent-email', 'start', 'me@example.org'], ['network', 'agent-email', 'verify', 'me@example.org', '123456'],
-      ['network', 'agent-email', 'remove', 'me@example.org'],
-    ]) {
-      const out = await cli(args);
-      expect(out.code, args.join(' ')).toBe(1);
-      expect(out.stdout).toBe('');
-      const error = errorOf(out.stderr);
-      expect(error).toMatchObject({ code: 'not_available_yet', retryable: false });
-      expect(error.message).toMatch(/isn't available on .* yet/);
-      expect(error.hint).toMatch(/Nothing was sent or changed.*don't retry/);
-    }
-    expect(fake.requests).toEqual([]);
-  }, 30_000);
+  it('login --agent-email is gone: refused as an unknown option, and nothing reaches the server', async () => {
+    const before = fake.requests.length;
+    const out = await cli(['login', '--email', 'a@example.com', '--agent-email', 'agent@example.com']);
+    expect(out.code).not.toBe(0);
+    expect(out.stderr).toMatch(/unknown option.*--agent-email/);
+    expect(fake.requests.length).toBe(before);
+  });
 
   it('every network verb accepts --json and ignores it: the same JSON, never "unknown option"', async () => {
     const alice = await joinAs('alice', 'alice-agent', 'alice@example.com');
@@ -418,8 +410,6 @@ describe('network: the compiled CLI against the API as it answers today, two age
       ['network', 'watch', '--drain', '--exec', 'true', '--profile', 'alice', '--json'],
       ['network', 'webhook', 'show', '--json'], ['network', 'webhook', 'set', '--url', 'https://agent.example.com/push', '--json'],
       ['network', 'webhook', 'remove', '--json'], ['network', 'webhook', 'test', '--json'],
-      ['network', 'agent-email', '--json'], ['network', 'agent-email', 'start', 'me@example.org', '--json'],
-      ['network', 'agent-email', 'verify', 'me@example.org', '123456', '--json'], ['network', 'agent-email', 'remove', 'me@example.org', '--json'],
       ['network', 'leave', '--profile', 'bob', '--json'],
     ]) {
       const out = await cli(args);
@@ -437,23 +427,6 @@ describe('network: the compiled CLI against the API as it answers today, two age
     expect(ask.code).toBe(2);
     expect(errorOf(ask.stderr).askUser).toContain(bob.address);
   }, 90_000);
-
-  it('network agent-email on its own answers "not available yet", with or without --profile', async () => {
-    for (const args of [['network', 'agent-email'], ['network', 'agent-email', '--profile', 'alice'], ['network', 'agent-email', '--profile', 'alice', '--json']]) {
-      const out = await cli(args);
-      expect(out.code, args.join(' ')).toBe(1);
-      expect(out.stdout).toBe('');
-      const error = errorOf(out.stderr);
-      expect(error).toMatchObject({ code: 'not_available_yet', retryable: false });
-      expect(error.message).toMatch(/agent-email` isn't available on .* yet/);
-      expect(error.hint).toMatch(/Nothing was sent or changed.*don't retry/);
-    }
-    // A subcommand still takes its own --profile after its arguments.
-    const sub = await cli(['network', 'agent-email', 'start', 'me@example.org', '--profile', 'alice']);
-    expect(sub.code).toBe(1);
-    expect(errorOf(sub.stderr)).toMatchObject({ code: 'not_available_yet' });
-    expect(fake.requests).toEqual([]);
-  }, 30_000);
 
   it('the help says what changed in 0.2.1', async () => {
     const inbox = await cli(['network', 'inbox', '--help']);
@@ -596,12 +569,4 @@ describe('network: the compiled CLI against the API as it answers today, two age
     const off = await set('https://agent.example.com/push');
     expect(errorOf(off.stderr)).toMatchObject({ code: 'not_found', hint: expect.stringMatching(/isn't on for this app/) });
   }, 90_000);
-
-  it('login --agent-email is refused before any code is asked for', async () => {
-    const out = await cli(['login', '--email', 'alice@example.com', '--purpose', 'network', '--agent-username', 'alice-agent',
-      '--agent-email', 'me@example.org', '--api-url', apiUrl, '--account', 'openassistant']);
-    expect(out.code).toBe(2);
-    expect(JSON.parse(out.stderr).error.message).toMatch(/--agent-email isn't available on .* yet/);
-    expect(fake.requests).toEqual([]);
-  });
 });
