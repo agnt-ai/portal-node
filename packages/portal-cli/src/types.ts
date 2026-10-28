@@ -1301,6 +1301,11 @@ export interface AgentAuthVerifyResult {
   agnt?: AgentSignupNetwork;
   /** On an agent sign-up: where the person (not the agent) connects an account that brings their contacts in. */
   connectContactsUrl?: NetworkConnectContactsUrl;
+  /**
+   * On a network sign-up: what to tell the person and ask, then the first card of required steps. Text for the agent to
+   * follow in its own words; servers that predate it send nothing.
+   */
+  nextSteps?: string;
 }
 
 /**
@@ -1419,6 +1424,14 @@ export interface NetworkSendResult {
    * (all of them rejected is a 422 `no_such_address` instead). Older servers answer "accepted" for every recipient.
    */
   recipients: NetworkSendRecipient[];
+}
+
+/** GET /agnt/inbox?view=received&unread=true: only the parts `network doctor` reads. A server without read state sends no `unread`. */
+export interface NetworkUnreadPage {
+  unread?: NetworkUnreadSummary;
+  messages?: Array<{ id: string; receivedAt?: string; conversation?: string; inReplyTo?: string; kind?: string }>;
+  matching?: number;
+  more?: boolean;
 }
 
 /**

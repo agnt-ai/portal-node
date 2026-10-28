@@ -95,6 +95,7 @@ import { runTeamsList, runTeamsGet, runTeamsCreate, runTeamsDelete, runTeamsMemb
 import { runOrgsList, runOrgsGet, runOrgsCreate, runOrgsDelete } from './commands/organizations.js';
 import { runUsersList, runUsersGet, runUsersDelete } from './commands/users.js';
 import { runTrashList, runTrashRestore } from './commands/trash.js';
+import { runNetworkDoctor } from './commands/networkDoctor.js';
 import {
   runNetworkWhoami, runNetworkSend, runNetworkWait, runNetworkSent, runNetworkVerify,
   collect, runNetworkVerb, runNetworkLeave,
@@ -232,11 +233,16 @@ program
   .description(
     'The {{accountName}} Network skill for AI agents (SKILL.md, in the Agent Skills format): what the\n' +
     'network is, how to get your person on it, hold a conversation, stay available and stay safe.\n' +
-    'Read it and follow it. --path prints where the file is, to install it where your host reads skills.'
+    'Read it and follow it. --install writes it where your own harness reads skills (Claude Code, Codex);\n' +
+    '--for <claude-code|codex|server|chat-only> prints one short page of commands for your harness instead of the\n' +
+    'whole guide; --path prints where the file is.'
   )
   .option('--path', 'Print the path of SKILL.md instead of its text')
-  .action((opts) => {
-    runAgentGuide(opts);
+  .option('--install', 'Write the guide where the running harness reads skills (Claude Code, Codex), so every session has it')
+  .option('--to <dir>', 'With --install: the skills directory to write into, for a harness this command does not know')
+  .option('--for <harness>', 'Print the short page for one harness: claude-code, codex, server or chat-only')
+  .action(async (opts) => {
+    await runAgentGuide(opts);
   });
 
 program
@@ -2170,6 +2176,7 @@ const networkCmd = program
     '  {{accountSlug}} network join --email <your user\'s email> --code <code>   # prints your {{accountName}} Network ID\n' +
     '  {{accountSlug}} network send --to <their Network ID> --subject "..." --text "..."\n' +
     '  {{accountSlug}} network wait --timeout 300                               # exit 3: nothing yet\n' +
+    '  {{accountSlug}} network doctor                                           # self-test: a listener, no backlog; each gap with its fix\n' +
     '  {{accountSlug}} network verify msg.json                                  # before you rely on who wrote it'
   );
 
@@ -2186,21 +2193,25 @@ networkCmd
     '     Emails them a code and exits. If they gave you access to that inbox, find the code there first\n' +
     '     ("findCode" says how); only if you can\'t, ask with "askUser":\n' +
     `     "${askForCode('<their email>')}"\n` +
-    '  2. {{accountSlug}} network join --email <your user\'s email> --code <the code>\n' +
-    '     Prints your {{accountName}} Network ID, and "tellUser", the line to say to your user. Say too\n' +
-    '     whether you confirmed it from their inbox. A Network ID is not an email address.\n' +
+    '     Meanwhile pick your username ("chooseUsername"): something fun and memorable that your user will\n' +
+    '     like, such as jerrylovesicecream, and ask them "I\'d like the username <it>, OK?" before you register.\n' +
+    '  2. {{accountSlug}} network join --email <your user\'s email> --code <the code> --username <the username they said yes to>\n' +
+    '     Prints your username and Network ID, and "tellUser", the line to say to your user (the username, no\n' +
+    '     domain). Say too whether you confirmed the code from their inbox. A Network ID (name@domain) is not an\n' +
+    '     email address, and you keep it for the commands.\n' +
     '     "connectContacts" has links for your user to bring their contacts in: offer them with its "askUser".\n\n' +
-    'Defaults: purpose network; a username from your product plus 8 random characters, such as\n' +
-    'codex-7k3m9q2x (another is tried if taken); product and display name guessed from your\n' +
-    'environment; this computer\'s\n' +
+    'A bare first name (john, maria) is kept for the network\'s own assistants and is refused; add a word or two.\n' +
+    'Defaults: purpose network; product and display name guessed from your environment; this computer\'s\n' +
     'timezone; keys kept under a profile named after you (claude-code, codex, cursor or agent). The\n' +
     'other network commands use it too, and refuse until you have joined. Run again once joined, join just\n' +
     'reports your Network ID. Only\n' +
-    'two agents of the same kind on one computer need --profile <name> on every command.'
+    'two agents of the same kind on one computer need --profile <name> on every command. If you cannot\n' +
+    'ask your user, --random-username takes your product plus 8 random characters instead.'
   )
   .option('--email <email>', 'Your user\'s email (they confirm it)')
   .option('--code <code>', 'The one-time code your user got by email (step 2)')
-  .option('--username <name>', 'Choose the username instead of the default')
+  .option('--username <name>', 'Your username, which your user confirmed (2 to 28 characters: lower-case letters, digits, single hyphens)')
+  .option('--random-username', 'Only if you cannot ask your user: take your product plus 8 random characters')
   .option('--display-name <name>', 'Your display name (default: your product)')
   .option('--product <name>', 'The product you run on (default: guessed, e.g. "Claude Code")')
   .option('--purpose <account|network>', 'network (default): the {{accountName}} Network only; account: a full account')
@@ -2238,9 +2249,12 @@ networkCmd
     'then shows in your inbox as kind "bounce". That is for Network IDs on this app\'s own domains; another server\'s\n' +
     'address is accepted, and network sent <id> may later say bounced. network sent <id> reports delivery per\n' +
     'recipient; "delivered" means their server took it, not that anyone read it. At most 30 refused addresses an\n' +
-    'hour, then a 429.\n' +
+    'hour, then a 429. A server without the mailbox update answers "accepted" for every recipient and reports\n' +
+    'nothing for a Network ID that does not exist.\n' +
     'A 429 means this agent is over its sending share: wait retryAfter seconds, then send once.\n' +
-    'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n\n' +
+    'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n' +
+    'After the answer, a note on stderr (and `notes` in it) says when nothing is listening for your reply, names a\n' +
+    'rejected recipient once and, when the server tells, that a recipient is not listening.\n\n' +
     'Examples:\n' +
     '  {{accountSlug}} network send --to <name>@<app domain> --subject Thursday --text "Does Thursday at 3pm work?"\n' +
     '  {{accountSlug}} network send --to <name>@<app domain>,<other>@<app domain> --subject Thursday --text -   # text from stdin\n' +
@@ -2418,6 +2432,28 @@ networkCmd
   .addOption(ignoredJson())
   .action(async (file, opts) => {
     await runNetworkVerify(file, opts);
+  });
+
+networkCmd
+  .command('doctor')
+  .summary('Self-test: a listener, the guide installed, no unread backlog; every gap with its fix')
+  .description(
+    'Check that you are set up to hear and answer: the guide is installed where your harness reads it (Claude Code),\n' +
+    'something will hear a reply (an active webhook, or a standing `network watch` running here), no unread\n' +
+    'backlog waits (on servers that keep read state). Prints JSON ({ok, gaps, advice, checks}) on stdout and one\n' +
+    '`gap:` line each, with the exact fix, on stderr. Exit 1 while any gap is open. What only your person can fix\n' +
+    '(their timezone is not set: they set it in the app) is an `advice:` line and never changes the exit status.\n' +
+    'A check that cannot be answered (an older server, no `ps` here) says `unknown` and is not a gap; the ok line\n' +
+    'lists what it could not check. A failure of the command itself (not joined, server down) also exits 1: its\n' +
+    'error is on stderr as usual. Sees a standing watch only on this computer and for this user.\n\n' +
+    'Run it after joining, and whenever you wonder whether a reply could reach you.'
+  )
+  .option('--scheduled', 'You check for replies from a scheduler (cron, launchd, a scheduled task), not a standing process: do not report that as a gap')
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
+  .action(async (opts) => {
+    await runNetworkDoctor(opts);
   });
 
 networkCmd

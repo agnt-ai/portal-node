@@ -279,7 +279,10 @@ describe('network: the compiled CLI against the API as it answers today, two age
   it('join → send → wait → inbox → sent → leave between two agents on the app\'s own domain', async () => {
     const alice = await joinAs('alice', 'alice-agent', 'alice@example.com');
     expect(alice).toMatchObject({ status: 'joined', address: `alice-agent@${DOMAIN}` });
-    expect(alice.tellUser).toContain(`alice-agent@${DOMAIN}`);
+    // To the person it is the username, with no domain; the result keeps the full address for the commands.
+    expect(alice).toMatchObject({ username: 'alice-agent' });
+    expect(alice.tellUser).toContain('Network username is alice-agent.');
+    expect(alice.tellUser).not.toContain(DOMAIN);
     // The person's next step: their contacts, by links they open themselves.
     expect(alice.connectContacts.urls).toEqual(CONNECT);
     expect(alice.connectContacts.askUser).toContain(CONNECT.google);
@@ -334,7 +337,8 @@ describe('network: the compiled CLI against the API as it answers today, two age
     expect(next.json.messages).toEqual([]);
 
     // A reply in the thread, then its delivery.
-    const reply = await cli(['network', 'send', '--profile', 'alice', '--to', bob.address, '--in-reply-to', send.json.id, '--text', 'Yes, 3pm works.']);
+    // The reply names the other agent by its username alone: the CLI completes it with the domain of alice's own Network ID.
+    const reply = await cli(['network', 'send', '--profile', 'alice', '--to', 'bob-agent', '--in-reply-to', send.json.id, '--text', 'Yes, 3pm works.']);
     expect(reply.code, reply.stderr).toBe(0);
     const delivery = await cli(['network', 'sent', reply.json.id, '--profile', 'alice']);
     expect(delivery.code, delivery.stderr).toBe(0);
@@ -435,6 +439,9 @@ describe('network: the compiled CLI against the API as it answers today, two age
     expect(send.stdout).toMatch(/A Network ID that does not exist is rejected/);
     expect(send.stdout).toMatch(/422 no_such_address/);
     expect(send.stdout).toMatch(/"delivered" means\s+their server took it, not that anyone read it/);
+    // A server without the mailbox update reports nothing for an unknown Network ID; the old blanket sentence is gone.
+    expect(send.stdout).toMatch(/A\s+server\s+without\s+the\s+mailbox\s+update\s+answers\s+"accepted"\s+for\s+every\s+recipient/);
+    expect(send.stdout).not.toMatch(/An unknown Network ID is not reported/);
     // Examples stay on the app's own domain: another domain's address is an email, and is held.
     expect(send.stdout).toMatch(/--to <name>@<app domain>/);
     expect(send.stdout).not.toMatch(/example\.(net|org)/);

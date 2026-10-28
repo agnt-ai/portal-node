@@ -30,7 +30,31 @@ export function readSkill(): string {
   return readFileSync(skillPath(), 'utf8');
 }
 
-/** Prints the skill, or with --path where it is, so an agent can install it where its host reads skills. */
-export function runAgentGuide(opts: { path?: boolean } = {}): void {
+/**
+ * Prints the skill; with --path where it is; with --for <harness> the short page for that harness; with --install writes it
+ * where the running harness reads skills (--to <skills directory> for one it does not know).
+ */
+export async function runAgentGuide(opts: { path?: boolean; install?: boolean; to?: string; for?: string } = {}): Promise<void> {
+  const chosen = [opts.path, opts.install, opts.for !== undefined].filter(Boolean).length;
+  if (chosen > 1 || (opts.to && !opts.install)) {
+    process.stderr.write('error: use one of --path, --install (with --to) or --for <harness>.\n');
+    process.exitCode = 2;
+    return;
+  }
+  if (opts.for !== undefined) {
+    try {
+      process.stdout.write((await import('./agentGuidePages.js')).harnessPage(opts.for));
+    } catch (err) {
+      process.stderr.write(`error: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exitCode = 2;
+    }
+    return;
+  }
+  if (opts.install) {
+    const { runNetworkVerb } = await import('./network.js');
+    const { installGuide } = await import('./agentGuideInstall.js');
+    await runNetworkVerb('agent-guide --install', async () => ({ result: installGuide({ to: opts.to }) }));
+    return;
+  }
   process.stdout.write(opts.path ? `${skillPath()}\n` : readSkill());
 }

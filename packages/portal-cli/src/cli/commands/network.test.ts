@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  networkWait, networkWhoami, STAY_REACHABLE, waitNotice, timeoutNotice, sendNotice, networkSent, sendBodyFrom, EMAIL_AND_PHONE_RECIPIENTS, briefEntry, readVerifyInput, oneMessage, describeError, runNetworkVerb,
+  networkWait, networkWhoami, networkSend, networkBlock, networkUnblock, STAY_REACHABLE, waitNotice, timeoutNotice, networkSent, sendBodyFrom, EMAIL_AND_PHONE_RECIPIENTS, briefEntry, readVerifyInput, oneMessage, describeError, runNetworkVerb,
   NetworkUsageError, EXIT_RETRY, EXIT_USAGE, EXIT_WAIT_TIMEOUT, WAIT_CALL_SECONDS, type WaitClock,
 } from './network.js';
 import { networkInbox } from './networkMailbox.js';
@@ -251,9 +251,11 @@ describe('network send body', () => {
     for (const to of ['(415) 555-0100', '4155550100', 'tel:4155550100']) {
       expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is a phone number without its country code: give it as \+ and the full number/);
     }
-    for (const to of ['carol', 'carol@localhost', '@example.com', '+1']) {
+    for (const to of ['c', 'carol@localhost', '@example.com', '+1', 'two words']) {
       expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is not a Network ID, an email or a phone/);
     }
+    // A bare username passes here and is completed with the agent's own domain once the client is known.
+    expect(sendBodyFrom({ to: ['carol'], text: 'x', subject: 's' }).to).toEqual(['carol']);
     // One bad recipient stops the whole send: nothing goes to the others either.
     expect(() => sendBodyFrom({ to: ['bob@agent.example.net', '4155550100'], text: 'x', subject: 's' })).toThrow(NetworkUsageError);
   });
@@ -526,14 +528,15 @@ describe('wait on a server with the mailbox', () => {
 });
 
 describe('send and sent show each recipient', () => {
-  it('names a rejected recipient on a plain line, and says nothing when all were accepted', async () => {
+  it('names a rejected recipient once, in the send notes, and says nothing when all were accepted', async () => {
     const result = { id: ID, receivedAt: 'x', recipients: [{ to: 'bob@agent.example.net', status: 'accepted' }, { to: 'ghost@agent.example.net', status: 'rejected', reason: 'no_such_address' }] };
     const send = vi.fn().mockResolvedValue(result);
-    const out = await (await import('./network.js')).networkSend(fakeClient({ send }), { to: ['bob@agent.example.net', 'ghost@agent.example.net'], text: 'x', subject: 's' });
-    expect(out.result).toEqual(result);
-    expect(out.notice).toMatch(/not delivered: bob@agent\.example\.net accepted, ghost@agent\.example\.net rejected \(no such address\)/);
-    expect(sendNotice({ recipients: [{ to: 'a@b.test', status: 'accepted' }] })).toBeUndefined();
-    expect(sendNotice({} as any)).toBeUndefined();
+    const out = await networkSend(fakeClient({ send }), { to: ['bob@agent.example.net', 'ghost@agent.example.net'], text: 'x', subject: 's' }, { processes: async () => [] });
+    expect(out.result).toMatchObject(result);
+    const lines = (out.notice ?? '').split('\n').filter((l) => l.includes('ghost@agent.example.net'));
+    expect(lines).toEqual(['ghost@agent.example.net was not sent: no agent has that Network ID.']);
+    const fine = await networkSend(fakeClient({ send: vi.fn().mockResolvedValue({ id: ID, receivedAt: 'x', recipients: [{ to: 'a@b.test', status: 'accepted' }] }) }), { to: ['a@b.test'], text: 'x', subject: 's' }, { processes: async () => [] });
+    expect(fine.notice ?? '').not.toMatch(/not sent|not delivered/);
   });
 
   it('an all-rejected send is a 422 with a plain hint and the server\'s per-recipient details', () => {
@@ -549,5 +552,42 @@ describe('send and sent show each recipient', () => {
     const out = await networkSent(fakeClient({ sent: vi.fn().mockResolvedValue(report) }), ID, {});
     expect(out.result).toEqual(report);
     expect((out as any).notice).toBe('delivery: bob@agent.example.net delivered, carol@far.test bounced');
+  });
+});
+
+describe('a bare username as shorthand for a Network ID on this agent\'s own domain', () => {
+  const me = { address: 'jerrylovesicecream@agent.example.net', pair: null, custody: { keys: 'custodial', note: 'n' } };
+  const withMe = (network: Record<string, any>) => fakeClient({ whoami: vi.fn().mockResolvedValue(me), ...network });
+
+  it('send completes a username and leaves full addresses, emails, phones and numbers alone, asking whoami once', async () => {
+    const send = vi.fn().mockResolvedValue({ accepted: [] });
+    const client = withMe({ send });
+    await networkSend(client, { to: ['Bob-the-Builder, alice', 'carol@other.example.org', '+15551234567'], subject: 'Hi', text: 'x', assistant: 'as1' });
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: ['bob-the-builder@agent.example.net', 'alice@agent.example.net', 'carol@other.example.org', '+15551234567'] }));
+    expect(client.network.whoami).toHaveBeenCalledTimes(1);
+    expect(client.network.whoami).toHaveBeenCalledWith({ assistant: 'as1' });
+  });
+
+  it('asks nothing when every recipient is already a full address, and a bare number is still a phone mistake', async () => {
+    const send = vi.fn().mockResolvedValue({ accepted: [] });
+    const client = withMe({ send });
+    await networkSend(client, { to: ['bob@agent.example.net'], subject: 'Hi', text: 'x' });
+    expect(client.network.whoami).not.toHaveBeenCalled();
+    await expect(networkSend(client, { to: ['5551234567'], subject: 'Hi', text: 'x' })).rejects.toThrow(/phone number without its country code/);
+    expect(client.network.whoami).not.toHaveBeenCalled();
+  });
+
+  it('wait --from, block and unblock take a username too; *@domain is not a username', async () => {
+    const wait = vi.fn().mockResolvedValue({ ...message, more: false });
+    await networkWait(withMe({ wait }), { from: 'old-me' }, fakeClock());
+    expect(wait).toHaveBeenCalledWith(expect.objectContaining({ from: 'old-me@agent.example.net' }));
+    const block = vi.fn().mockResolvedValue({ block: { kind: 'address', match: 'spam@agent.example.net', scope: 'agent' } });
+    await networkBlock(withMe({ block }), 'spam');
+    expect(block).toHaveBeenCalledWith('spam@agent.example.net', { assistant: undefined });
+    await networkBlock(withMe({ block }), '*@evil.example');
+    expect(block).toHaveBeenLastCalledWith('*@evil.example', { assistant: undefined });
+    const unblock = vi.fn().mockResolvedValue({ ok: true });
+    await networkUnblock(withMe({ unblock }), 'spam');
+    expect(unblock).toHaveBeenCalledWith('spam@agent.example.net', { assistant: undefined });
   });
 });

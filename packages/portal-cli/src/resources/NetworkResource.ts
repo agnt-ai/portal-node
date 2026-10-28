@@ -1,7 +1,7 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkSentReport, NetworkSentList,
-  NetworkVerifyResult, NetworkLeaveResult, NetworkInboxDigest, NetworkAckResult, NetworkAckTarget, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
+  NetworkVerifyResult, NetworkLeaveResult, NetworkInboxDigest, NetworkAckResult, NetworkAckTarget, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
 } from '../types.js';
 
 /**
@@ -93,6 +93,14 @@ export class NetworkResource {
    */
   ack(target: NetworkAckTarget, opts: NetworkAssistantOption = {}): Promise<NetworkAckResult> {
     return this.http.post<NetworkAckResult>('/agnt/ack', { ...target, ...(opts.assistant ? { assistant: opts.assistant } : {}) }, T);
+  }
+
+  /**
+   * The mailbox's unread summary and the oldest unread messages (up to `limit`, 20 by default). Reading marks nothing by itself. A
+   * server that keeps no read state answers without `unread`: read that as "unknown", never as "none".
+   */
+  unread(opts: { limit?: number } & NetworkAssistantOption = {}): Promise<NetworkUnreadPage> {
+    return this.http.get<NetworkUnreadPage>('/agnt/inbox', { view: 'received', unread: true, order: 'oldest', limit: opts.limit ?? 20, assistant: opts.assistant }, T);
   }
 
   /**

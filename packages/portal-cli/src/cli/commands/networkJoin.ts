@@ -8,8 +8,13 @@
  *      says to its user, and the person's next step, `connectContacts` (links to bring their contacts in).
  *   Run again once joined, it only reports the Network ID.
  *
- * Defaults: the profile named after the agent (claude-code, codex, cursor or agent); purpose "network"; a
- * username made from the product plus 8 random characters, such as codex-7k3m9q2x (another is tried if it is taken); the
+ * The username is the agent's own pick, confirmed with its person before step 2: something fun and memorable that
+ * they will like, such as jerrylovesicecream (`--username`). The agent calls it a "username" to its person and leaves
+ * off the domain; it still knows the full address. A bare first name (john) is refused: those are for the network's own
+ * assistants. `--random-username` is the fallback for an agent that cannot ask: the product plus 8 random characters,
+ * such as codex-7k3m9q2x (another is tried if it is taken).
+ *
+ * Defaults: the profile named after the agent (claude-code, codex, cursor or agent); purpose "network"; the
  * product and display name guessed from the environment; the timezone from this computer.
  */
 
@@ -23,6 +28,7 @@ import { NetworkUsageError, connectContactsStep, STAY_REACHABLE } from './networ
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
 import { CONVERSATION } from './agentGuide.js';
+import { firstCardFrom } from '../utils/firstCard.js';
 
 export { guessProduct };
 import type { AgentAuthVerifyResult, AgentSignupPurpose } from '../../types.js';
@@ -31,6 +37,8 @@ export interface JoinOptions {
   email?: string;
   code?: string;
   username?: string;
+  /** Take a random username (product plus 8 characters) instead of one the person confirmed. */
+  randomUsername?: boolean;
   displayName?: string;
   product?: string;
   purpose?: string;
@@ -77,15 +85,30 @@ export function pickUsername(product: string, random: () => string = () => rando
   return `${base}-${random()}`;
 }
 
+/** The username half of a Network ID: what the agent says to its person, without the domain. */
+export const usernameOf = (address: string): string => address.split('@')[0];
+
 /** What the agent tells its person once it has joined. Every sign-up gives them a free account. */
 export function joinedLine(email: string, address: string, purpose: AgentSignupPurpose = 'network'): string {
   const done = purpose === 'network'
-    ? `I signed you up for a free {{accountName}} account with ${email} and joined us to the {{accountName}} Network, so other people's agents can reach me for you.`
+    ? `I signed you up for a free {{accountName}} account with ${email} and joined the {{accountName}} Network, so other people's agents can reach me for you.`
     : `I signed you up for a free {{accountName}} account with ${email}. I'm all set.`;
-  return `${done} My {{accountName}} Network ID is ${address}. Which agent do you want me to talk to?`;
+  return `${done} My {{accountName}} Network username is ${usernameOf(address)}. Which agent do you want me to talk to?`;
 }
 
-const sayLine = (address: string) => `I'm all set. My {{accountName}} Network ID is ${address}. Which agent do you want me to talk to?`;
+const sayLine = (address: string) => `I'm all set. My {{accountName}} Network username is ${usernameOf(address)}. Which agent do you want me to talk to?`;
+
+/**
+ * What the agent does between step 1 and step 2: choose a username, say it to its person and wait for a yes. The
+ * CLI cannot see that conversation, so step 2 refuses to run without a username the agent chose.
+ */
+export const CHOOSE_USERNAME =
+  'Before you finish, pick your username: something fun and memorable that your person will like, such as ' +
+  'jerrylovesicecream (2 to 28 characters: lower-case letters, digits and single hyphens). Ask them: "I\'d like the ' +
+  'username <it>, OK?" Only after they say yes, finish with --username <it>. To them it is your username, with no domain; ' +
+  'you keep the full address (name@domain, your Network ID) for the commands. A bare first name such as john is kept for ' +
+  'the network\'s own assistants and is refused: add a word or two (john2 and john-bot are fine). If it is taken, propose ' +
+  'another to them.';
 
 /** The same join, as given, ready for `--code` (step 2): every choice repeated, so step 2 signs up what step 1 meant. */
 export function finishJoinCommand(opts: JoinOptions, email: string, apiUrl: string): string {
@@ -104,6 +127,9 @@ export function finishJoinCommand(opts: JoinOptions, email: string, apiUrl: stri
   ];
   const parts = ['{{accountSlug}} network join'];
   for (const [flag, value] of flags) if (value) parts.push(flagWord(flag, value));
+  // The username the person confirmed goes here: step 2 does not run without one (or --random-username).
+  if (opts.randomUsername) parts.push('--random-username');
+  else if (!opts.username?.trim()) parts.push('--username <the username your person confirmed>');
   if (opts.json) parts.push('--json');
   parts.push('--code <the code>');
   return parts.join(' ');
@@ -120,13 +146,24 @@ function nextCommands(profileFlag: string, profileName: string): string[] {
   ];
 }
 
+/** What to do when the username the person confirmed is taken or refused: ask them again; the code still works. */
+function usernameHint(err: AgntApiError): string | undefined {
+  if (err.errorCode === 'agnt_username_taken' && !/new code/i.test(err.message)) {
+    return 'That username is taken. Nothing was used up and the code still works: propose a different one to your person ("I\'d like the username <it>, OK?"), then run the same join command with it. Only if you cannot ask them, add --random-username.';
+  }
+  if (err.errorCode === 'agnt_username_reserved') {
+    return 'That username is reserved (a bare first name or a name the network keeps). The code still works: propose a longer or more distinctive one to your person, such as a word or two they like, then run the same join command with it. Only if you cannot ask them, add --random-username.';
+  }
+  return undefined;
+}
+
 /** A refusal with the plain guidance the agent should follow, printed as the error's hint. */
 function withHint(err: AgntApiError, hint: string | undefined): AgntApiError {
   if (hint) (err as AgntApiError & { cliHint?: string }).cliHint = hint;
   return err;
 }
 
-export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown; exitCode?: number }> {
+export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown; exitCode?: number; notice?: string }> {
   // The agent's own profile (claude-code, codex, ...), never the shared default: two agents on one computer
   // never share keys, and a profile made earlier by hand is never picked up. --profile wins.
   const profileName = opts.profile?.trim() || envProfileName() || agentProfileName();
@@ -141,9 +178,10 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
         const connect = connectContactsStep(me.connectContactsUrl);
         return {
           result: {
-            status: 'already_joined', address: me.address, tellUser: sayLine(me.address), conversation: CONVERSATION, stayReachable: STAY_REACHABLE,
+            status: 'already_joined', address: me.address, username: usernameOf(me.address), tellUser: sayLine(me.address), firstCard: firstCardFrom(undefined).text, conversation: CONVERSATION, stayReachable: STAY_REACHABLE,
             next: nextCommands(profileFlag, profileName), ...(connect ? { connectContacts: connect } : {}),
           },
+          notice: firstCardFrom(undefined).text,
         };
       } catch (err) {
         // Only a key the server refuses (revoked) means joining again. Anything else (a 503, no network) is
@@ -181,19 +219,29 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
         ...(warning ? { apiUrl, warning } : {}),
         findCode: findCodeHint(email, sentAt),
         askUser: askForCode(email),
+        ...(opts.username?.trim() || opts.randomUsername ? {} : { chooseUsername: CHOOSE_USERNAME }),
         next: finishJoinCommand(opts, email, apiUrl),
         note: 'Check your user\'s inbox for the code if you can; otherwise ask them in your conversation. They never need a terminal.',
       },
     };
   }
 
-  // Step 2: finish, picking another username if the one tried is taken (the code stays good for that).
+  // Step 2: finish. The username is the one the person confirmed; only --random-username picks one itself, and then
+  // another if the one tried is taken (the code stays good for that).
   const code = opts.code.trim();
+  if (!opts.username?.trim() && !opts.randomUsername) {
+    throw new NetworkUsageError(
+      'Give --username: the username your person confirmed. Pick one that is fun and memorable and that they will like, ' +
+      'ask them "I\'d like the username <it>, OK?", and finish with it once they say yes. Nothing was used up: the code still works. ' +
+      'Only if you cannot ask them, pass --random-username instead.',
+    );
+  }
+  if (opts.username?.trim() && opts.randomUsername) throw new NetworkUsageError('Give --username or --random-username, not both.');
   // The key's label, where the person sees their keys: the one they chose, else the product. Never this computer's name.
   const label = opts.label?.trim() || product;
   let result: AgentAuthVerifyResult | undefined;
   for (let attempt = 0; attempt < USERNAME_TRIES && !result; attempt++) {
-    const username = (attempt === 0 && opts.username?.trim()) || pickUsername(product);
+    const username = opts.username?.trim() || pickUsername(product);
     const login: LoginOptions = {
       email, purpose, timezone, agentUsername: username, agentDisplayName: displayName, agentProduct: product,
     };
@@ -202,18 +250,18 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     try {
       result = await publicRequest<AgentAuthVerifyResult>(apiUrl, '/portal/auth/agent/verify', { email, account, code, label, ...read.fields });
     } catch (err) {
-      const pickAnother = err instanceof AgntApiError && !opts.username && (
+      const pickAnother = err instanceof AgntApiError && !!opts.randomUsername && (
         err.errorCode === 'agnt_username_reserved' ||
         (err.errorCode === 'agnt_username_taken' && !/new code/i.test(err.message)));
       if (pickAnother && attempt < USERNAME_TRIES - 1) continue;
       if (err instanceof AgntApiError) {
         const hint = verifyErrorHint(err, code)?.replace(/run the same command/g, 'run the same join command');
-        throw withHint(err, hint);
+        throw withHint(err, (opts.randomUsername ? undefined : usernameHint(err)) ?? hint);
       }
       throw err;
     }
   }
-  if (!result) throw new NetworkUsageError('Could not find a free username. Pass --username <name>.');
+  if (!result) throw new NetworkUsageError('Could not find a free username. Propose one to your person and pass --username <name>.');
 
   await saveProfile(profileName, { apiUrl, apiKey: result.apiKey, apiKeyId: result.apiKeyId, account });
 
@@ -233,13 +281,18 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
   const short = {
     status: 'joined',
     address: result.agnt.address,
+    username: usernameOf(result.agnt.address),
     tellUser: joinedLine(email, result.agnt.address, result.purpose === 'account' ? 'account' : 'network'),
+    // The server's card (what to tell and ask, then the four required steps) or, from an older server, the built-in four.
+    firstCard: firstCardFrom(result.nextSteps).text,
     ...(connect ? { connectContacts: connect } : {}),
     conversation: CONVERSATION,
     stayReachable: STAY_REACHABLE,
     next: nextCommands(profileFlag, profileName),
   };
-  if (!opts.json) return { result: short };
+  // The card is also a plain block on stderr, where it is seen even if the JSON on stdout is not read.
+  const notice = short.firstCard;
+  if (!opts.json) return { result: short, notice };
   const { apiKey: _apiKey, ...shown } = result;
-  return { result: { ...short, purpose: result.purpose, savedProfile: profileName, signup: shown } };
+  return { result: { ...short, purpose: result.purpose, savedProfile: profileName, signup: shown }, notice };
 }

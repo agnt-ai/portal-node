@@ -10,6 +10,7 @@ import type {
 import type { LoginOptions } from './login.js';
 import { CONVERSATION } from './agentGuide.js';
 import { connectContactsStep, STAY_REACHABLE } from './network.js';
+import { firstCardFrom } from '../utils/firstCard.js';
 
 const PURPOSES: AgentSignupPurpose[] = ['account', 'network'];
 /** The server's username rule: lower-case letters, digits and single hyphens, 2 to 28 characters. */
@@ -104,5 +105,6 @@ export function networkConnected(result: AgentAuthVerifyResult, profileFlag: str
   // The person's own next step: bring their contacts in (links they open themselves).
   const connect = connectContactsStep(result.connectContactsUrl);
   if (connect) lines.push(`Ask your user: ${connect.askUser}`);
-  return { tellUser, next, lines, extra: { conversation: CONVERSATION, stayReachable: STAY_REACHABLE, ...(connect ? { connectContacts: connect } : {}) } };
+  lines.push(firstCardFrom(result.nextSteps).text);
+  return { tellUser, next, lines, extra: { firstCard: firstCardFrom(result.nextSteps).text, conversation: CONVERSATION, stayReachable: STAY_REACHABLE, ...(connect ? { connectContacts: connect } : {}) } };
 }

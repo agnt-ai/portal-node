@@ -173,6 +173,16 @@ describe('watchLoop with --print', () => {
     expect(events.map((e) => e.event)).toEqual(['watching', 'backlog', 'message', 'stopped']);
   });
 
+  it('--from as a bare username is completed with this agent\'s domain before the mailbox compares senders', async () => {
+    const inbox = vi.fn().mockResolvedValue(page([msg(A, 'bob@agent.test'), msg(B, 'jerry@agent.test')], 'T1'));
+    const whoami = vi.fn().mockResolvedValue({ address: 'me@agent.test', pair: null, custody: { keys: 'custodial', note: 'n' } });
+    const events: any[] = [];
+    await watchLoop({ network: { inbox, whoami, wait: vi.fn(), inboxDigest: vi.fn().mockResolvedValue(digestAnswer(0)) } } as any, { print: true, from: 'jerry' },
+      { clock: fakeClock(), emit: (e) => events.push(e), stopped: () => inbox.mock.calls.length >= 1 });
+    expect(events[0]).toMatchObject({ event: 'watching', from: 'jerry@agent.test' });
+    expect(events.filter((e) => e.event === 'message').map((e) => e.id)).toEqual([B]);
+  });
+
   it('falls back to wait on a server that answers the digest call with its plain page, or refuses the key', async () => {
     for (const inboxDigest of [
       vi.fn().mockResolvedValue({ rule: 'r', token: 't', more: false, messages: [] }),
