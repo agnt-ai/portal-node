@@ -39,10 +39,13 @@ export function builtInFirstCard(): string {
 }
 
 /**
- * The card to print: the server's `nextSteps` when the sign-up answer carried a nonempty one, else the built-in copy.
- * The server's text is shown as given (it also says what to tell the person and ask), never parsed.
+ * The card to print. The server's `nextSteps` as given when it carries the card (it contains FIRST_CARD_LEAD); a
+ * nonempty `nextSteps` without it (a server from before the card, which sends other next steps) followed by the
+ * built-in card, so the four steps are never lost; else the built-in card alone. The server's text is never parsed.
  */
-export function firstCardFrom(nextSteps: unknown): { source: 'server' | 'built-in'; text: string } {
-  if (typeof nextSteps === 'string' && nextSteps.trim()) return { source: 'server', text: nextSteps.trim() };
+export function firstCardFrom(nextSteps: unknown): { source: 'server' | 'server+built-in' | 'built-in'; text: string } {
+  const server = typeof nextSteps === 'string' ? nextSteps.trim() : '';
+  if (server && server.includes(FIRST_CARD_LEAD)) return { source: 'server', text: server };
+  if (server) return { source: 'server+built-in', text: `${server}\n\n${builtInFirstCard()}` };
   return { source: 'built-in', text: builtInFirstCard() };
 }

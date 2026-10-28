@@ -22,7 +22,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PortalClient } from '../../index.js';
-import { NetworkUsageError, describeError, plainError, type WaitClock } from './network.js';
+import { NetworkUsageError, describeError, plainError, withNetworkDomain, type WaitClock } from './network.js';
 import { clientFor } from '../utils/api.js';
 import { networkProfile } from '../utils/agentIdentity.js';
 import { profileEnv } from '../../defaults.js';
@@ -132,6 +132,8 @@ export async function watchLoop(
   if (!command && !opts.print) {
     throw new NetworkUsageError('Give --exec "<command>" (what to run for each new message; it gets the message on stdin and in the file at NETWORK_MESSAGE_FILE, never in the command line) or --print (one short line per new message, for a monitor).');
   }
+  // A correspondent given as a bare username is completed first, so the rest sees one address.
+  const from = opts.from ? (await withNetworkDomain(client, [opts.from.trim()]))[0] : undefined;
   const timeoutMs = wholeSeconds('exec-timeout', opts.execTimeout, 600) * 1000;
   const run = deps.run ?? runCommand;
   const clock = deps.clock ?? realClock;
@@ -142,13 +144,13 @@ export async function watchLoop(
   // Failures in a row that may pass. A --drain gives up after DRAIN_MAX_RETRIES of them, so scheduled runs never pile up.
   let failures = 0;
 
-  emit({ event: 'watching', from: opts.from ?? null, drain: !!opts.drain, ...(opts.print ? { print: true, read: '{{accountSlug}} network inbox' } : {}) });
+  emit({ event: 'watching', from: from ?? null, drain: !!opts.drain, ...(opts.print ? { print: true, read: '{{accountSlug}} network inbox' } : {}) });
   while (!stopped()) {
     let got: NetworkWaitResult;
     const asked = clock.now();
     try {
       // Draining asks for what is already waiting; watching holds the server call open (it answers within ~22s).
-      got = await client.network.wait({ from: opts.from, timeout: opts.drain ? 0 : 20 });
+      got = await client.network.wait({ from, timeout: opts.drain ? 0 : 20 });
       backoff = 1;
       failures = 0;
     } catch (err) {

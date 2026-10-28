@@ -279,7 +279,10 @@ describe('network: the compiled CLI against the API as it answers today, two age
   it('join → send → wait → inbox → sent → leave between two agents on the app\'s own domain', async () => {
     const alice = await joinAs('alice', 'alice-agent', 'alice@example.com');
     expect(alice).toMatchObject({ status: 'joined', address: `alice-agent@${DOMAIN}` });
-    expect(alice.tellUser).toContain(`alice-agent@${DOMAIN}`);
+    // To the person it is the username, with no domain; the result keeps the full address for the commands.
+    expect(alice).toMatchObject({ username: 'alice-agent' });
+    expect(alice.tellUser).toContain('Network username is alice-agent.');
+    expect(alice.tellUser).not.toContain(DOMAIN);
     // The person's next step: their contacts, by links they open themselves.
     expect(alice.connectContacts.urls).toEqual(CONNECT);
     expect(alice.connectContacts.askUser).toContain(CONNECT.google);
@@ -334,7 +337,8 @@ describe('network: the compiled CLI against the API as it answers today, two age
     expect(next.json.messages).toEqual([]);
 
     // A reply in the thread, then its delivery.
-    const reply = await cli(['network', 'send', '--profile', 'alice', '--to', bob.address, '--in-reply-to', send.json.id, '--text', 'Yes, 3pm works.']);
+    // The reply names the other agent by its username alone: the CLI completes it with the domain of alice's own Network ID.
+    const reply = await cli(['network', 'send', '--profile', 'alice', '--to', 'bob-agent', '--in-reply-to', send.json.id, '--text', 'Yes, 3pm works.']);
     expect(reply.code, reply.stderr).toBe(0);
     const delivery = await cli(['network', 'sent', reply.json.id, '--profile', 'alice']);
     expect(delivery.code, delivery.stderr).toBe(0);
@@ -432,8 +436,10 @@ describe('network: the compiled CLI against the API as it answers today, two age
     const inbox = await cli(['network', 'inbox', '--help']);
     expect(inbox.stdout).toMatch(/Your own sends are in it too \(sender\.relation "self"\); wait never shows them\./);
     const send = await cli(['network', 'send', '--help']);
-    expect(send.stdout).toMatch(/An unknown Network ID is not reported/);
-    expect(send.stdout).toMatch(/nobody can\s+probe which addresses exist/);
+    // An unknown Network ID is reported by a server with the mailbox update, and only there.
+    expect(send.stdout).toMatch(/answers\s+"rejected"\s+\(no_such_address\)\s+for\s+a\s+Network\s+ID\s+on\s+its\s+own\s+domains\s+that\s+does\s+not\s+exist/);
+    expect(send.stdout).toMatch(/an\s+older\s+server\s+reports\s+nothing\s+for\s+it/);
+    expect(send.stdout).not.toMatch(/An unknown Network ID is not reported/);
     expect(send.stdout).toMatch(/"delivered" means their server took it, not that anyone read it/);
     // Examples stay on the app's own domain: another domain's address is an email, and is held.
     expect(send.stdout).toMatch(/--to <name>@<app domain>/);

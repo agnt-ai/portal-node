@@ -5,10 +5,13 @@
  *   - the guide is installed where this agent's harness reads it (only for a harness whose folder is known);
  *   - something will hear a reply: an active webhook, or a standing `network watch` on this computer;
  *   - no unread backlog, and which threads wait for an answer (the server's unread summary, on servers that keep one);
- *   - the profile gaps worth asking the person about (a timezone that is not set).
+ *   - what is worth asking the person about (a timezone that is not set). That is advice, never a gap: a key from
+ *     `network join` may read the profile but not change it (`PATCH /profile` answers 403 `network_scope`), so only the
+ *     person can fix it, in the app.
  *
- * The answer is JSON on stdout (`ok`, `checks`, `gaps`) and one plain `gap:` line each on stderr; the exit status is 1
- * while any gap is open. A check the server or this computer cannot answer is reported as `unknown` and is not a gap.
+ * The answer is JSON on stdout (`ok`, `checks`, `gaps`, and `advice` when there is some) and one plain `gap:` or
+ * `advice:` line each on stderr; the exit status is 1 while any gap is open (advice never changes it). A check the
+ * server or this computer cannot answer is reported as `unknown` and is not a gap.
  */
 
 import { existsSync } from 'node:fs';
@@ -21,12 +24,21 @@ import { installTarget, skillName } from './agentGuideInstall.js';
 import { runNetworkVerb, type NetworkBaseOptions } from './network.js';
 import { clientFor } from '../utils/api.js';
 import { networkProfile } from '../utils/agentIdentity.js';
+import { flagWord } from './login.js';
 
 export interface DoctorGap {
-  id: 'guide_not_installed' | 'no_listener' | 'webhook_disabled' | 'unread_backlog' | 'timezone_not_set';
+  id: 'guide_not_installed' | 'no_listener' | 'webhook_disabled' | 'unread_backlog';
   problem: string;
   /** The exact command, or the one thing to do. */
   fix: string;
+}
+
+/** Something worth raising with the person that the agent cannot fix itself. Never changes the exit status. */
+export interface DoctorAdvice {
+  id: 'timezone_not_set';
+  problem: string;
+  /** What to ask the person to do. */
+  advice: string;
 }
 
 export interface DoctorOptions extends NetworkBaseOptions {
@@ -62,7 +74,7 @@ function ago(iso: string | null | undefined, now: number): string | undefined {
 }
 
 function profileFlag(profile: string | undefined): string {
-  return profile ? ` --profile ${profile}` : '';
+  return profile ? ` ${flagWord('--profile', profile)}` : '';
 }
 
 export function listenerGaps(status: ListenerStatus, flag: string, scheduled = false): DoctorGap[] {
@@ -112,6 +124,7 @@ export async function networkDoctor(
   // The agent's own profile in every fix, not only an explicit --profile: commands outside `network` use the default one.
   const flag = profileFlag(opts.profile ?? deps.profileName);
   const gaps: DoctorGap[] = [];
+  const advice: DoctorAdvice[] = [];
   const checks: Record<string, unknown> = {};
 
   // Who this is: a refusal here (no key, a retired agent) is the answer, so it is not caught.
@@ -156,16 +169,17 @@ export async function networkDoctor(
     checks.unread = { state: 'unknown', why: err instanceof AgntApiError ? `the server answered ${err.status}` : 'could not ask' };
   }
 
-  // 4. Profile gaps worth asking the person about. Optional, so never louder than a hint, but it is a gap until set.
+  // 4. What to ask the person about. Advice, not a gap: a network key can read the profile but not change it, so the
+  //    person sets it in the app, and an agent must not be told to fix what it cannot.
   try {
     const user = await client.me.get();
     const timezone = (user as { timezone?: string | null }).timezone;
     checks.profile = { timezone: timezone ?? null };
     if (!timezone) {
-      gaps.push({
+      advice.push({
         id: 'timezone_not_set',
         problem: "Your person's timezone is not set, so times you work out for them may be wrong.",
-        fix: `Ask your person for their IANA timezone (never guess), then: {{accountSlug}} me update '{"timezone":"<their IANA zone>"}'${flag}`,
+        advice: 'Ask your person to set their timezone in the {{accountName}} app (never guess it). A key from `network join` cannot change it for them.',
       });
     }
   } catch {
@@ -180,10 +194,11 @@ export async function networkDoctor(
     ...(((checks.unread as { state?: string })?.state === 'unknown') ? ['the unread backlog'] : []),
     ...(((checks.profile as { state?: string })?.state === 'unknown') ? ['the profile'] : []),
   ];
-  const notice = ok
-    ? `ok: no gaps found.${unchecked.length ? ` Could not check: ${unchecked.join('; ')}.` : ''}`
-    : gaps.map((g) => `gap: ${g.problem} Fix: ${g.fix}`).join('\n');
-  return { result: { ok, gaps, checks }, exitCode: ok ? 0 : 1, notice };
+  const lines = ok
+    ? [`ok: no gaps found.${unchecked.length ? ` Could not check: ${unchecked.join('; ')}.` : ''}`]
+    : gaps.map((g) => `gap: ${g.problem} Fix: ${g.fix}`);
+  lines.push(...advice.map((a) => `advice: ${a.problem} ${a.advice}`));
+  return { result: { ok, gaps, ...(advice.length ? { advice } : {}), checks }, exitCode: ok ? 0 : 1, notice: lines.join('\n') };
 }
 
 export const runNetworkDoctor = (opts: DoctorOptions) =>

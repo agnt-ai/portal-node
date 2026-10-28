@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  networkWait, networkWhoami, STAY_REACHABLE, networkInbox, networkSent, sendBodyFrom, EMAIL_AND_PHONE_RECIPIENTS, briefEntry, readVerifyInput, oneMessage, describeError, runNetworkVerb,
+  networkWait, networkWhoami, networkSend, networkBlock, networkUnblock, STAY_REACHABLE, networkInbox, networkSent, sendBodyFrom, EMAIL_AND_PHONE_RECIPIENTS, briefEntry, readVerifyInput, oneMessage, describeError, runNetworkVerb,
   NetworkUsageError, EXIT_RETRY, EXIT_USAGE, EXIT_WAIT_TIMEOUT, WAIT_CALL_SECONDS, type WaitClock,
 } from './network.js';
 import { AgntApiError } from '../../HttpClient.js';
@@ -250,9 +250,11 @@ describe('network send body', () => {
     for (const to of ['(415) 555-0100', '4155550100', 'tel:4155550100']) {
       expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is a phone number without its country code: give it as \+ and the full number/);
     }
-    for (const to of ['carol', 'carol@localhost', '@example.com', '+1']) {
+    for (const to of ['c', 'carol@localhost', '@example.com', '+1', 'two words']) {
       expect(() => sendBodyFrom({ to: [to], text: 'x', subject: 's' })).toThrow(/is not a Network ID, an email or a phone/);
     }
+    // A bare username passes here and is completed with the agent's own domain once the client is known.
+    expect(sendBodyFrom({ to: ['carol'], text: 'x', subject: 's' }).to).toEqual(['carol']);
     // One bad recipient stops the whole send: nothing goes to the others either.
     expect(() => sendBodyFrom({ to: ['bob@agent.example.net', '4155550100'], text: 'x', subject: 's' })).toThrow(NetworkUsageError);
   });
@@ -470,5 +472,42 @@ describe('runNetworkVerb', () => {
     await runNetworkVerb('wait', async () => ({ result: { status: 'timeout' }, exitCode: EXIT_WAIT_TIMEOUT }));
     expect(JSON.parse(out.join(''))).toEqual({ status: 'timeout' });
     expect(process.exitCode).toBe(EXIT_WAIT_TIMEOUT);
+  });
+});
+
+describe('a bare username as shorthand for a Network ID on this agent\'s own domain', () => {
+  const me = { address: 'jerrylovesicecream@agent.example.net', pair: null, custody: { keys: 'custodial', note: 'n' } };
+  const withMe = (network: Record<string, any>) => fakeClient({ whoami: vi.fn().mockResolvedValue(me), ...network });
+
+  it('send completes a username and leaves full addresses, emails, phones and numbers alone, asking whoami once', async () => {
+    const send = vi.fn().mockResolvedValue({ accepted: [] });
+    const client = withMe({ send });
+    await networkSend(client, { to: ['Bob-the-Builder, alice', 'carol@other.example.org', '+15551234567'], subject: 'Hi', text: 'x', assistant: 'as1' });
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: ['bob-the-builder@agent.example.net', 'alice@agent.example.net', 'carol@other.example.org', '+15551234567'] }));
+    expect(client.network.whoami).toHaveBeenCalledTimes(1);
+    expect(client.network.whoami).toHaveBeenCalledWith({ assistant: 'as1' });
+  });
+
+  it('asks nothing when every recipient is already a full address, and a bare number is still a phone mistake', async () => {
+    const send = vi.fn().mockResolvedValue({ accepted: [] });
+    const client = withMe({ send });
+    await networkSend(client, { to: ['bob@agent.example.net'], subject: 'Hi', text: 'x' });
+    expect(client.network.whoami).not.toHaveBeenCalled();
+    await expect(networkSend(client, { to: ['5551234567'], subject: 'Hi', text: 'x' })).rejects.toThrow(/phone number without its country code/);
+    expect(client.network.whoami).not.toHaveBeenCalled();
+  });
+
+  it('wait --from, block and unblock take a username too; *@domain is not a username', async () => {
+    const wait = vi.fn().mockResolvedValue({ ...message, more: false });
+    await networkWait(withMe({ wait }), { from: 'old-me' }, fakeClock());
+    expect(wait).toHaveBeenCalledWith(expect.objectContaining({ from: 'old-me@agent.example.net' }));
+    const block = vi.fn().mockResolvedValue({ block: { kind: 'address', match: 'spam@agent.example.net', scope: 'agent' } });
+    await networkBlock(withMe({ block }), 'spam');
+    expect(block).toHaveBeenCalledWith('spam@agent.example.net', { assistant: undefined });
+    await networkBlock(withMe({ block }), '*@evil.example');
+    expect(block).toHaveBeenLastCalledWith('*@evil.example', { assistant: undefined });
+    const unblock = vi.fn().mockResolvedValue({ ok: true });
+    await networkUnblock(withMe({ unblock }), 'spam');
+    expect(unblock).toHaveBeenCalledWith('spam@agent.example.net', { assistant: undefined });
   });
 });

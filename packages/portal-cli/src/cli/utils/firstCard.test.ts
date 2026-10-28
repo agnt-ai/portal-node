@@ -27,8 +27,11 @@ describe('the built-in first card', () => {
     lines.slice(1).forEach((line, i) => expect(line.startsWith(`${i + 1}. `)).toBe(true));
   });
 
-  it('prints the server\'s nextSteps when it sent a nonempty one, else the built-in card', () => {
-    expect(firstCardFrom('  tell them\n1. a  ')).toEqual({ source: 'server', text: 'tell them\n1. a' });
+  it('prints the server\'s nextSteps when it carries the card, appends the built-in card to one that does not, else the built-in card', () => {
+    const card = `tell them\n${FIRST_CARD_LEAD}\n1. a`;
+    expect(firstCardFrom(`  ${card}  `)).toEqual({ source: 'server', text: card });
+    // Today's server already sends nextSteps, without the four steps: they are appended, never lost.
+    expect(firstCardFrom('  Tell your person you joined.  ')).toEqual({ source: 'server+built-in', text: `Tell your person you joined.\n\n${builtInFirstCard()}` });
     for (const none of [undefined, null, '', '   ', 5, {}]) expect(firstCardFrom(none)).toEqual({ source: 'built-in', text: builtInFirstCard() });
   });
 });

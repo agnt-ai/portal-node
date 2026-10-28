@@ -81,11 +81,17 @@ describe('network doctor', () => {
     expect(failing.exitCode).toBe(0);
   });
 
-  it('lists a missing timezone as a gap that says to ask the person; an unreadable profile is unknown', async () => {
+  it('reports a missing timezone as advice to ask the person (a network key cannot set it), never a gap or exit 1; an unreadable profile is unknown', async () => {
     const base = { getWebhook: vi.fn().mockResolvedValue(webhook('active')) };
     const gapOut = await networkDoctor(fake({ ...base, me: vi.fn().mockResolvedValue({ timezone: null }) }), {}, { processes: none, env: env(), now: () => NOW });
-    const gap = (gapOut.result as any).gaps.find((g: any) => g.id === 'timezone_not_set');
-    expect(gap.fix).toMatch(/Ask your person .* \(never guess\).*me update '\{"timezone":"<their IANA zone>"\}'/);
+    expect(gapOut.exitCode).toBe(0);
+    expect((gapOut.result as any).ok).toBe(true);
+    expect((gapOut.result as any).gaps).toEqual([]);
+    const tip = (gapOut.result as any).advice.find((a: any) => a.id === 'timezone_not_set');
+    expect(tip.advice).toMatch(/Ask your person to set their timezone in the .* app \(never guess it\)/);
+    // No command the key would be refused for (PATCH /profile answers 403 network_scope to a network key).
+    expect(JSON.stringify(gapOut.result)).not.toMatch(/me update/);
+    expect(gapOut.notice).toMatch(/^ok: no gaps found\.[^\n]*\nadvice: Your person's timezone is not set/);
     const unknown = await networkDoctor(fake({ ...base, me: vi.fn().mockRejectedValue(new AgntApiError(403, 'no')) }), {}, { processes: none, env: env(), now: () => NOW });
     expect((unknown.result as any).checks.profile).toEqual({ state: 'unknown' });
     expect(unknown.exitCode).toBe(0);
@@ -138,9 +144,17 @@ describe('network doctor', () => {
     expect(out.notice).toBe('ok: no gaps found. Could not check: whether the guide is installed (this harness is not known); whether anything is listening; the unread backlog; the profile.');
   });
 
-  it('puts the agent\'s own profile in every fix, not only an explicit --profile (me update falls back to the default profile)', async () => {
+  it('puts the agent\'s own profile in every fix, not only an explicit --profile', async () => {
     const out = await networkDoctor(fake({ me: vi.fn().mockResolvedValue({ timezone: null }) }), {}, { processes: none, env: env(), now: () => NOW, profileName: 'claude-code' });
+    expect((out.result as any).gaps.length).toBeGreaterThan(0);
     for (const g of (out.result as any).gaps) expect(g.fix, g.id).toContain('--profile claude-code');
+  });
+
+  it('quotes a profile name in the printed commands, so it is one shell word and never read as a flag', async () => {
+    const spaced = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW, profileName: "my agent's" });
+    for (const g of (spaced.result as any).gaps) expect(g.fix, g.id).toContain(`--profile 'my agent'\\''s'`);
+    const dashed = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW, profileName: '-x' });
+    for (const g of (dashed.result as any).gaps) expect(g.fix, g.id).toContain('--profile=-x');
   });
 
   it('a refusal on whoami (no key, a left agent) is the answer, not hidden', async () => {
