@@ -245,6 +245,7 @@ describe('runLogin against a mocked API', () => {
     const out = JSON.parse(stdout.join(''));
     expect(out.apiKey).toBeUndefined();
     expect(out).toMatchObject({ status: 'connected', purpose: 'network', savedProfile: 'default', agnt: { address: 'sally@agent.example.test' } });
+    expect(out.stayReachable).toMatch(/network webhook set.*network watch --print/);
     expect(out.tellUser).toMatch(/sally@agent\.example\.test/);
     expect(out.connectContacts.urls).toEqual(currentSignupResponse.connectContactsUrl);
     expect(out.connectContacts.askUser).toContain('https://portal.example.test/connections?connect=google');

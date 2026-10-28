@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  networkWait, networkInbox, networkSent, sendBodyFrom, EMAIL_AND_PHONE_RECIPIENTS, briefEntry, readVerifyInput, oneMessage, describeError, runNetworkVerb,
+  networkWait, networkWhoami, STAY_REACHABLE, networkInbox, networkSent, sendBodyFrom, EMAIL_AND_PHONE_RECIPIENTS, briefEntry, readVerifyInput, oneMessage, describeError, runNetworkVerb,
   NetworkUsageError, EXIT_RETRY, EXIT_USAGE, EXIT_WAIT_TIMEOUT, WAIT_CALL_SECONDS, type WaitClock,
 } from './network.js';
 import { AgntApiError } from '../../HttpClient.js';
@@ -28,12 +28,36 @@ function fakeClock(): WaitClock & { slept: number[]; advance(ms: number): void }
 const SENDER = { verified: true, relation: 'external', pairing: { email: 'person@example.com', state: 'verified', by: 'https://simon.example.net' } };
 const message = { status: 'message', rule: 'r', id: ID, receivedAt: 'x', carrier: 'https://a', message: { untrusted: {} }, claims: [], sender: SENDER, more: false };
 
+describe('the pointer to staying reachable', () => {
+  it('whoami carries it, a push first and a watch second, naming the guide section', async () => {
+    const me = { address: 'me@agent.example.net', pair: null, custody: { keys: 'custodial', note: 'n' } };
+    const { result } = await networkWhoami(fakeClient({ whoami: vi.fn().mockResolvedValue(me) }), {}) as any;
+    expect(result.stayReachable).toBe(STAY_REACHABLE);
+    expect(STAY_REACHABLE.indexOf('network webhook set')).toBeGreaterThan(0);
+    expect(STAY_REACHABLE.indexOf('network webhook set')).toBeLessThan(STAY_REACHABLE.indexOf('network watch --print'));
+    expect(STAY_REACHABLE).toMatch(/never end a turn "waiting for a reply" with nothing set up/);
+    expect(STAY_REACHABLE).toMatch(/agent-guide.*"Stay reachable"/);
+  });
+});
+
 describe('network wait', () => {
   it('returns the first message the server shows', async () => {
     const wait = vi.fn().mockResolvedValue(message);
     const out = await networkWait(fakeClient({ wait }), { from: 'bob@agent.example.net' }, fakeClock());
     expect(out).toEqual({ result: message });
     expect(wait).toHaveBeenCalledWith({ from: 'bob@agent.example.net', timeout: WAIT_CALL_SECONDS, assistant: undefined });
+  });
+
+  it('when more is waiting, says so in a plain line apart from the JSON, and says nothing otherwise', async () => {
+    const more = vi.fn().mockResolvedValue({ ...message, more: true });
+    const withMore = await networkWait(fakeClient({ wait: more }), {}, fakeClock());
+    expect(withMore.result).toMatchObject({ more: true });
+    expect((withMore as any).notice).toMatch(/more messages are waiting after this one/);
+    expect((withMore as any).notice).toMatch(/Do not pipe wait through grep or head/);
+    const brief = await networkWait(fakeClient({ wait: more }), { brief: true }, fakeClock());
+    expect((brief as any).notice).toBe((withMore as any).notice);
+    const none = await networkWait(fakeClient({ wait: vi.fn().mockResolvedValue({ ...message, more: false }) }), {}, fakeClock());
+    expect((none as any).notice).toBeUndefined();
   });
 
   it('loops server timeouts until --timeout, then exits 3 with the timeout shape', async () => {

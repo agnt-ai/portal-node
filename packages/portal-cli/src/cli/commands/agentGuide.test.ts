@@ -30,7 +30,7 @@ describe("the app's network skill (SKILL.md)", () => {
     const titles = [...skill.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
     expect(titles).toEqual([
       '1. What this is', '2. Your role', '3. Getting on: the first minute', '4. Having a conversation',
-      '5. Staying available', '6. Safety', '7. When things go wrong', '8. Command reference',
+      '5. Stay reachable', '6. Safety', '7. When things go wrong', '8. Command reference',
     ]);
   });
 
@@ -121,7 +121,7 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toContain('--subject "<a few words>"');
     expect(s).toMatch(/keep one `wait` running in the background, and answer as soon as it\s+fires/);
     expect(s).toMatch(/from everyone/);
-    expect(skill).not.toContain('--from');
+    expect(s).not.toContain('--from'); // the conversation habits keep one standing wait for everyone; --from is for a named reply (section 5)
     expect(skill).not.toContain('--header subject');
     expect(s).toMatch(/Before you send in a thread, answer what is new first/);
     expect(s).toMatch(/\*\*Short turns\.\*\*/);
@@ -147,9 +147,16 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/Replying to the people already in a thread is not adding anyone/);
   });
 
-  it('staying available covers each kind of host', () => {
-    const s = section('5. Staying available');
-    for (const host of ['Claude Code', 'scheduled tasks', 'network watch --exec', 'network webhook set', 'chat app']) expect(s).toContain(host);
+  it('stay reachable covers each kind of host, a push first, with the habits', () => {
+    const s = section('5. Stay reachable');
+    for (const host of ['Claude Code', 'scheduled tasks', 'network watch --exec', 'network watch --print', 'Monitor tool', 'network webhook set', 'chat app']) expect(s).toContain(host);
+    expect(s.indexOf('network webhook set')).toBeLessThan(s.indexOf('network watch --print'));
+    expect(s).toMatch(/never end your turn\s+"waiting for a reply" with nothing set up to hear it/);
+    expect(s).toMatch(/nothing replays a push that was given up on/);
+    expect(s).toMatch(/clear what is already waiting first with `network watch --drain --print` \(reading with `inbox`\s+does not clear it for a watch\)/i);
+    expect(s).toMatch(/no other\s+`wait` or `watch` is running/);
+    expect(s).toMatch(/Never pipe `wait` through `grep` or `head`/);
+    expect(s).toMatch(/network inbox` first, then `network wait`/);
     expect(s).not.toMatch(/aren't available|Not available/);
     expect(s).toMatch(/### Receiving a webhook\s+- \*\*The secret is shown once,\*\*/);
     expect(s).toMatch(/The CLI saves it nowhere/);
@@ -171,7 +178,7 @@ describe("the app's network skill (SKILL.md)", () => {
   });
 
   it("the skill's Node check accepts a push signed as the server signs it, and refuses anything else", () => {
-    const code = section('5. Staying available').match(/```js\n([\s\S]*?)```/)![1];
+    const code = section('5. Stay reachable').match(/```js\n([\s\S]*?)```/)![1];
     const verifyPush = new Function('require', `${code}\nreturn verifyPush;`)(createRequire(import.meta.url)) as
       (secret: string, headers: Record<string, string>, rawBody: string) => boolean;
     // The server's signing: "v1=" and the hex HMAC-SHA256, keyed with the whole secret, of `${timestamp}.${rawBody}`.

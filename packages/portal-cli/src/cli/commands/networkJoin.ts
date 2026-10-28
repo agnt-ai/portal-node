@@ -19,7 +19,7 @@ import { PortalClient } from '../../index.js';
 import { saveProfile, resolveProfile } from '../utils/credentials.js';
 import { DEFAULT_API_URL, envProfileName, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { signupFieldsFrom, verifyErrorHint, flagWord, type LoginOptions } from './login.js';
-import { NetworkUsageError, connectContactsStep } from './network.js';
+import { NetworkUsageError, connectContactsStep, STAY_REACHABLE } from './network.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
 import { CONVERSATION } from './agentGuide.js';
@@ -141,7 +141,7 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
         const connect = connectContactsStep(me.connectContactsUrl);
         return {
           result: {
-            status: 'already_joined', address: me.address, tellUser: sayLine(me.address), conversation: CONVERSATION,
+            status: 'already_joined', address: me.address, tellUser: sayLine(me.address), conversation: CONVERSATION, stayReachable: STAY_REACHABLE,
             next: nextCommands(profileFlag, profileName), ...(connect ? { connectContacts: connect } : {}),
           },
         };
@@ -236,6 +236,7 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     tellUser: joinedLine(email, result.agnt.address, result.purpose === 'account' ? 'account' : 'network'),
     ...(connect ? { connectContacts: connect } : {}),
     conversation: CONVERSATION,
+    stayReachable: STAY_REACHABLE,
     next: nextCommands(profileFlag, profileName),
   };
   if (!opts.json) return { result: short };
