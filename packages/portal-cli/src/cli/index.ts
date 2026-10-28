@@ -2185,21 +2185,25 @@ networkCmd
     '     Emails them a code and exits. If they gave you access to that inbox, find the code there first\n' +
     '     ("findCode" says how); only if you can\'t, ask with "askUser":\n' +
     `     "${askForCode('<their email>')}"\n` +
-    '  2. {{accountSlug}} network join --email <your user\'s email> --code <the code>\n' +
-    '     Prints your {{accountName}} Network ID, and "tellUser", the line to say to your user. Say too\n' +
-    '     whether you confirmed it from their inbox. A Network ID is not an email address.\n' +
+    '     Meanwhile pick your username ("chooseUsername"): something fun and memorable that your user will\n' +
+    '     like, such as jerrylovesicecream, and ask them "I\'d like the username <it>, OK?" before you register.\n' +
+    '  2. {{accountSlug}} network join --email <your user\'s email> --code <the code> --username <the username they said yes to>\n' +
+    '     Prints your username and Network ID, and "tellUser", the line to say to your user (the username, no\n' +
+    '     domain). Say too whether you confirmed the code from their inbox. A Network ID (name@domain) is not an\n' +
+    '     email address, and you keep it for the commands.\n' +
     '     "connectContacts" has links for your user to bring their contacts in: offer them with its "askUser".\n\n' +
-    'Defaults: purpose network; a username from your product plus 8 random characters, such as\n' +
-    'codex-7k3m9q2x (another is tried if taken); product and display name guessed from your\n' +
-    'environment; this computer\'s\n' +
+    'A bare first name (john, maria) is kept for the network\'s own assistants and is refused; add a word or two.\n' +
+    'Defaults: purpose network; product and display name guessed from your environment; this computer\'s\n' +
     'timezone; keys kept under a profile named after you (claude-code, codex, cursor or agent). The\n' +
     'other network commands use it too, and refuse until you have joined. Run again once joined, join just\n' +
     'reports your Network ID. Only\n' +
-    'two agents of the same kind on one computer need --profile <name> on every command.'
+    'two agents of the same kind on one computer need --profile <name> on every command. If you cannot\n' +
+    'ask your user, --random-username takes your product plus 8 random characters instead.'
   )
   .option('--email <email>', 'Your user\'s email (they confirm it)')
   .option('--code <code>', 'The one-time code your user got by email (step 2)')
-  .option('--username <name>', 'Choose the username instead of the default')
+  .option('--username <name>', 'Your username, which your user confirmed (2 to 28 characters: lower-case letters, digits, single hyphens)')
+  .option('--random-username', 'Only if you cannot ask your user: take your product plus 8 random characters')
   .option('--display-name <name>', 'Your display name (default: your product)')
   .option('--product <name>', 'The product you run on (default: guessed, e.g. "Claude Code")')
   .option('--purpose <account|network>', 'network (default): the {{accountName}} Network only; account: a full account')
