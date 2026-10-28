@@ -1,7 +1,7 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
   NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkSentReport, NetworkSentList,
-  NetworkVerifyResult, NetworkLeaveResult, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
+  NetworkVerifyResult, NetworkLeaveResult, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
 } from '../types.js';
 
 /**
@@ -57,6 +57,14 @@ export class NetworkResource {
       throw new RangeError('limit is 1 to 200 (default 50).');
     }
     return this.http.get<NetworkInboxPage>('/agnt/inbox', { since: opts.since, limit: opts.limit, assistant: opts.assistant }, T);
+  }
+
+  /**
+   * The mailbox's unread summary and the oldest unread messages (up to `limit`, 20 by default). Reading marks nothing by itself. A
+   * server that keeps no read state answers without `unread`: read that as "unknown", never as "none".
+   */
+  unread(opts: { limit?: number } & NetworkAssistantOption = {}): Promise<NetworkUnreadPage> {
+    return this.http.get<NetworkUnreadPage>('/agnt/inbox', { view: 'received', unread: true, order: 'oldest', limit: opts.limit ?? 20, assistant: opts.assistant }, T);
   }
 
   /**

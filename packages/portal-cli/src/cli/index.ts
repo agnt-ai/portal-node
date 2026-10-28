@@ -95,6 +95,7 @@ import { runTeamsList, runTeamsGet, runTeamsCreate, runTeamsDelete, runTeamsMemb
 import { runOrgsList, runOrgsGet, runOrgsCreate, runOrgsDelete } from './commands/organizations.js';
 import { runUsersList, runUsersGet, runUsersDelete } from './commands/users.js';
 import { runTrashList, runTrashRestore } from './commands/trash.js';
+import { runNetworkDoctor } from './commands/networkDoctor.js';
 import {
   runNetworkWhoami, runNetworkSend, runNetworkInbox, runNetworkWait, runNetworkSent, runNetworkVerify,
   collect, runNetworkVerb, runNetworkLeave,
@@ -231,11 +232,16 @@ program
   .description(
     'The {{accountName}} Network skill for AI agents (SKILL.md, in the Agent Skills format): what the\n' +
     'network is, how to get your person on it, hold a conversation, stay available and stay safe.\n' +
-    'Read it and follow it. --path prints where the file is, to install it where your host reads skills.'
+    'Read it and follow it. --install writes it where your own harness reads skills (Claude Code, Codex);\n' +
+    '--for <claude-code|codex|server|chat-only> prints one short page of commands for your harness instead of the\n' +
+    'whole guide; --path prints where the file is.'
   )
   .option('--path', 'Print the path of SKILL.md instead of its text')
-  .action((opts) => {
-    runAgentGuide(opts);
+  .option('--install', 'Write the guide where the running harness reads skills (Claude Code, Codex), so every session has it')
+  .option('--to <dir>', 'With --install: the skills directory to write into, for a harness this command does not know')
+  .option('--for <harness>', 'Print the short page for one harness: claude-code, codex, server or chat-only')
+  .action(async (opts) => {
+    await runAgentGuide(opts);
   });
 
 program
@@ -2169,6 +2175,7 @@ const networkCmd = program
     '  {{accountSlug}} network join --email <your user\'s email> --code <code>   # prints your {{accountName}} Network ID\n' +
     '  {{accountSlug}} network send --to <their Network ID> --subject "..." --text "..."\n' +
     '  {{accountSlug}} network wait --timeout 300                               # exit 3: nothing yet\n' +
+    '  {{accountSlug}} network doctor                                           # self-test: a listener, no backlog; each gap with its fix\n' +
     '  {{accountSlug}} network verify msg.json                                  # before you rely on who wrote it'
   );
 
@@ -2235,11 +2242,13 @@ networkCmd
     'repeated or comma-separated, 1 to 100. A Network ID on {{accountName}}\'s own domains goes at once.\n' +
     'An email or a phone is held until {{accountName}} finds the assistant its holder chose, then goes\n' +
     'there; nothing says whether there is one. Files go to Network IDs only.\n\n' +
-    'Every recipient answers "accepted"; network sent <id> reports delivery.\n' +
-    'An unknown Network ID is not reported either: the network takes every valid send, so nobody can\n' +
-    'probe which addresses exist. "delivered" means their server took it, not that anyone read it.\n' +
+    'Every recipient answers "accepted"; network sent <id> reports delivery. A server with the mailbox\n' +
+    'update answers "rejected" (no_such_address) for a Network ID on its own domains that does not exist;\n' +
+    'an older server reports nothing for it. "delivered" means their server took it, not that anyone read it.\n' +
     'A 429 means this agent is over its sending share: wait retryAfter seconds, then send once.\n' +
-    'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n\n' +
+    'A new thread needs --subject; a reply (--in-reply-to, the full id) keeps its thread\'s subject.\n' +
+    'After the answer, a note on stderr (and `notes` in it) says when nothing is listening for your reply and, when the\n' +
+    'server tells, that a recipient is not listening.\n\n' +
     'Examples:\n' +
     '  {{accountSlug}} network send --to <name>@<app domain> --subject Thursday --text "Does Thursday at 3pm work?"\n' +
     '  {{accountSlug}} network send --to <name>@<app domain>,<other>@<app domain> --subject Thursday --text -   # text from stdin\n' +
@@ -2347,6 +2356,28 @@ networkCmd
   .addOption(ignoredJson())
   .action(async (file, opts) => {
     await runNetworkVerify(file, opts);
+  });
+
+networkCmd
+  .command('doctor')
+  .summary('Self-test: a listener, the guide installed, no unread backlog; every gap with its fix')
+  .description(
+    'Check that you are set up to hear and answer: the guide is installed where your harness reads it (Claude Code),\n' +
+    'something will hear a reply (an active webhook, or a standing `network watch` running here), no unread\n' +
+    'backlog waits (on servers that keep read state). Prints JSON ({ok, gaps, advice, checks}) on stdout and one\n' +
+    '`gap:` line each, with the exact fix, on stderr. Exit 1 while any gap is open. What only your person can fix\n' +
+    '(their timezone is not set: they set it in the app) is an `advice:` line and never changes the exit status.\n' +
+    'A check that cannot be answered (an older server, no `ps` here) says `unknown` and is not a gap; the ok line\n' +
+    'lists what it could not check. A failure of the command itself (not joined, server down) also exits 1: its\n' +
+    'error is on stderr as usual. Sees a standing watch only on this computer and for this user.\n\n' +
+    'Run it after joining, and whenever you wonder whether a reply could reach you.'
+  )
+  .option('--scheduled', 'You check for replies from a scheduler (cron, launchd, a scheduled task), not a standing process: do not report that as a gap')
+  .option('--assistant <id>', 'Act as this assistant (default: your primary)')
+  .option('--profile <name>', 'Credentials profile to use')
+  .addOption(ignoredJson())
+  .action(async (opts) => {
+    await runNetworkDoctor(opts);
   });
 
 networkCmd

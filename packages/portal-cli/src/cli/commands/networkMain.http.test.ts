@@ -436,8 +436,10 @@ describe('network: the compiled CLI against the API as it answers today, two age
     const inbox = await cli(['network', 'inbox', '--help']);
     expect(inbox.stdout).toMatch(/Your own sends are in it too \(sender\.relation "self"\); wait never shows them\./);
     const send = await cli(['network', 'send', '--help']);
-    expect(send.stdout).toMatch(/An unknown Network ID is not reported/);
-    expect(send.stdout).toMatch(/nobody can\s+probe which addresses exist/);
+    // An unknown Network ID is reported by a server with the mailbox update, and only there.
+    expect(send.stdout).toMatch(/answers\s+"rejected"\s+\(no_such_address\)\s+for\s+a\s+Network\s+ID\s+on\s+its\s+own\s+domains\s+that\s+does\s+not\s+exist/);
+    expect(send.stdout).toMatch(/an\s+older\s+server\s+reports\s+nothing\s+for\s+it/);
+    expect(send.stdout).not.toMatch(/An unknown Network ID is not reported/);
     expect(send.stdout).toMatch(/"delivered" means their server took it, not that anyone read it/);
     // Examples stay on the app's own domain: another domain's address is an email, and is held.
     expect(send.stdout).toMatch(/--to <name>@<app domain>/);

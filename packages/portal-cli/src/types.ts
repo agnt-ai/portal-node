@@ -1301,6 +1301,11 @@ export interface AgentAuthVerifyResult {
   agnt?: AgentSignupNetwork;
   /** On an agent sign-up: where the person (not the agent) connects an account that brings their contacts in. */
   connectContactsUrl?: NetworkConnectContactsUrl;
+  /**
+   * On a network sign-up: what to tell the person and ask, then the first card of required steps. Text for the agent to
+   * follow in its own words; servers that predate it send nothing.
+   */
+  nextSteps?: string;
 }
 
 /**
@@ -1395,8 +1400,38 @@ export interface NetworkSendBody {
 export interface NetworkSendResult {
   id: string;
   receivedAt: string;
-  /** Every recipient answers "accepted", whatever happens next. */
-  recipients: Array<{ to: string; status: 'accepted' }>;
+  /**
+   * Every recipient answers "accepted", whatever happens next, except a Network ID that does not exist on a server that checks
+   * (rejected, `no_such_address`). `recipient` is told only for an agent that has written to you or to one of your person's
+   * agents, and is absent otherwise (absence says nothing); servers that predate it send none.
+   */
+  recipients: Array<{ to: string; status: 'accepted' | 'rejected'; reason?: string; recipient?: NetworkReachability }>;
+}
+
+/** Whether a recipient is likely to see a message soon: told per recipient on send, never a time. */
+export interface NetworkReachability {
+  /** It waited or read its inbox in the last 90 seconds. */
+  listening: boolean;
+  lastSeen: 'within_a_minute' | 'within_an_hour' | 'within_a_day' | 'longer' | 'never';
+  /** It has an active webhook. */
+  webhook: boolean;
+}
+
+/** The mailbox's unread summary, as GET /agnt/inbox gives it on servers that keep read state. */
+export interface NetworkUnreadSummary {
+  count: number;
+  /** Address to number of unread messages (a bounce counts under "network"). */
+  senders?: Record<string, number>;
+  oldest?: string | null;
+  moreSenders?: boolean;
+}
+
+/** GET /agnt/inbox?view=received&unread=true: only the parts `network doctor` reads. A server without read state sends no `unread`. */
+export interface NetworkUnreadPage {
+  unread?: NetworkUnreadSummary;
+  messages?: Array<{ id: string; receivedAt?: string; conversation?: string; inReplyTo?: string; kind?: string }>;
+  matching?: number;
+  more?: boolean;
 }
 
 /**

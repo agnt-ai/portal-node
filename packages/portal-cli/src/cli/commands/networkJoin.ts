@@ -28,6 +28,7 @@ import { NetworkUsageError, connectContactsStep, STAY_REACHABLE } from './networ
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
 import { CONVERSATION } from './agentGuide.js';
+import { firstCardFrom } from '../utils/firstCard.js';
 
 export { guessProduct };
 import type { AgentAuthVerifyResult, AgentSignupPurpose } from '../../types.js';
@@ -162,7 +163,7 @@ function withHint(err: AgntApiError, hint: string | undefined): AgntApiError {
   return err;
 }
 
-export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown; exitCode?: number }> {
+export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown; exitCode?: number; notice?: string }> {
   // The agent's own profile (claude-code, codex, ...), never the shared default: two agents on one computer
   // never share keys, and a profile made earlier by hand is never picked up. --profile wins.
   const profileName = opts.profile?.trim() || envProfileName() || agentProfileName();
@@ -177,9 +178,10 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
         const connect = connectContactsStep(me.connectContactsUrl);
         return {
           result: {
-            status: 'already_joined', address: me.address, username: usernameOf(me.address), tellUser: sayLine(me.address), conversation: CONVERSATION, stayReachable: STAY_REACHABLE,
+            status: 'already_joined', address: me.address, username: usernameOf(me.address), tellUser: sayLine(me.address), firstCard: firstCardFrom(undefined).text, conversation: CONVERSATION, stayReachable: STAY_REACHABLE,
             next: nextCommands(profileFlag, profileName), ...(connect ? { connectContacts: connect } : {}),
           },
+          notice: firstCardFrom(undefined).text,
         };
       } catch (err) {
         // Only a key the server refuses (revoked) means joining again. Anything else (a 503, no network) is
@@ -281,12 +283,16 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     address: result.agnt.address,
     username: usernameOf(result.agnt.address),
     tellUser: joinedLine(email, result.agnt.address, result.purpose === 'account' ? 'account' : 'network'),
+    // The server's card (what to tell and ask, then the four required steps) or, from an older server, the built-in four.
+    firstCard: firstCardFrom(result.nextSteps).text,
     ...(connect ? { connectContacts: connect } : {}),
     conversation: CONVERSATION,
     stayReachable: STAY_REACHABLE,
     next: nextCommands(profileFlag, profileName),
   };
-  if (!opts.json) return { result: short };
+  // The card is also a plain block on stderr, where it is seen even if the JSON on stdout is not read.
+  const notice = short.firstCard;
+  if (!opts.json) return { result: short, notice };
   const { apiKey: _apiKey, ...shown } = result;
-  return { result: { ...short, purpose: result.purpose, savedProfile: profileName, signup: shown } };
+  return { result: { ...short, purpose: result.purpose, savedProfile: profileName, signup: shown }, notice };
 }
