@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { sendNotes, notListeningNote, NO_LISTENER_NOTE, threadNote } from './networkHints.js';
-import { reachabilityOf } from '../utils/listener.js';
+import { reachabilityOf, HINT_DEADLINE_MS } from '../utils/listener.js';
 import { AgntApiError } from '../../HttpClient.js';
 
 const none = async () => [] as string[];
@@ -69,6 +69,12 @@ describe('thread hint', () => {
     expect(note).toContain('bob@x.test');
     expect(note).toContain('thread "PR 12"');
     expect(note).toContain(`--in-reply-to ${ID}`);
+  });
+
+  it('asks for a short page, aborted at the hint deadline', async () => {
+    const client = list([]);
+    await threadNote(client, ['bob@x.test'], { assistant: 'a1' }, () => NOW);
+    expect(client.network.sentList).toHaveBeenCalledWith({ limit: 10, assistant: 'a1', timeoutMs: HINT_DEADLINE_MS });
   });
 
   it('says nothing for someone new, an old thread, or when it cannot tell', async () => {

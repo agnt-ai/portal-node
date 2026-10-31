@@ -6,7 +6,7 @@
 
 import type { PortalClient } from '../../index.js';
 import type { NetworkSendResult, NetworkReachability } from '../../types.js';
-import { listenerStatus, type ProcessLister } from '../utils/listener.js';
+import { listenerStatus, HINT_DEADLINE_MS, type ProcessLister } from '../utils/listener.js';
 
 export const NO_LISTENER_NOTE =
   'You have no listener set up (no active webhook, no standing watch here), so you will not hear a reply until you set one up, or check by hand: a webhook ' +
@@ -60,7 +60,8 @@ const RECENT_THREAD_MS = 7 * 24 * 3600 * 1000;
 
 /**
  * A gentle hint (never a block) for a new thread to someone you wrote to in the last 7 days: reply in that thread
- * instead of opening another. Looks at your last 50 sent messages; says nothing when it cannot tell.
+ * instead of opening another. Looks at your last 10 sent messages; says nothing when it cannot tell. The lookup is
+ * aborted at the hint's own deadline, so a slow server never keeps the process alive after the answer is printed.
  */
 export async function threadNote(
   client: PortalClient,
@@ -69,7 +70,7 @@ export async function threadNote(
   now: () => number = Date.now,
 ): Promise<string | undefined> {
   try {
-    const list = await client.network.sentList({ limit: 50, assistant: opts.assistant });
+    const list = await client.network.sentList({ limit: 10, assistant: opts.assistant, timeoutMs: HINT_DEADLINE_MS });
     const wanted = new Set(to.map((t) => t.toLowerCase()));
     for (const s of Array.isArray(list?.sends) ? list.sends : []) {
       const at = Date.parse(s?.sentAt);
