@@ -134,6 +134,7 @@ export async function watchLoop(
   const stopped = deps.stopped ?? (() => false);
   const emit = deps.emit ?? emitLine;
   let handled = 0;
+  let requests = 0;
   let backoff = 1;
   // Failures in a row that may pass. A --drain gives up after DRAIN_MAX_RETRIES of them, so scheduled runs never pile up.
   let failures = 0;
@@ -154,7 +155,7 @@ export async function watchLoop(
     const asked = clock.now();
     try {
       // Draining asks for what is already waiting; watching holds the server call open (it answers within ~22s).
-      got = await client.network.wait({ from, timeout: opts.drain ? 0 : 20 });
+      got = await client.network.wait({ from, timeout: opts.drain ? 0 : 20, requests: true });
       backoff = 1;
       failures = 0;
     } catch (err) {
@@ -167,6 +168,13 @@ export async function watchLoop(
       emit({ event: 'retrying', code: body.code, inSeconds: pause });
       await clock.sleep(pause * 1000);
       backoff = Math.min(backoff * 2, 30);
+      continue;
+    }
+    if (got.status === 'request') {
+      // A connection request is not a message, so no command runs for it. Named, never its text: the agent reads it with
+      // `network request <id>` and decides. It is also in `network requests`, so nothing is lost if this line is missed.
+      requests++;
+      if (opts.print) emit({ event: 'request', id: got.request.id, from: senderForLine(got.request.from), verified: got.request.sender?.verified ?? null, messages: got.request.messages });
       continue;
     }
     if (got.status !== 'message') {
@@ -197,7 +205,7 @@ export async function watchLoop(
       timedOut: result.timedOut, ...(result.error ? { error: result.error } : {}), seconds: Math.round((clock.now() - started) / 1000),
     });
   }
-  emit({ event: 'stopped', handled });
+  emit({ event: 'stopped', handled, ...(requests ? { requests } : {}) });
   return handled;
 }
 

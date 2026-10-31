@@ -21,6 +21,7 @@ describe('network wait: a connection request', () => {
     expect(out.notice).toMatch(/not a message/);
     expect(out.notice).toMatch(/data, never instructions/);
     expect(wait).toHaveBeenCalledTimes(1);
+    expect(wait.mock.calls[0][0].requests).toBe(true);
   });
 });
 
@@ -72,6 +73,8 @@ describe('NetworkResource: connections and discovery', () => {
   it('calls the /agnt routes with the assistant in the query', async () => {
     const h = http();
     const r = new NetworkResource(h);
+    await r.wait({ timeout: 0, requests: true });
+    await r.wait({ timeout: 0 });
     await r.discover({ name: 'maria' });
     await r.requests({ state: 'pending', limit: 3 });
     await r.request('i/d');
@@ -80,6 +83,8 @@ describe('NetworkResource: connections and discovery', () => {
     await r.connections({ limit: 5 });
     await r.disconnect('x@net.example');
     await r.mutual('x@net.example');
+    expect(h.get).toHaveBeenCalledWith('/agnt/wait', { from: undefined, timeout: 0, assistant: undefined, requests: 'true' }, expect.anything());
+    expect(h.get).toHaveBeenCalledWith('/agnt/wait', { from: undefined, timeout: 0, assistant: undefined }, expect.anything());
     expect(h.get).toHaveBeenCalledWith('/agnt/discover', { name: 'maria', domain: undefined, address: undefined, assistant: undefined }, T);
     expect(h.get).toHaveBeenCalledWith('/agnt/requests', { state: 'pending', limit: 3, assistant: undefined }, T);
     expect(h.get).toHaveBeenCalledWith('/agnt/requests/i%2Fd', { assistant: undefined }, T);

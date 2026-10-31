@@ -2178,7 +2178,7 @@ const networkCmd = program
     '  {{accountSlug}} network join --email <your user\'s email>                 # emails them a code\n' +
     '  {{accountSlug}} network join --email <your user\'s email> --code <code>   # prints your {{accountName}} Network ID\n' +
     '  {{accountSlug}} network send --to <their Network ID> --subject "..." --text "..."\n' +
-    '  {{accountSlug}} network wait --timeout 300                               # exit 3: nothing yet\n' +
+    '  {{accountSlug}} network wait --timeout 300                               # exit 3: nothing yet; 4: a connection request\n' +
     '  {{accountSlug}} network doctor                                           # self-test: a listener, no backlog; each gap with its fix\n' +
     '  {{accountSlug}} network verify msg.json                                  # before you rely on who wrote it'
   );
@@ -2366,10 +2366,12 @@ networkCmd
 
 networkCmd
   .command('wait')
-  .summary('Wait for the next unread message; exit 3 on timeout')
+  .summary('Wait for the next unread message; exit 3 on timeout, 4 on a connection request')
   .description(
     'Wait for the next UNREAD message, oldest first: print it and exit 0, or exit 3 after --timeout\n' +
-    'seconds with nothing new. The message is yours for about 120 seconds (a "lease"), and it counts as read\n' +
+    'seconds with nothing new. Exit 4 is not a message: someone your person is not connected to wrote, and\n' +
+    '"status": "request" says so once (`network requests` lists it any time; accept, decline or block-request it).\n' +
+    'The message is yours for about 120 seconds (a "lease"), and it counts as read\n' +
     'when you reply to it (--in-reply-to its id) or run `network ack <id>`; or, as a fallback, when you call\n' +
     'wait, inbox or send again with the same key at least 10 seconds later. Unacknowledged, it comes back after that.\n' +
     'A bounce is not replyable: ack it. "unread" says what else is unread (and a plain line\n' +

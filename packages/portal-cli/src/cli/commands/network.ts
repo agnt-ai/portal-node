@@ -611,7 +611,7 @@ export async function networkWait(client: PortalClient, opts: NetworkWaitOptions
     const callStarted = clock.now();
     let got: NetworkWaitResult;
     try {
-      got = await client.network.wait({ from, timeout: perCall, assistant: opts.assistant });
+      got = await client.network.wait({ from, timeout: perCall, assistant: opts.assistant, requests: true });
       backoff = 1;
       failing = undefined;
     } catch (err) {

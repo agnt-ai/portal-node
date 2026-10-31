@@ -110,9 +110,9 @@ export class NetworkResource {
    * otherwise it comes back. An older server remembers what wait has shown instead. Loop on `{status: "timeout"}`.
    * To only look, read `inbox`.
    */
-  wait(opts: { from?: string; timeout?: number } & NetworkAssistantOption = {}): Promise<NetworkWaitResult> {
+  wait(opts: { from?: string; timeout?: number; requests?: boolean } & NetworkAssistantOption = {}): Promise<NetworkWaitResult> {
     // Give up on a call the server holds 15 seconds past its own deadline: the connection is gone.
-    return this.http.get<NetworkWaitResult>('/agnt/wait', { from: opts.from, timeout: opts.timeout, assistant: opts.assistant },
+    return this.http.get<NetworkWaitResult>('/agnt/wait', { from: opts.from, timeout: opts.timeout, assistant: opts.assistant, ...(opts.requests ? { requests: 'true' } : {}) },
       { timeoutMs: ((opts.timeout ?? 25) + 15) * 1000 });
   }
 
