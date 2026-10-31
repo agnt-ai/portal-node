@@ -313,8 +313,11 @@ export function waitNotice(got: NetworkWaitResult): string | undefined {
 
 /** What a wait that timed out says when the mailbox still holds unread messages (a `--from` wait, or ones on lease). */
 export function timeoutNotice(unread: unknown): string | undefined {
+  const waiting = (unread as { pendingRequests?: number } | undefined)?.pendingRequests;
+  const requests = waiting ? ` ${waiting} connection request${waiting === 1 ? ' is' : 's are'} waiting: run \`{{accountSlug}} network requests\`.` : '';
   const line = unreadSummaryLine(unread as never);
-  return line ? `note: nothing new to hand out, but ${line}. Read them with \`{{accountSlug}} network inbox --unread\`.` : undefined;
+  if (!line && requests) return `note:${requests}`;
+  return line ? `note: nothing new to hand out, but ${line}. Read them with \`{{accountSlug}} network inbox --unread\`.${requests}` : undefined;
 }
 
 /** Run one verb: its result as JSON on stdout, or its error as JSON on stderr with the matching exit status. */

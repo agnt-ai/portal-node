@@ -1453,6 +1453,8 @@ export interface NetworkSender {
 
 /** What is unread in the whole mailbox (the Network ID's, shared by every session that uses it), whatever the filter. */
 export interface NetworkUnreadSummary {
+  /** Connection requests waiting for a decision (`network requests`). */
+  pendingRequests?: number;
   count: number;
   /** Sender address to how many of its messages are unread. A bounce counts as "network". */
   senders: Record<string, number>;

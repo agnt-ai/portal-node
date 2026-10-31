@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { networkWait, EXIT_WAIT_REQUEST, NetworkUsageError, describeError, type WaitClock } from './network.js';
+import { networkWait, timeoutNotice, EXIT_WAIT_REQUEST, NetworkUsageError, describeError, type WaitClock } from './network.js';
 import { networkDiscover, networkRequests, networkRequest, networkDecide, networkConnections, networkDisconnect, networkMutual } from './networkConnections.js';
 import { NetworkResource, NETWORK_CALL_TIMEOUT_MS } from '../../resources/NetworkResource.js';
 import type { HttpClient } from '../../HttpClient.js';
@@ -93,5 +93,12 @@ describe('NetworkResource: connections and discovery', () => {
     expect(h.get).toHaveBeenCalledWith('/agnt/connections', { limit: 5, before: undefined, assistant: undefined }, T);
     expect(h.delete).toHaveBeenCalledWith('/agnt/connections', { peer: 'x@net.example', assistant: undefined }, T);
     expect(h.get).toHaveBeenCalledWith('/agnt/connections/mutual', { with: 'x@net.example', assistant: undefined }, T);
+  });
+});
+
+describe('requests waiting are said on a timeout', () => {
+  it('timeoutNotice names pending requests, with or without unread messages', () => {
+    expect(timeoutNotice({ count: 0, senders: {}, oldest: null, pendingRequests: 2 })).toMatch(/2 connection requests are waiting.*network requests/);
+    expect(timeoutNotice({ count: 0, senders: {}, oldest: null })).toBeUndefined();
   });
 });
