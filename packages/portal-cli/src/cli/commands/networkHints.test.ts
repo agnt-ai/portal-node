@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { sendNotes, notListeningNote, NO_LISTENER_NOTE } from './networkHints.js';
-import { reachabilityOf } from '../utils/listener.js';
+import { sendNotes, notListeningNote, NO_LISTENER_NOTE, threadNote } from './networkHints.js';
+import { reachabilityOf, HINT_DEADLINE_MS } from '../utils/listener.js';
 import { AgntApiError } from '../../HttpClient.js';
 
 const none = async () => [] as string[];
@@ -55,5 +55,32 @@ describe('whoami reachability', () => {
     expect(reachabilityOf({ webhook: { state: 'unknown' }, watcher: { running: null, count: 0 }, listening: null })).toBeUndefined();
     expect(reachabilityOf({ webhook: { state: 'none' }, watcher: { running: false, count: 0 }, listening: false })).toMatchObject({ listening: false, webhook: 'none', watcher: 'not_running' });
     expect(reachabilityOf({ webhook: { state: 'active' }, watcher: { running: null, count: 0 }, listening: true })).toMatchObject({ listening: true, watcher: 'unknown' });
+  });
+});
+
+describe('thread hint', () => {
+  const ID = 'a'.repeat(64);
+  const NOW = Date.parse('2026-10-31T12:00:00Z');
+  const list = (sends: any[]) => ({ network: { sentList: vi.fn().mockResolvedValue({ sends, cursor: null, more: false }) } }) as any;
+  const sendTo = (to: string, sentAt: string, subject = 'PR 12') => ({ id: ID, sentAt, to: [to], content: { parts: [], inReplyTo: null, headers: { subject } } });
+
+  it('names the recent thread and its id when you write to the same person again', async () => {
+    const note = await threadNote(list([sendTo('bob@x.test', '2026-10-30T12:00:00Z')]), ['BOB@x.test'], {}, () => NOW);
+    expect(note).toContain('bob@x.test');
+    expect(note).toContain('thread "PR 12"');
+    expect(note).toContain(`--in-reply-to ${ID}`);
+  });
+
+  it('asks for a short page, aborted at the hint deadline', async () => {
+    const client = list([]);
+    await threadNote(client, ['bob@x.test'], { assistant: 'a1' }, () => NOW);
+    expect(client.network.sentList).toHaveBeenCalledWith({ limit: 10, assistant: 'a1', timeoutMs: HINT_DEADLINE_MS });
+  });
+
+  it('says nothing for someone new, an old thread, or when it cannot tell', async () => {
+    expect(await threadNote(list([sendTo('bob@x.test', '2026-10-30T12:00:00Z')]), ['carol@x.test'], {}, () => NOW)).toBeUndefined();
+    expect(await threadNote(list([sendTo('bob@x.test', '2026-10-01T12:00:00Z')]), ['bob@x.test'], {}, () => NOW)).toBeUndefined();
+    expect(await threadNote({ network: { sentList: vi.fn().mockRejectedValue(new Error('x')) } } as any, ['bob@x.test'], {}, () => NOW)).toBeUndefined();
+    expect(await threadNote({} as any, ['bob@x.test'])).toBeUndefined();
   });
 });

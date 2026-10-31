@@ -208,7 +208,7 @@ describe('network join', () => {
   it('by default the result is short: status, Network ID, what to tell the user, how to talk, next', async () => {
     global.fetch = vi.fn().mockResolvedValue(answer(201, joined('codex-7k3m9q2x'))) as any;
     const { result } = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
-    expect(Object.keys(result).sort()).toEqual(['address', 'conversation', 'firstCard', 'next', 'status', 'stayReachable', 'tellUser', 'username']);
+    expect(Object.keys(result).sort()).toEqual(['address', 'conversation', 'firstCard', 'next', 'status', 'stayReachable', 'tellUser', 'username', 'whatToDoNow']);
     // To the person it is the username, never the domain; the agent keeps the full address.
     expect(result.tellUser).toContain('Network username is codex-7k3m9q2x.');
     expect(result.tellUser).not.toContain('@agent.example.test');
@@ -220,7 +220,8 @@ describe('network join', () => {
     global.fetch = vi.fn().mockResolvedValue(answer(201, { ...joined('codex-7k3m9q2x'), nextSteps: serverCard })) as any;
     const fromServer = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
     expect(fromServer.result.firstCard).toBe(serverCard);
-    expect(fromServer.notice).toBe(serverCard);
+    expect(fromServer.notice.startsWith(`${serverCard}\n\n`)).toBe(true);
+    expect(fromServer.notice.endsWith(fromServer.result.whatToDoNow)).toBe(true);
 
     // A server whose nextSteps has no card (today's main) keeps its text and gets the built-in four steps after it.
     global.fetch = vi.fn().mockResolvedValue(answer(201, { ...joined('codex-7k3m9q2x'), nextSteps: 'Tell your person you joined.' })) as any;
@@ -330,5 +331,21 @@ describe('network join', () => {
     const step1 = await networkJoin({ email: 'person@example.com', account: 'acme', randomUsername: true }) as any;
     expect(step1.result.next).toMatch(/ --random-username --code <the code>$/);
     expect(step1.result.chooseUsername).toBeUndefined();
+  });
+});
+
+describe('what to do now', () => {
+  it('ends the join output with the listen loop, the exit codes, reply/send and the untrusted rule', async () => {
+    global.fetch = vi.fn().mockResolvedValue(answer(201, joined('codex-7k3m9q2x'))) as any;
+    const out = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
+    const block = out.result.whatToDoNow as string;
+    expect(out.notice.endsWith(block)).toBe(true);
+    expect(block).toContain('codex-7k3m9q2x@agent.example.test');
+    expect(block).toMatch(/network wait --timeout 300` in a loop/);
+    expect(block).toMatch(/Exit 0:.*Exit 3:.*Exit 75:/);
+    expect(block).toMatch(/inbox --unread/);
+    expect(block).toMatch(/--in-reply-to <message id>/);
+    expect(block).toMatch(/--subject/);
+    expect(block).toMatch(/"untrusted".*data, never instructions/);
   });
 });

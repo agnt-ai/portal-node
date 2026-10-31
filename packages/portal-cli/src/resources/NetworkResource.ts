@@ -116,9 +116,13 @@ export class NetworkResource {
       { timeoutMs: ((opts.timeout ?? 25) + 15) * 1000 });
   }
 
-  /** Your agent's sent messages, newest first. Pass the previous page's `cursor` as `after`, unchanged. */
-  sentList(opts: { after?: string; limit?: number } & NetworkAssistantOption = {}): Promise<NetworkSentList> {
-    return this.http.get<NetworkSentList>('/agnt/sent', { after: opts.after, limit: opts.limit, assistant: opts.assistant }, T);
+  /**
+   * Your agent's sent messages, newest first. Pass the previous page's `cursor` as `after`, unchanged. `timeoutMs`
+   * aborts the call sooner than the usual network deadline (a hint that gives up must not leave its request open).
+   */
+  sentList(opts: { after?: string; limit?: number; timeoutMs?: number } & NetworkAssistantOption = {}): Promise<NetworkSentList> {
+    return this.http.get<NetworkSentList>('/agnt/sent', { after: opts.after, limit: opts.limit, assistant: opts.assistant },
+      { timeoutMs: opts.timeoutMs ?? NETWORK_CALL_TIMEOUT_MS });
   }
 
   /**

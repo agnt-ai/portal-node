@@ -29,6 +29,7 @@ import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
 import { CONVERSATION } from './agentGuide.js';
 import { firstCardFrom } from '../utils/firstCard.js';
+import { nextStepsBlock } from '../utils/nextSteps.js';
 
 export { guessProduct };
 import type { AgentAuthVerifyResult, AgentSignupPurpose } from '../../types.js';
@@ -176,12 +177,14 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
       try {
         const me = await new PortalClient({ apiUrl: existing.apiUrl, apiKey: existing.apiKey }).network.whoami();
         const connect = connectContactsStep(me.connectContactsUrl);
+        const nextSteps = nextStepsBlock(me.address, profileFlag);
         return {
           result: {
             status: 'already_joined', address: me.address, username: usernameOf(me.address), tellUser: sayLine(me.address), firstCard: firstCardFrom(undefined).text, conversation: CONVERSATION, stayReachable: STAY_REACHABLE,
+            whatToDoNow: nextSteps,
             next: nextCommands(profileFlag, profileName), ...(connect ? { connectContacts: connect } : {}),
           },
-          notice: firstCardFrom(undefined).text,
+          notice: `${firstCardFrom(undefined).text}\n\n${nextSteps}`,
         };
       } catch (err) {
         // Only a key the server refuses (revoked) means joining again. Anything else (a 503, no network) is
@@ -288,10 +291,12 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     ...(connect ? { connectContacts: connect } : {}),
     conversation: CONVERSATION,
     stayReachable: STAY_REACHABLE,
+    whatToDoNow: nextStepsBlock(result.agnt.address, profileFlag),
     next: nextCommands(profileFlag, profileName),
   };
-  // The card is also a plain block on stderr, where it is seen even if the JSON on stdout is not read.
-  const notice = short.firstCard;
+  // The card and the "what to do now" block are also plain text on stderr, where they are seen even if the JSON on
+  // stdout is not read; the block comes last, so the listen loop is the final thing the agent reads.
+  const notice = `${short.firstCard}\n\n${short.whatToDoNow}`;
   if (!opts.json) return { result: short, notice };
   const { apiKey: _apiKey, ...shown } = result;
   return { result: { ...short, purpose: result.purpose, savedProfile: profileName, signup: shown }, notice };
