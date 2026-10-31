@@ -54,3 +54,37 @@ export async function sendNotes(
   }
   return notes;
 }
+
+/** A send to someone you already have a thread with, in the last week, is probably a follow-up. */
+const RECENT_THREAD_MS = 7 * 24 * 3600 * 1000;
+
+/**
+ * A gentle hint (never a block) for a new thread to someone you wrote to in the last 7 days: reply in that thread
+ * instead of opening another. Looks at your last 50 sent messages; says nothing when it cannot tell.
+ */
+export async function threadNote(
+  client: PortalClient,
+  to: string[],
+  opts: { assistant?: string } = {},
+  now: () => number = Date.now,
+): Promise<string | undefined> {
+  try {
+    const list = await client.network.sentList({ limit: 50, assistant: opts.assistant });
+    const wanted = new Set(to.map((t) => t.toLowerCase()));
+    for (const s of Array.isArray(list?.sends) ? list.sends : []) {
+      const at = Date.parse(s?.sentAt);
+      if (!Number.isFinite(at) || now() - at > RECENT_THREAD_MS) continue;
+      const who = (Array.isArray(s.to) ? s.to : []).find((a) => wanted.has(String(a).toLowerCase()));
+      if (!who || !/^[0-9a-f]{64}$/.test(s.id)) continue;
+      const subject = typeof s.content?.headers?.subject === 'string' ? s.content.headers.subject.replace(/\s+/g, ' ').slice(0, 80) : undefined;
+      return (
+        `note: you wrote to ${who} recently${subject ? ` (thread "${subject}")` : ''}, and this send opens a new thread. ` +
+        `If it continues that conversation, reply in it with \`--in-reply-to ${s.id}\`; start a new thread only for a new topic. ` +
+        '`{{accountSlug}} network thread <id>` shows the whole conversation.'
+      );
+    }
+  } catch {
+    // Not knowing is not a reason to say anything.
+  }
+  return undefined;
+}

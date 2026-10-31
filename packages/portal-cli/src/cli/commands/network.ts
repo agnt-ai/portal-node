@@ -19,7 +19,8 @@ import { removeProfile, resolveProfileName } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
 import { deliveryLine, unreadSummaryLine, idForLine } from './mailboxFormat.js';
 import { listenerStatus, reachabilityOf, within, HINT_DEADLINE_MS, type ProcessLister } from '../utils/listener.js';
-import { sendNotes } from './networkHints.js';
+import { sendNotes, threadNote } from './networkHints.js';
+import { nextStepsBlock, profileFlagFor } from '../utils/nextSteps.js';
 import type { PortalClient } from '../../index.js';
 import type {
   NetworkConnectContactsUrl, NetworkInboxEntry, NetworkSendBody, NetworkUntrusted, NetworkWaitResult, NetworkSender, NetworkSentRecipient, NetworkSendRecipient,
@@ -353,7 +354,12 @@ export async function networkWhoami(client: PortalClient, opts: NetworkBaseOptio
   const connect = connectContactsStep(me.connectContactsUrl);
   // Whether anything will hear a reply (a webhook, a standing watch here). Left out when it could not be told.
   const reachability = await within(listenerStatus(client, { assistant: opts.assistant, profile: opts.profile }).then(reachabilityOf), HINT_DEADLINE_MS, undefined);
-  return { result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.`, stayReachable: STAY_REACHABLE, ...(reachability ? { reachability } : {}), ...(connect ? { connectContacts: connect } : {}) } };
+  const whatToDoNow = nextStepsBlock(me.address, profileFlagFor(opts.profile));
+  return {
+    result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.`, stayReachable: STAY_REACHABLE, whatToDoNow, ...(reachability ? { reachability } : {}), ...(connect ? { connectContacts: connect } : {}) },
+    // Plain text on stderr too, where it is seen even if the JSON is not read.
+    notice: whatToDoNow,
+  };
 }
 
 /**
@@ -476,10 +482,15 @@ export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string =
 }
 
 export async function networkSend(client: PortalClient, opts: NetworkSendOptions, deps: { profile?: string; processes?: ProcessLister } = {}) {
-  const result = await client.network.send(await completeRecipients(client, sendBodyFrom(opts)));
+  const body = await completeRecipients(client, sendBodyFrom(opts));
+  // Asked before the send (so this message is not in the list); a hint, never a block.
+  const thread = body.inReplyTo ? Promise.resolve(undefined) : within(threadNote(client, body.to, { assistant: opts.assistant }), HINT_DEADLINE_MS, undefined);
+  const result = await client.network.send(body);
   // Said beside the answer, never instead of it: whether you will hear a reply, whether they are listening, and
   // which recipient was rejected. sendNotes is the one place that says each, so nothing is printed twice.
   const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile: deps.profile }, { processes: deps.processes }), HINT_DEADLINE_MS, [] as string[]);
+  const threadHint = await thread;
+  if (threadHint) notes.push(threadHint);
   return { result: notes.length ? { ...result, notes } : result, ...(notes.length ? { notice: notes.join('\n') } : {}) };
 }
 

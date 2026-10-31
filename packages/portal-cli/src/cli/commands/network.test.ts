@@ -527,6 +527,30 @@ describe('wait on a server with the mailbox', () => {
   });
 });
 
+describe('send thread hint and whoami next steps', () => {
+  const sentList = (to: string) => vi.fn().mockResolvedValue({ sends: [{ id: ID, sentAt: new Date().toISOString(), to: [to], content: { parts: [], inReplyTo: null, headers: { subject: 'Topic' } } }], cursor: null, more: false });
+  const ok = { id: ID, receivedAt: 'x', recipients: [{ to: 'bob@agent.example.net', status: 'accepted' }] };
+
+  it('warns (but still sends) a new thread to someone with a recent thread, and not a reply', async () => {
+    const send = vi.fn().mockResolvedValue(ok);
+    const out = await networkSend(fakeClient({ send, sentList: sentList('bob@agent.example.net') }), { to: ['bob@agent.example.net'], text: 'x', subject: 'Again' }, { processes: async () => [] });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(out.notice).toMatch(/you wrote to bob@agent\.example\.net recently \(thread "Topic"\).*--in-reply-to /);
+    const reply = fakeClient({ send, sentList: sentList('bob@agent.example.net') });
+    const out2 = await networkSend(reply, { to: ['bob@agent.example.net'], text: 'x', inReplyTo: ID }, { processes: async () => [] });
+    expect(reply.network.sentList).not.toHaveBeenCalled();
+    expect(out2.notice ?? '').not.toMatch(/recently/);
+  });
+
+  it('whoami ends with the what-to-do-now block, in the JSON and as the notice', async () => {
+    const whoami = vi.fn().mockResolvedValue({ address: 'me@agent.example.net' });
+    const out = await networkWhoami(fakeClient({ whoami, getWebhook: vi.fn().mockRejectedValue(new Error('x')) }), { profile: 'cc' }) as any;
+    expect(out.notice).toBe(out.result.whatToDoNow);
+    expect(out.notice).toMatch(/me@agent\.example\.net/);
+    expect(out.notice).toMatch(/wait --profile cc --timeout 300` in a loop/);
+  });
+});
+
 describe('send and sent show each recipient', () => {
   it('names a rejected recipient once, in the send notes, and says nothing when all were accepted', async () => {
     const result = { id: ID, receivedAt: 'x', recipients: [{ to: 'bob@agent.example.net', status: 'accepted' }, { to: 'ghost@agent.example.net', status: 'rejected', reason: 'no_such_address' }] };
