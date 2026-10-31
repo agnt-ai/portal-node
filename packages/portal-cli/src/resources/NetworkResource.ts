@@ -1,6 +1,6 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
-  NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkSentReport, NetworkSentList,
+  NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkDiscoverResult, NetworkConnectionRequest, NetworkRequestFirstMessage, NetworkRequestDecision, NetworkConnectionList, NetworkMutualResult, NetworkSentReport, NetworkSentList,
   NetworkVerifyResult, NetworkLeaveResult, NetworkInboxDigest, NetworkAckResult, NetworkAckTarget, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
 } from '../types.js';
 
@@ -227,5 +227,43 @@ export class NetworkResource {
   /** Remove a block. Idempotent: `removed` says whether there was one. An agent can't remove its person's own (403 person_block). */
   unblock(match: string, opts: NetworkAssistantOption = {}): Promise<{ removed: boolean }> {
     return this.http.delete<{ removed: boolean }>('/agnt/blocks', { match, assistant: opts.assistant }, T);
+  }
+
+  // ── Connections and discovery (404 while the app has them off) ────────────────────────────────────────────────────
+
+  /** Find agents that chose to be found, by name (3 letters or more), workspace domain or exact address. At most 10, no next page. */
+  discover(q: { name?: string; domain?: string; address?: string } & NetworkAssistantOption): Promise<NetworkDiscoverResult> {
+    return this.http.get<NetworkDiscoverResult>('/agnt/discover', { name: q.name, domain: q.domain, address: q.address, assistant: q.assistant }, T);
+  }
+
+  /** Connection requests waiting for your agent (a first message from someone your person is not connected to). */
+  requests(opts: { state?: 'pending' | 'declined'; limit?: number } & NetworkAssistantOption = {}): Promise<{ requests: NetworkConnectionRequest[]; more: boolean }> {
+    return this.http.get<{ requests: NetworkConnectionRequest[]; more: boolean }>('/agnt/requests', { state: opts.state, limit: opts.limit, assistant: opts.assistant }, T);
+  }
+
+  /** One request with its first message's text. */
+  request(id: string, opts: NetworkAssistantOption = {}): Promise<{ request: NetworkConnectionRequest; firstMessage: NetworkRequestFirstMessage }> {
+    return this.http.get<{ request: NetworkConnectionRequest; firstMessage: NetworkRequestFirstMessage }>(`/agnt/requests/${encodeURIComponent(id)}`, { assistant: opts.assistant }, T);
+  }
+
+  /** Accept, decline or block (decline + block the sender) a request. Accepting releases the held messages into the inbox. */
+  decideRequest(id: string, action: 'accept' | 'decline' | 'block', opts: NetworkAssistantOption = {}): Promise<NetworkRequestDecision> {
+    const query = opts.assistant ? `?assistant=${encodeURIComponent(opts.assistant)}` : '';
+    return this.http.post<NetworkRequestDecision>(`/agnt/requests/${encodeURIComponent(id)}/${action}${query}`, {}, T);
+  }
+
+  /** Your person's connections, newest first. */
+  connections(opts: { limit?: number; before?: string } & NetworkAssistantOption = {}): Promise<NetworkConnectionList> {
+    return this.http.get<NetworkConnectionList>('/agnt/connections', { limit: opts.limit, before: opts.before, assistant: opts.assistant }, T);
+  }
+
+  /** Remove a connection (both sides when the other is a person on this network). */
+  disconnect(peer: string, opts: NetworkAssistantOption = {}): Promise<{ removed: boolean }> {
+    return this.http.delete<{ removed: boolean }>('/agnt/connections', { peer, assistant: opts.assistant }, T);
+  }
+
+  /** Degree and mutual connections with one agent (listed in discovery, or already connected). */
+  mutual(address: string, opts: NetworkAssistantOption = {}): Promise<NetworkMutualResult> {
+    return this.http.get<NetworkMutualResult>('/agnt/connections/mutual', { with: address, assistant: opts.assistant }, T);
   }
 }
