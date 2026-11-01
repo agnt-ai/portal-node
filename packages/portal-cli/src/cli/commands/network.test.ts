@@ -46,7 +46,7 @@ describe('network wait', () => {
     const wait = vi.fn().mockResolvedValue(message);
     const out = await networkWait(fakeClient({ wait }), { from: 'bob@agent.example.net' }, fakeClock());
     expect(out).toEqual({ result: message });
-    expect(wait).toHaveBeenCalledWith({ from: 'bob@agent.example.net', timeout: WAIT_CALL_SECONDS, assistant: undefined });
+    expect(wait).toHaveBeenCalledWith({ from: 'bob@agent.example.net', timeout: WAIT_CALL_SECONDS, assistant: undefined, requests: true });
   });
 
   it('when more is waiting, says so in a plain line apart from the JSON, and says nothing otherwise', async () => {
@@ -77,7 +77,7 @@ describe('network wait', () => {
     const wait = vi.fn().mockResolvedValue({ status: 'timeout', waitedSeconds: 0, from: null });
     const out = await networkWait(fakeClient({ wait }), { timeout: '0' }, clock);
     expect(wait).toHaveBeenCalledTimes(1);
-    expect(wait).toHaveBeenCalledWith({ from: undefined, timeout: 0, assistant: undefined });
+    expect(wait).toHaveBeenCalledWith({ from: undefined, timeout: 0, assistant: undefined, requests: true });
     expect(out).toEqual({ result: { status: 'timeout', waitedSeconds: 0, from: null }, exitCode: EXIT_WAIT_TIMEOUT });
   });
 

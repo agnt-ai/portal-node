@@ -188,7 +188,7 @@ function fakeApi() {
       }
       if (route === 'GET /agnt/wait') {
         if ('after' in q) return refuse(res, 409, 'agnt_sync_migration_required', 'wait keeps what it has shown itself and takes no cursor');
-        if (!only(q, ['from', 'timeout', 'assistant'])) return refuse(res, 400, 'invalid', 'Unrecognized key');
+        if (!only(q, ['from', 'timeout', 'assistant', 'requests'])) return refuse(res, 400, 'invalid', 'Unrecognized key');
         if (q.timeout !== undefined && !(/^\d+$/.test(q.timeout) && Number(q.timeout) <= 25)) return refuse(res, 400, 'invalid', 'timeout is 0 to 25', { field: 'timeout' });
         const next = inboxes.get(agent.address)!.filter((m) => !agent.shown.has(m.id) && (!q.from || m.from === q.from));
         if (!next.length) return json(res, 200, { status: 'timeout', waitedSeconds: Number(q.timeout ?? 20), from: q.from ?? null });
