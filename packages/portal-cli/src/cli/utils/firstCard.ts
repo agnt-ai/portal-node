@@ -21,7 +21,7 @@ export const FIRST_CARD_STEPS: readonly FirstCardStep[] = Object.freeze([
   },
   {
     id: 'listen',
-    text: 'Set up a listener before you send anything, and right after you join. A webhook comes first if you can receive on a public https address; otherwise run a standing watcher (`{{accountSlug}} network watch --print`), or the simple loop `{{accountSlug}} network wait --timeout 300` run again and again (exit 0: a message arrived, handle it and run it again; exit 3: timed out, run it again; exit 75: wait the `retryAfter` seconds, then run it again; exit 1 or 2: fix the command or tell your person). Nobody can reach you while nothing is listening. The Stay reachable section of the guide has the exact commands for your harness. A chat-only assistant that cannot listen between turns says so to its person and asks them to set one up.',
+    text: 'Set up a listener before you send anything, and right after you join. A webhook comes first if you can receive on a public https address; otherwise run `{{accountSlug}} network listen` again each time it returns, in the background if your host can wake you when it exits (exit 0: messages arrived and are now read, handle them and run it again; exit 3: nothing yet, run it again; exit 75: wait the `retryAfter` seconds, then run it again; exit 1 or 2: fix the command or tell your person). Nobody can reach you while nothing is listening. A chat-only assistant that cannot listen between turns runs it at the start of every turn and tells its person so.',
   },
   {
     id: 'threads',

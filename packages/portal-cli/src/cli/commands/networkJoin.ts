@@ -30,6 +30,7 @@ import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
 import { CONVERSATION } from './agentGuide.js';
 import { firstCardFrom } from '../utils/firstCard.js';
 import { nextStepsBlock } from '../utils/nextSteps.js';
+import { orientationFrom } from '../networkCore.js';
 
 export { guessProduct };
 import type { AgentAuthVerifyResult, AgentSignupPurpose } from '../../types.js';
@@ -139,7 +140,9 @@ export function finishJoinCommand(opts: JoinOptions, email: string, apiUrl: stri
 function nextCommands(profileFlag: string, profileName: string): string[] {
   return [
     `{{accountSlug}} network send${profileFlag} --to <their Network ID> --subject "..." --text "..."`,
-    `{{accountSlug}} network wait${profileFlag} --timeout 300`,
+    `{{accountSlug}} network listen${profileFlag} --timeout 300`,
+    // The guide where the agent's harness reads it in every session (it writes only the skill file).
+    `{{accountSlug}} agent-guide --install`,
     // Everyone your person already knows: LinkedIn's Connections.csv, from their LinkedIn data export.
     // Always the profile join saved: commands outside network use the default profile otherwise.
     `{{accountSlug}} contacts import-linkedin ${flagWord('--profile', profileName)} <your person's LinkedIn Connections.csv>`,
@@ -178,13 +181,14 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
         const me = await new PortalClient({ apiUrl: existing.apiUrl, apiKey: existing.apiKey }).network.whoami();
         const connect = connectContactsStep(me.connectContactsUrl);
         const nextSteps = nextStepsBlock(me.address, profileFlag);
+        const orientation = orientationFrom(undefined).text;
         return {
           result: {
-            status: 'already_joined', address: me.address, username: usernameOf(me.address), tellUser: sayLine(me.address), firstCard: firstCardFrom(undefined).text, conversation: CONVERSATION, stayReachable: STAY_REACHABLE,
+            status: 'already_joined', address: me.address, username: usernameOf(me.address), orientation, tellUser: sayLine(me.address), firstCard: firstCardFrom(undefined).text, conversation: CONVERSATION, stayReachable: STAY_REACHABLE,
             whatToDoNow: nextSteps,
             next: nextCommands(profileFlag, profileName), ...(connect ? { connectContacts: connect } : {}),
           },
-          notice: `${firstCardFrom(undefined).text}\n\n${nextSteps}`,
+          notice: `${orientation}\n\n${firstCardFrom(undefined).text}\n\n${nextSteps}`,
         };
       } catch (err) {
         // Only a key the server refuses (revoked) means joining again. Anything else (a 503, no network) is
@@ -285,6 +289,8 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     status: 'joined',
     address: result.agnt.address,
     username: usernameOf(result.agnt.address),
+    // How the network works, in 200 words: the server's own when it sends one, else the built-in copy.
+    orientation: orientationFrom(result.orientation).text,
     tellUser: joinedLine(email, result.agnt.address, result.purpose === 'account' ? 'account' : 'network'),
     // The server's card (what to tell and ask, then the four required steps) or, from an older server, the built-in four.
     firstCard: firstCardFrom(result.nextSteps).text,
@@ -294,9 +300,9 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     whatToDoNow: nextStepsBlock(result.agnt.address, profileFlag),
     next: nextCommands(profileFlag, profileName),
   };
-  // The card and the "what to do now" block are also plain text on stderr, where they are seen even if the JSON on
-  // stdout is not read; the block comes last, so the listen loop is the final thing the agent reads.
-  const notice = `${short.firstCard}\n\n${short.whatToDoNow}`;
+  // The orientation, the card and the "what to do now" block are also plain text on stderr, where they are seen even if
+  // the JSON on stdout is not read; the block comes last, so the listen loop is the final thing the agent reads.
+  const notice = `${short.orientation}\n\n${short.firstCard}\n\n${short.whatToDoNow}`;
   if (!opts.json) return { result: short, notice };
   const { apiKey: _apiKey, ...shown } = result;
   return { result: { ...short, purpose: result.purpose, savedProfile: profileName, signup: shown }, notice };
