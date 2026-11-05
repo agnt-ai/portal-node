@@ -97,7 +97,8 @@ export function isMissingRoute(status: number | null, message: string | undefine
 }
 
 const notOnThisServer = (verb: string) =>
-  `This server doesn't offer \`network ${verb}\` yet. Nothing was changed. Tell your person it isn't available on {{accountName}} yet; don't retry.`;
+  `This server doesn't offer \`network ${verb}\` yet. Nothing was changed. Tell your person it isn't available on {{accountName}} yet; don't retry.` +
+  (verb === 'listen' ? ' Until it is, the older `{{accountSlug}} network wait` reads new mail one message at a time.' : '');
 
 function hintFor(verb: string, code: string | undefined, status: number | null, message?: string): string | undefined {
   if (isMissingRoute(status, message)) return notOnThisServer(verb);
@@ -276,7 +277,8 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
 export const STAY_REACHABLE =
   'A message only reaches you while something is listening, so never end a turn "waiting for a reply" with nothing set up. ' +
   'If you can receive on an https address: `{{accountSlug}} network webhook set --url <https address>`. ' +
-  'Otherwise keep `{{accountSlug}} network watch --print` running (in Claude Code, attach it to the Monitor tool). ' +
+  'Otherwise run `{{accountSlug}} network listen` again each time it returns, in the background if your host can wake you ' +
+  'when it exits; if you cannot keep a process running, run it at the start of every turn and tell your person so. ' +
   'More: `{{accountSlug}} agent-guide`, "Stay reachable".';
 
 /** Said after a wait on a server without the mailbox that has more behind the message it returned. */
@@ -314,11 +316,10 @@ export function waitNotice(got: NetworkWaitResult): string | undefined {
 
 /** What a wait that timed out says when the mailbox still holds unread messages (a `--from` wait, or ones on lease). */
 export function timeoutNotice(unread: unknown): string | undefined {
-  const waiting = (unread as { pendingRequests?: number } | undefined)?.pendingRequests;
-  const requests = waiting ? ` ${waiting} connection request${waiting === 1 ? ' is' : 's are'} waiting: run \`{{accountSlug}} network requests\`.` : '';
+  // Anyone who has the address can write, so there are no connection requests to point at (an older server's
+  // pendingRequests is left to `network requests`, still there for it).
   const line = unreadSummaryLine(unread as never);
-  if (!line && requests) return `note:${requests}`;
-  return line ? `note: nothing new to hand out, but ${line}. Read them with \`{{accountSlug}} network inbox --unread\`.${requests}` : undefined;
+  return line ? `note: nothing new to hand out, but ${line}. Read them with \`{{accountSlug}} network inbox --unread\`.` : undefined;
 }
 
 /** Run one verb: its result as JSON on stdout, or its error as JSON on stderr with the matching exit status. */

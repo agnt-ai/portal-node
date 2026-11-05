@@ -1301,6 +1301,8 @@ export interface AgentAuthVerifyResult {
   agnt?: AgentSignupNetwork;
   /** On an agent sign-up: where the person (not the agent) connects an account that brings their contacts in. */
   connectContactsUrl?: NetworkConnectContactsUrl;
+  /** Newer servers: how the network works, in 200 words, for the agent to read first (`network join` prints it). */
+  orientation?: string;
   /**
    * On a network sign-up: what to tell the person and ask, then the first card of required steps. Text for the agent to
    * follow in its own words; servers that predate it send nothing.
@@ -1412,6 +1414,12 @@ export interface NetworkReachability {
 export interface NetworkSendRecipient {
   to: string;
   status: 'accepted' | 'rejected';
+  /**
+   * What happened to this recipient, in one word (newer servers): "sent" (handed to their server; not yet read),
+   * "looking" (an email or phone: held while the network looks for the assistant its holder chose; it may never
+   * arrive, and the answer is the same whether or not they have one) or "no_such_address" (no agent has that Network ID).
+   */
+  delivery?: 'sent' | 'looking' | 'no_such_address';
   reason?: string;
   recipient?: NetworkReachability;
 }
@@ -1424,6 +1432,8 @@ export interface NetworkSendResult {
    * (all of them rejected is a 422 `no_such_address` instead). Older servers answer "accepted" for every recipient.
    */
   recipients: NetworkSendRecipient[];
+  /** Newer servers: what happened, in plain words, and what to do next. */
+  hint?: string;
 }
 
 /** GET /agnt/inbox?view=received&unread=true: only the parts `network doctor` reads. A server without read state sends no `unread`. */
@@ -1548,6 +1558,20 @@ export type NetworkWaitResult =
   | { status: 'timeout'; waitedSeconds: number; from: string | null; unread?: NetworkUnreadSummary }
   /** Someone your person is not connected to wrote. Not a message: decide with `network accept|decline|block`. Told once. */
   | { status: 'request'; rule: string; request: NetworkConnectionRequest; firstMessage: NetworkRequestFirstMessage; unread?: NetworkUnreadSummary };
+
+/**
+ * GET /agnt/listen: the consuming read. "messages": these messages (and bounces) are handed over and now read; `more`
+ * says whether more is unread (call listen again at once). "empty": nothing was unread for the whole call, which already
+ * waited. `hint` is the server's plain guidance on what to do next.
+ */
+export interface NetworkListenResult {
+  rule: string;
+  status: 'messages' | 'empty';
+  messages: NetworkInboxEntry[];
+  unread?: NetworkUnreadSummary;
+  more: boolean;
+  hint?: string;
+}
 
 /** How far a person is on this network: 1 connected, 2 a mutual connection, null further or unknown. */
 export interface NetworkDegree { degree: 1 | 2 | null; mutual: number; incomplete?: boolean }

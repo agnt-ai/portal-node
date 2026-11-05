@@ -45,8 +45,13 @@ export async function sendNotes(
   } catch {
     // Not knowing is not a reason to say anything.
   }
+  // A newer server says what happened itself, in plain words: that line first, and not again below.
+  const said = typeof sent?.hint === 'string' && sent.hint.trim() ? sent.hint.trim() : undefined;
+  if (said) notes.push(`note: ${said}`);
   for (const r of Array.isArray(sent?.recipients) ? sent.recipients : []) {
-    if (r?.status === 'rejected') {
+    if (r?.delivery === 'looking' && !said) {
+      notes.push(lookingNote(r.to));
+    } else if (r?.status === 'rejected') {
       notes.push(`${r.to} was not sent: ${r.reason === 'no_such_address' ? 'no agent has that Network ID' : 'the server rejected it'}.`);
     } else if (r?.recipient && r.recipient.listening === false) {
       notes.push(notListeningNote(r.to, r.recipient));
@@ -54,6 +59,15 @@ export async function sendNotes(
   }
   return notes;
 }
+
+/**
+ * An email or phone recipient: held while the network looks for the assistant its holder chose. It may never arrive,
+ * and nothing will say so, by design (no answer may tell anyone whether a person has an assistant).
+ */
+export const lookingNote = (to: string) =>
+  `${to} is an email or phone, not a Network ID: the network is looking for the assistant its holder chose. ` +
+  'It may never arrive, and nothing will tell you either way. Tell your person it is not delivered yet, only sent, ' +
+  'and report back if a reply comes. To reach an agent for sure, ask for its Network ID or find it with `{{accountSlug}} network discover`.';
 
 /** A send to someone you already have a thread with, in the last week, is probably a follow-up. */
 const RECENT_THREAD_MS = 7 * 24 * 3600 * 1000;

@@ -1,6 +1,6 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
-  NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkDiscoverResult, NetworkConnectionRequest, NetworkRequestFirstMessage, NetworkRequestDecision, NetworkConnectionList, NetworkMutualResult, NetworkSentReport, NetworkSentList,
+  NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkListenResult, NetworkDiscoverResult, NetworkConnectionRequest, NetworkRequestFirstMessage, NetworkRequestDecision, NetworkConnectionList, NetworkMutualResult, NetworkSentReport, NetworkSentList,
   NetworkVerifyResult, NetworkLeaveResult, NetworkInboxDigest, NetworkAckResult, NetworkAckTarget, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
 } from '../types.js';
 
@@ -101,6 +101,18 @@ export class NetworkResource {
    */
   unread(opts: { limit?: number } & NetworkAssistantOption = {}): Promise<NetworkUnreadPage> {
     return this.http.get<NetworkUnreadPage>('/agnt/inbox', { view: 'received', unread: true, order: 'oldest', limit: opts.limit ?? 20, assistant: opts.assistant }, T);
+  }
+
+  /**
+   * One long poll (at most 25 seconds; the server answers within about 22) that TAKES new mail: the unread messages
+   * and bounces, oldest first, up to `limit`. Everything it hands over is marked read before the answer leaves, so
+   * nothing comes back and there is nothing to acknowledge. With nothing unread it
+   * waits, and answers `status: "empty"` when the call's time is up. A lost answer is found again with `inbox`.
+   */
+  listen(opts: { from?: string; timeout?: number; limit?: number } & NetworkAssistantOption = {}): Promise<NetworkListenResult> {
+    // Give up on a call the server holds 15 seconds past its own deadline: the connection is gone.
+    return this.http.get<NetworkListenResult>('/agnt/listen', { from: opts.from, timeout: opts.timeout, limit: opts.limit, assistant: opts.assistant },
+      { timeoutMs: ((opts.timeout ?? 25) + 15) * 1000 });
   }
 
   /**

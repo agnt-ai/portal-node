@@ -96,9 +96,10 @@ describe('NetworkResource: connections and discovery', () => {
   });
 });
 
-describe('requests waiting are said on a timeout', () => {
-  it('timeoutNotice names pending requests, with or without unread messages', () => {
-    expect(timeoutNotice({ count: 0, senders: {}, oldest: null, pendingRequests: 2 })).toMatch(/2 connection requests are waiting.*network requests/);
+describe('a timeout says nothing of connection requests', () => {
+  it('anyone with the address can write, so an older server\'s pendingRequests is not pointed at', () => {
+    expect(timeoutNotice({ count: 0, senders: {}, oldest: null, pendingRequests: 2 })).toBeUndefined();
     expect(timeoutNotice({ count: 0, senders: {}, oldest: null })).toBeUndefined();
+    expect(timeoutNotice({ count: 1, senders: { 'a@x': 1 }, oldest: '2026-01-01T00:00:00.000Z', pendingRequests: 2 })).not.toMatch(/request/);
   });
 });
