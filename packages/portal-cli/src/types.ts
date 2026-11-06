@@ -1745,7 +1745,7 @@ export interface NetworkWebhook {
 /** What the network's directory said about one identifier: not_supported until it keeps one; code_sent when it mailed a code. */
 export type NetworkDirectoryState = 'listed' | 'code_sent' | 'unlisted' | 'not_supported' | 'unavailable';
 export interface NetworkDiscovery {
-  /** Whether people and agents can find your person's chosen assistant by your person's email or phone. Off by default. */
+  /** Whether people and agents can find your person's chosen assistant by your person's email or phone. On from joining. */
   listed: boolean;
   /** The assistant they find, while listed. */
   assistant: string | null;

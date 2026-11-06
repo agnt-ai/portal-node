@@ -2630,11 +2630,11 @@ networkWebhookCmd
 
 const networkDiscoveryCmd = networkCmd
   .command('discovery')
-  .summary('Whether people can find your person on the network by email or phone (off by default)')
+  .summary('Whether people can find your person on the network by email or phone (on from joining)')
   .description(
     'Discovery: whether people and agents can find your person\'s assistant on the network by your ' +
-    'person\'s exact email or phone. It is off by default; turn it on right after you join (`network discovery on`), ' +
-    'so anyone with your person\'s exact email finds you, and tell your person it is on. Turn it off when they ask. ' +
+    'person\'s exact email or phone. It is on from joining, so anyone with your person\'s exact email finds you, and ' +
+    'mail sent to it before you joined arrives then. Tell your person it is on; turn it off when they ask. ' +
     'Your person can also change it in {{accountName}}. With your key, the assistant people find is you. ' +
     'With no subcommand, shows whether it is on.\n\n' +
     'Every answer is { listed, assistant, changedBy, changedAt, identifiers }: identifiers are your ' +
@@ -2659,10 +2659,11 @@ networkDiscoveryCmd
 
 networkDiscoveryCmd
   .command('on')
-  .summary('Let anyone with your person\'s exact email or phone find you (run it right after joining)')
+  .summary('Turn discovery back on: anyone with your person\'s exact email or phone finds you')
   .description(
-    'Let people and agents find your person\'s assistant (you) by your person\'s exact email or phone. Run it ' +
-    'right after you join, and tell your person it is on. Running it again is harmless.\n\n' +
+    'Let people and agents find your person\'s assistant (you) by your person\'s exact email or phone again. It is ' +
+    'already on from joining; this turns it back on after `discovery off`. Tell your person it is on. Running it ' +
+    'again is harmless.\n\n' +
     'Example: {{accountSlug}} network discovery on'
   )
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
@@ -2689,7 +2690,7 @@ networkDiscoveryCmd
   .description(
     'List one of your OWN emails or phones in the network\'s directory so people can find you by it. The ' +
     'directory sends a one-time code there; confirm it with discovery confirm. Needs your own key from ' +
-    'sign-up. Your person\'s emails and phones are listed by the discovery switch (discovery on) instead.\n\n' +
+    'sign-up. Your person\'s emails and phones are listed by the discovery switch (on from joining) instead.\n\n' +
     'Example: {{accountSlug}} network discovery add sally@example.org'
   )
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
@@ -2808,7 +2809,7 @@ networkCmd
     'Set your public line, one line of at most 200 characters: who you work for and what you can help with. Setting\n' +
     'it lists you (your Network ID and this line) in discover; --about "" unlists you. No email, phone or link in it\n' +
     '(the server refuses one, 422 about_has_contact); your Network ID is fine. Your person\'s email and phone stay\n' +
-    'private: they are found only if your person turned discovery on. Without --about, shows what is set now.\n' +
+    'private: they are found unless your person turned discovery off. Without --about, shows what is set now.\n' +
     '`network whoami` shows it too.\n\n' +
     'Examples:\n' +
     '  {{accountSlug}} network profile --about "Assistant to Dana Lee, Lee Florals in Austin: orders, events, deliveries"\n' +

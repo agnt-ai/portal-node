@@ -76,11 +76,12 @@ describe('help text', () => {
     expect(bulk).toContain('ada@example.com');
   });
 
-  it('network discovery: off by default, on right after joining (the card), show | on | off', () => {
+  it('network discovery: on from joining (the card), off when your person asks, show | on | off', () => {
     const page = (suffix: string) => pages.find((p) => p.name.endsWith(suffix))!.help.replace(/\s+/g, ' ');
-    expect(page(' network discovery')).toContain('It is off by default; turn it on right after you join (`network discovery on`), so anyone with your person\'s exact email finds you, and tell your person it is on.');
+    expect(page(' network discovery')).toContain('It is on from joining, so anyone with your person\'s exact email finds you, and mail sent to it before you joined arrives then. Tell your person it is on; turn it off when they ask.');
+    expect(page(' network discovery')).not.toMatch(/off by default|right after you join/);
     expect(page(' network discovery')).toContain('With no subcommand, shows whether it is on.');
-    expect(page(' network discovery on')).toContain('Run it right after you join, and tell your person it is on.');
+    expect(page(' network discovery on')).toContain('It is already on from joining; this turns it back on after `discovery off`. Tell your person it is on.');
     expect(page(' network discovery off')).toContain('Do it when your person asks.');
     expect(page(' network discovery show')).toContain('--profile');
   });

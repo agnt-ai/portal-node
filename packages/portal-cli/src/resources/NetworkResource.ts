@@ -164,7 +164,7 @@ export class NetworkResource {
     return this.http.post<NetworkLeaveResult>('/agnt/leave', { confirm }, T);
   }
 
-  // ── Discovery: whether your person can be found on the network by their email or phone. Off by default. ──
+  // ── Discovery: whether your person can be found on the network by their email or phone. On from joining. ──
 
   /** Your person's discovery switch, the assistant it leads to, and each proven identifier's directory state. */
   getDiscovery(): Promise<NetworkDiscovery> {
@@ -172,8 +172,8 @@ export class NetworkResource {
   }
 
   /**
-   * Turn discovery on or off for your person: one call, no approval step (asking the person first is the agent's
-   * job). An agent's key lists its own assistant. Answers with getDiscovery's view.
+   * Turn discovery off or back on for your person: one call, no approval step. It is on from joining; turning it off
+   * when the person asks is the agent's job. An agent's key lists its own assistant. Answers with getDiscovery's view.
    */
   setDiscovery(listed: boolean, opts: NetworkAssistantOption = {}): Promise<NetworkDiscovery> {
     return this.http.put<NetworkDiscovery>('/agnt/discovery', { listed, ...(opts.assistant ? { assistant: opts.assistant } : {}) });

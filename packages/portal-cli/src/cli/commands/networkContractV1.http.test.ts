@@ -226,7 +226,7 @@ describe('network contract v1: the compiled CLI', () => {
     expect(help.stdout).toMatch(/default\s+20/);
   });
 
-  it('discovery on turns the person switch on (the card says so); discovery alone shows it', async () => {
+  it('discovery on turns the person switch back on (it is on from joining); discovery alone shows it', async () => {
     await join2(['--name', 'me']);
     const on = await cli(['network', 'discovery', 'on']);
     expect(on.code, on.stderr).toBe(0);
