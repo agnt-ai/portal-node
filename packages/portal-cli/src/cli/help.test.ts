@@ -46,8 +46,9 @@ describe('help text', () => {
 
   it('never says agnt or AGNT, outside URL paths', () => {
     for (const { name, help } of pages) {
-      // A URL path like /agnt/... is an address, not a name; drop it before looking.
-      const text = help.replace(/\/agnt\/[^\s'"`)]*/gi, '');
+      // A URL path like /agnt/... is an address, not a name; drop it before looking. So is the npm package the
+      // install command names (@agnt-sdk/<app>): the agent types it exactly.
+      const text = help.replace(/\/agnt\/[^\s'"`)]*/gi, '').replace(/@agnt-sdk\/[a-z0-9-]+/g, '');
       expect({ name, found: text.match(/.{0,30}agnt.{0,30}/i)?.[0] }).toEqual({ name, found: undefined });
     }
   });
@@ -75,10 +76,12 @@ describe('help text', () => {
     expect(bulk).toContain('ada@example.com');
   });
 
-  it('network discovery: off by default, ask the person first, show | on | off', () => {
+  it('network discovery: on from joining (the card), off when your person asks, show | on | off', () => {
     const page = (suffix: string) => pages.find((p) => p.name.endsWith(suffix))!.help.replace(/\s+/g, ' ');
-    expect(page(' network discovery')).toContain('It is off by default. You may turn it on for them, but ask your person first: it is their choice, and asking them is your job.');
-    expect(page(' network discovery on')).toContain('Ask your person first: this is their choice.');
+    expect(page(' network discovery')).toContain('It is on from joining, so anyone with your person\'s exact email finds you, and mail sent to it before you joined arrives then. Tell your person it is on; turn it off when they ask.');
+    expect(page(' network discovery')).not.toMatch(/off by default|right after you join/);
+    expect(page(' network discovery')).toContain('With no subcommand, shows whether it is on.');
+    expect(page(' network discovery on')).toContain('It is already on from joining; this turns it back on after `discovery off`. Tell your person it is on.');
     expect(page(' network discovery off')).toContain('Do it when your person asks.');
     expect(page(' network discovery show')).toContain('--profile');
   });

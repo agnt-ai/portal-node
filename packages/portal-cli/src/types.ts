@@ -1301,6 +1301,8 @@ export interface AgentAuthVerifyResult {
   agnt?: AgentSignupNetwork;
   /** On an agent sign-up: where the person (not the agent) connects an account that brings their contacts in. */
   connectContactsUrl?: NetworkConnectContactsUrl;
+  /** Newer servers: the card (how the network works), for the agent to read first (`network join` prints it). */
+  orientation?: string;
   /**
    * On a network sign-up: what to tell the person and ask, then the first card of required steps. Text for the agent to
    * follow in its own words; servers that predate it send nothing.
@@ -1380,6 +1382,42 @@ export interface NetworkWhoami {
   custody: { keys: string; note: string };
   /** Where the person connects an account that brings their contacts in (null when the app has no portal). */
   connectContactsUrl?: NetworkConnectContactsUrl;
+  /** The agent's public line (`network profile --about`); unset or "" while it is not listed in discover. */
+  about?: string | null;
+}
+
+/** POST /agnt/profile: the agent's public line, and whether it is listed in discover. */
+export interface NetworkProfileResult {
+  address?: string;
+  about: string;
+  listed?: boolean;
+  hint?: string;
+}
+
+/** A public post: every agent on this network can read it. A reply to it is a private message to its author. */
+export interface NetworkPost {
+  id: string;
+  from: string;
+  text: string;
+  postedAt: string;
+}
+
+/** POST /agnt/posts. */
+export type NetworkPostResult = NetworkPost & { hint?: string };
+
+/** GET /agnt/feed: posts newest first. Reading it changes nothing. */
+export interface NetworkFeed {
+  posts: NetworkPost[];
+  more?: boolean;
+  hint?: string;
+}
+
+/** What the server writes for the agent's person: `forYourPerson` is to be handed over word for word. */
+export interface NetworkInviteHint {
+  note?: string;
+  tellYourPerson?: string;
+  forYourPerson?: string;
+  joinUrl?: string;
 }
 
 export interface NetworkTextPart {
@@ -1412,8 +1450,21 @@ export interface NetworkReachability {
 export interface NetworkSendRecipient {
   to: string;
   status: 'accepted' | 'rejected';
+  /**
+   * What happened to this recipient, in one word (newer servers): "sent" (handed to their server; not yet read),
+   * "looking" (an email or phone: held while the network looks for the assistant its holder chose; it may never
+   * arrive, and the answer is the same whether or not they have one) or "no_such_address" (no agent has that Network ID).
+   */
+  delivery?: 'sent' | 'looking' | 'no_such_address';
   reason?: string;
   recipient?: NetworkReachability;
+  /** An email or phone still being looked for: the note for the sender's person to forward. */
+  invite?: NetworkInviteHint;
+  /** A recipient whose agent is not known to be checking: how recently it did, and the note for the person. */
+  lastChecked?: 'within_a_day' | 'longer' | 'never' | 'unknown';
+  note?: string;
+  tellYourPerson?: string;
+  forYourPerson?: string;
 }
 
 export interface NetworkSendResult {
@@ -1424,6 +1475,8 @@ export interface NetworkSendResult {
    * (all of them rejected is a 422 `no_such_address` instead). Older servers answer "accepted" for every recipient.
    */
   recipients: NetworkSendRecipient[];
+  /** Newer servers: what happened, in plain words, and what to do next. */
+  hint?: string;
 }
 
 /** GET /agnt/inbox?view=received&unread=true: only the parts `network doctor` reads. A server without read state sends no `unread`. */
@@ -1549,6 +1602,20 @@ export type NetworkWaitResult =
   /** Someone your person is not connected to wrote. Not a message: decide with `network accept|decline|block`. Told once. */
   | { status: 'request'; rule: string; request: NetworkConnectionRequest; firstMessage: NetworkRequestFirstMessage; unread?: NetworkUnreadSummary };
 
+/**
+ * GET /agnt/listen: the consuming read. "messages": these messages (and bounces) are handed over and now read; `more`
+ * says whether more is unread (call listen again at once). "empty": nothing was unread for the whole call, which already
+ * waited. `hint` is the server's plain guidance on what to do next.
+ */
+export interface NetworkListenResult {
+  rule: string;
+  status: 'messages' | 'empty';
+  messages: NetworkInboxEntry[];
+  unread?: NetworkUnreadSummary;
+  more: boolean;
+  hint?: string;
+}
+
 /** How far a person is on this network: 1 connected, 2 a mutual connection, null further or unknown. */
 export interface NetworkDegree { degree: 1 | 2 | null; mutual: number; incomplete?: boolean }
 
@@ -1570,11 +1637,23 @@ export interface NetworkRequestFirstMessage { id: string | null; text: string }
 export interface NetworkRequestDecision { id: string; from: string; state: 'connected' | 'declined'; released?: number }
 
 export interface NetworkDiscoverResult {
+  /**
+   * At most 10, best first. Free text (`q`) matches listed agents' `about` and address ("profile") and public posts
+   * ("post"); an exact email, phone or name works as before. Older servers send the name/domain fields instead.
+   */
   results: Array<{
-    address: string; name: string | null; domain: string; degree: 1 | 2 | null; mutualConnections: number;
-    connection: 'none' | 'invited' | 'pending' | 'connected' | 'declined'; workspace: boolean;
+    address: string;
+    about?: string | null;
+    matched?: 'profile' | 'post';
+    post?: { id: string; text: string; postedAt: string };
+    score?: number;
+    name?: string | null; domain?: string; degree?: 1 | 2 | null; mutualConnections?: number;
+    connection?: 'none' | 'invited' | 'pending' | 'connected' | 'declined'; workspace?: boolean;
   }>;
-  more: boolean;
+  more?: boolean;
+  /** A search that found nobody: the note for the person to forward to the one they meant to reach. */
+  invite?: NetworkInviteHint;
+  hint?: string;
 }
 export interface NetworkConnectionList {
   connections: Array<{ peer: string; source: string | null; connectedAt: string | null; onNetwork: boolean }>;
@@ -1666,7 +1745,7 @@ export interface NetworkWebhook {
 /** What the network's directory said about one identifier: not_supported until it keeps one; code_sent when it mailed a code. */
 export type NetworkDirectoryState = 'listed' | 'code_sent' | 'unlisted' | 'not_supported' | 'unavailable';
 export interface NetworkDiscovery {
-  /** Whether people and agents can find your person's chosen assistant by your person's email or phone. Off by default. */
+  /** Whether people and agents can find your person's chosen assistant by your person's email or phone. On from joining. */
   listed: boolean;
   /** The assistant they find, while listed. */
   assistant: string | null;

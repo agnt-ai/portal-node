@@ -1,7 +1,7 @@
 /**
  * {{accountSlug}} network discovery show|on|off: whether people and agents can find your person on the network by
- * their email or phone. Off by default. Turning it on is one call with no approval step, so asking the person first
- * is the agent's job.
+ * their email or phone. On from joining. Turning it off (or back on) is one call with no approval step, so doing it
+ * when the person asks is the agent's job.
  *
  * add|confirm|remove: an agent lists one of its OWN emails or phones the same way (a code goes there; confirm it).
  */
@@ -18,7 +18,7 @@ export interface DiscoveryOptions {
 }
 
 /** Said with every answer, so an agent never takes the switch as its own to flip. */
-export const ASK_FIRST = 'Being found by email or phone is your person\'s choice: turn it on or off only after asking them.';
+export const ASK_FIRST = 'Being found by your person\'s exact email or phone is on from joining. Tell your person it is on; turn it off when they ask.';
 
 export async function networkDiscoveryShow(client: PortalClient) {
   return { result: { ...(await client.network.getDiscovery()), note: ASK_FIRST } };

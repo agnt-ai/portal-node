@@ -48,6 +48,16 @@ describe('send notes', () => {
     const notes = await sendNotes(hook(), sent([{ to: 'ghost@x.test', status: 'rejected', reason: 'no_such_address' }]), {}, { processes: none });
     expect(notes).toEqual(['ghost@x.test was not sent: no agent has that Network ID.']);
   });
+
+  it('a looking recipient (an email or phone) is said not to be delivered yet, once, unless the server said so itself', async () => {
+    const notes = await sendNotes(hook(), sent([{ to: 'dana@example.com', status: 'accepted', delivery: 'looking' }]), {}, { processes: none });
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatch(/^dana@example\.com is an email or phone, not a Network ID/);
+    expect(notes[0]).toMatch(/It may never arrive.*not delivered yet, only sent/);
+    // The server's own hint is said first, and the CLI's line is not repeated under it.
+    const said = await sendNotes(hook(), { ...sent([{ to: 'dana@example.com', status: 'accepted', delivery: 'looking' }]), hint: '  Held while we look.  ' }, {}, { processes: none });
+    expect(said).toEqual(['note: Held while we look.']);
+  });
 });
 
 describe('whoami reachability', () => {

@@ -8,18 +8,23 @@ import { installGuide, installTarget, skillName } from './agentGuideInstall.js';
 import { readSkill } from './agentGuide.js';
 import { NetworkUsageError } from './network.js';
 import { DEFAULT_ACCOUNT_SLUG } from '../../defaults.js';
+import { NETWORK_CORE } from '../networkCore.js';
 
 const indexSource = readFileSync(fileURLToPath(new URL('../index.ts', import.meta.url)), 'utf8');
+/** A page after the shared card it opens with: the harness's own steps. */
+const steps = (h: string) => harnessPage(h).slice(NETWORK_CORE.length);
 
 describe('agent-guide --for', () => {
   it('has one short page for each of claude-code, codex, server and chat-only', () => {
     expect([...HARNESSES]).toEqual(['claude-code', 'codex', 'server', 'chat-only']);
     for (const h of HARNESSES) {
       const page = harnessPage(h);
-      expect(page.length).toBeLessThan(4500);
+      // Short: the harness's own steps after the shared card.
+      expect(steps(h).length).toBeLessThan(2500);
       expect(page.length).toBeLessThan(readSkill().length / 6);
       expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network doctor`);
       expect(page).not.toMatch(/\{\{/);
+      expect(page.startsWith(`${NETWORK_CORE}\n\n`)).toBe(true);
     }
     expect(() => harnessPage('vim')).toThrow(NetworkUsageError);
     expect(harnessPage(' Claude-Code ')).toBe(harnessPage('claude-code'));
@@ -27,19 +32,21 @@ describe('agent-guide --for', () => {
 
   it('puts the webhook first and polling second on every page that can run a process', () => {
     for (const h of ['claude-code', 'codex', 'server'] as const) {
-      const page = harnessPage(h);
+      const page = steps(h);
       expect(page.indexOf('network webhook set')).toBeGreaterThan(-1);
-      expect(page.indexOf('network webhook set')).toBeLessThan(page.search(/network watch/));
+      expect(page.indexOf('network webhook set')).toBeLessThan(page.search(/network (watch|listen)/));
     }
   });
 
-  it('Claude Code: clear the backlog with a drain, then attach the live watch to Monitor, and attach again after about 30 minutes', () => {
-    const page = harnessPage('claude-code');
-    expect(page.indexOf('watch --drain --print')).toBeGreaterThan(-1);
-    expect(page.indexOf('watch --drain --print')).toBeLessThan(page.indexOf('Monitor tool:\n   a.') + 400);
-    expect(page.indexOf('network watch --drain --print')).toBeLessThan(page.indexOf('network watch --print\n'));
-    expect(page).toMatch(/Monitor stops after about 30 minutes: attach `watch --print` again/);
-    expect(page).toMatch(/reading with `inbox` does not clear it for a watch/);
+  it('Claude Code: listen in the background and run it again each time it exits; no drain that marks a backlog read', () => {
+    const page = steps('claude-code');
+    expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network listen --timeout 300`);
+    expect(page).toMatch(/run it again each time it exits/);
+    expect(page).toMatch(/already marked read \(nothing to acknowledge\)/);
+    expect(page).toMatch(/never loop it faster/);
+    expect(page).toMatch(/Tell your person how you will hear replies/);
+    // A drain prints and reads a whole backlog at once: the guide never sends an agent there.
+    expect(page).not.toMatch(/--drain|Monitor/);
     expect(page).toContain('agent-guide --install');
   });
 
@@ -48,6 +55,8 @@ describe('agent-guide --for', () => {
     expect(page).toMatch(/cannot listen between turns/);
     expect(page).toMatch(/ask them to set one up/);
     expect(page).toMatch(/check at the start of every turn/);
+    expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network listen --timeout 0`);
+    expect(page).toMatch(/With no terminal at all, ask your person to add the connector https:\/\/mcp\.\S+\/network: then the network is a set of tools/);
     expect(page).toMatch(/do not rely on it/);
   });
 

@@ -110,7 +110,7 @@ export function backlogGap(page: NetworkUnreadPage, flag: string, now: number): 
   return {
     id: 'unread_backlog',
     problem: `${parts[0]}${parts.length > 1 ? ` (${parts.slice(1).join(', ')})` : ''} still wait for an answer.`,
-    fix: `Read them: {{accountSlug}} network inbox${flag}. Answer each inside its thread: {{accountSlug}} network send${flag} --to <their Network ID> --in-reply-to <the message id> --text "..."; a reply marks the unread messages of that thread, up to the one you answer, as read. What needs no answer (a bounce, a notice): {{accountSlug}} network watch --drain --print${flag} hands it out and counts it read.`,
+    fix: `Read them: {{accountSlug}} network inbox${flag}. Answer each inside its thread: {{accountSlug}} network send${flag} --to <their Network ID> --in-reply-to <the message id> --text "..."; a reply marks the unread messages of that thread, up to the one you answer, as read. What needs no answer (a bounce, a notice): {{accountSlug}} network listen${flag} hands it out and marks it read.`,
   };
 }
 

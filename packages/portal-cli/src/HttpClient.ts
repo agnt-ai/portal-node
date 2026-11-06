@@ -66,6 +66,17 @@ function errorFromResponse(response: Response, text: string): AgntApiError {
   return new AgntApiError(response.status, message, errorCode, { details, retryAfter, body });
 }
 
+/** The header that names the calling CLI's version, so the server can refuse a copy older than it serves. */
+export const CLIENT_VERSION_HEADER = 'x-agnt-cli-version';
+let clientVersion: string | undefined;
+
+/** Set once by the CLI at start-up; a library caller that never sets it sends no version. */
+export function setClientVersion(version: string | undefined): void {
+  clientVersion = version;
+}
+
+const versionHeader = (): Record<string, string> => (clientVersion ? { [CLIENT_VERSION_HEADER]: clientVersion } : {});
+
 export interface SseEvent {
   event: string;
   data: any;
@@ -116,7 +127,8 @@ export class HttpClient {
       method,
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...versionHeader(),
       }
     };
 
@@ -195,7 +207,7 @@ export class HttpClient {
 export async function publicRequest<T>(apiUrl: string, path: string, body: any): Promise<T> {
   const response = await fetch(`${apiUrl.replace(/\/$/, '')}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...versionHeader() },
     body: JSON.stringify(body)
   });
 

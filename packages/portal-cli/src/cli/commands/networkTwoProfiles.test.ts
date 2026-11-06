@@ -47,11 +47,11 @@ describe('two agents of one person side by side (the rename path)', () => {
     const step1 = await networkJoin({ email: 'person@example.com', account: 'acme', apiUrl: 'https://api.example.test', profile: 'claude-code-2', username: 'newname' }) as any;
     expect(step1.result.status).toBe('code_sent');
     expect(start.mock.calls[0][0]).toBe('https://api.example.test/portal/auth/agent/start');
-    expect(step1.result.next).toMatch(/--username newname --profile claude-code-2 .*--code <the code>$/);
+    expect(step1.result.next).toMatch(/--name newname --profile claude-code-2 .*--code <the code>$/);
     global.fetch = vi.fn().mockResolvedValue(answer(201, joined('newname', 'key-new'))) as any;
     const done = await networkJoin({ email: 'person@example.com', code: '2', account: 'acme', apiUrl: 'https://api.example.test', profile: 'claude-code-2', username: 'newname' }) as any;
     expect(done.result.next[0]).toMatch(/network send --profile claude-code-2 /);
-    expect(done.result.next[1]).toMatch(/network wait --profile claude-code-2 /);
+    expect(done.result.next[1]).toMatch(/network listen --profile claude-code-2 /);
 
     expect((await resolveProfile('claude-code')).apiKey).toBe('key-old');
     expect((await resolveProfile('claude-code-2')).apiKey).toBe('key-new');

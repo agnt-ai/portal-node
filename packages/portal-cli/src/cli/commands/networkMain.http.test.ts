@@ -434,13 +434,18 @@ describe('network: the compiled CLI against the API as it answers today, two age
 
   it('the help says what changed in 0.2.1', async () => {
     const inbox = await cli(['network', 'inbox', '--help']);
-    expect(inbox.stdout).toMatch(/Listing with inbox marks none of the\s+messages it lists/);
+    expect(inbox.stdout).toMatch(/Reading it changes nothing \(unless you give\s+--mark-read\)/);
     const send = await cli(['network', 'send', '--help']);
-    expect(send.stdout).toMatch(/A Network ID that does not exist is rejected/);
+    // Each recipient's "delivery" in one word: sent, looking (an email or phone, may never arrive) or no_such_address.
+    expect(send.stdout).toMatch(/sent\s+handed to their server\. Not yet read/);
+    expect(send.stdout).toMatch(/looking\s+an email or a phone: .* It may\s+never arrive/);
+    expect(send.stdout).toMatch(/no_such_address\s+no agent has that Network ID, so nothing went/);
     expect(send.stdout).toMatch(/422 no_such_address/);
-    expect(send.stdout).toMatch(/"delivered" means\s+their server took it, not that anyone read it/);
-    // A server without the mailbox update reports nothing for an unknown Network ID; the old blanket sentence is gone.
-    expect(send.stdout).toMatch(/A\s+server\s+without\s+the\s+mailbox\s+update\s+answers\s+"accepted"\s+for\s+every\s+recipient/);
+    // The older word stays explained for a server without "delivery": "accepted" never meant delivered or read.
+    expect(send.stdout).toMatch(/a server without "delivery" sends only it, and\s+"accepted" never meant delivered or read/);
+    // What the reply id is and how to pass long text: the gaps fresh agents hit.
+    expect(send.stdout).toMatch(/The id to answer is the "id" of a message that\s+`network listen` or `network inbox` gave you/);
+    expect(send.stdout).toMatch(/--text - to read it from stdin/);
     expect(send.stdout).not.toMatch(/An unknown Network ID is not reported/);
     // Examples stay on the app's own domain: another domain's address is an email, and is held.
     expect(send.stdout).toMatch(/--to <name>@<app domain>/);
@@ -450,6 +455,49 @@ describe('network: the compiled CLI against the API as it answers today, two age
     expect(verify.stdout).toMatch(/one inbox entry/);
     // --json is accepted but never advertised.
     for (const out of [inbox, send, verify]) expect(out.stdout).not.toMatch(/--json/);
+  });
+
+  it('the help leads with the card, before the usage line, then the network verbs, and listen says how to check', async () => {
+    const { NETWORK_CORE } = await import('../networkCore.js');
+    // The source is hydrated before it is built and tested, so the card is already the app's own text.
+    const card = (t: string) => t;
+    const flat = (t: string) => t.replace(/\s+/g, ' ').trim();
+    const network = await cli(['network', '--help']);
+    const root = await cli(['--help']);
+    const bare = await cli([]);
+    // The card, word for word, is the first thing on each page (commander wraps it: compare with spacing collapsed).
+    for (const page of [network, root, bare]) {
+      expect(page.code).toBe(0);
+      expect(flat(page.stdout).startsWith(flat(card(NETWORK_CORE)))).toBe(true);
+    }
+    // No arguments is the same page as --help, on stdout.
+    expect(bare.stdout).toBe(root.stdout);
+    const { DEFAULT_ACCOUNT_SLUG } = await import('../../defaults.js');
+    expect(flat(root.stdout)).toContain(`Needs version 0.2.11 or later; an older copy must be updated with the same npm command: npm i -g @agnt-sdk/${DEFAULT_ACCOUNT_SLUG}`);
+    const start = network.stdout.indexOf('Start here:');
+    const more = network.stdout.indexOf('\nMore:');
+    expect(start).toBeGreaterThan(-1);
+    expect(more).toBeGreaterThan(start);
+    const core = network.stdout.slice(start, more);
+    const verbs = ['join', 'whoami', 'profile', 'discover', 'send', 'post', 'feed', 'listen', 'inbox', 'block'];
+    const at = verbs.map((verb) => core.search(new RegExp(`\\n  ${verb}\\b`)));
+    expect(at.every((i) => i > -1)).toBe(true);
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
+    // Connection requests are gone from the help: anyone with the address can write.
+    expect(network.stdout).not.toMatch(/\n  (requests|accept|decline|connections)\b/);
+    // Nothing recommends the drain that prints and marks a whole backlog at once.
+    for (const page of [network, root, await cli(['network', 'watch', '--help']), await cli(['network', 'doctor', '--help'])]) {
+      expect(page.stdout).not.toMatch(/--drain --print|drain\s+--print/);
+    }
+    const listen = await cli(['network', 'listen', '--help']);
+    expect(listen.stdout).toMatch(/marks exactly those read as it hands them over/);
+    expect(listen.stdout).toMatch(/never call it in a faster loop/);
+    expect(listen.stdout).toMatch(/run it at the start of every turn/);
+    expect(listen.stdout).toMatch(/a stranger's first message arrives here too/);
+    const join = await cli(['network', 'join', '--help']);
+    expect(join.stdout).toMatch(/It works for 10 minutes; if it\s+expired, run step 1 again/);
+    const whoami = await cli(['network', 'whoami', '--help']);
+    expect(whoami.stdout).toMatch(/Your .* Network ID/);
   });
 
   it('a route the server does not have is "not available yet", never "the network is off"', async () => {
