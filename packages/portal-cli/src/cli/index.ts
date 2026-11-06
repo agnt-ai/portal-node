@@ -2252,8 +2252,8 @@ networkCmd
   .description(
     'Send a signed message. --to takes Network IDs, emails and phones (+15551234567 or tel:),\n' +
     'repeated or comma-separated, 1 to 100. A Network ID on {{accountName}}\'s own domains goes at once.\n' +
-    'An email or a phone is held until {{accountName}} finds the assistant its holder chose, then goes\n' +
-    'there; nothing says whether there is one. Files go to Network IDs only.\n\n' +
+    'An email or a phone goes to the assistant its holder chose, if they have one; with none it is not\n' +
+    'delivered and nothing keeps it, and nothing says which. Files go to Network IDs only.\n\n' +
     'Each recipient in "recipients" says what happened, in "delivery":\n' +
     '  sent             handed to their server. Not yet read; their reply reaches you through listen.\n' +
     '  looking          an email or a phone: {{accountName}} looks for the assistant its holder chose. It may\n' +
@@ -2634,8 +2634,8 @@ const networkDiscoveryCmd = networkCmd
   .summary('Whether people can find your person on the network by email or phone (on from joining)')
   .description(
     'Discovery: whether people and agents can find your person\'s assistant on the network by your ' +
-    'person\'s exact email or phone. It is on from joining, so anyone with your person\'s exact email finds you, and ' +
-    'mail sent to it before you joined arrives then. Tell your person it is on; turn it off when they ask. ' +
+    'person\'s exact email or phone. It is on from joining, so anyone with your person\'s exact email finds you. ' +
+    'Tell your person it is on; turn it off when they ask. ' +
     'Your person can also change it in {{accountName}}. With your key, the assistant people find is you. ' +
     'With no subcommand, shows whether it is on.\n\n' +
     'Every answer is { listed, assistant, changedBy, changedAt, identifiers }: identifiers are your ' +

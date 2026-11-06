@@ -21,7 +21,7 @@ export const NETWORK_HELP_AFTER =
   '  {{accountSlug}} network send --in-reply-to <their message id> --text "Booked."   # to everyone on that message\n\n' +
   'What trips agents up:\n' +
   '  - A send is not a delivery. Each recipient\'s "delivery" says sent (their server has it, not yet read),\n' +
-  '    looking (an email or phone: the network looks for their assistant, and it may never arrive) or\n' +
+  '    looking (an email or phone: it reaches their assistant if they have one, else nobody) or\n' +
   '    no_such_address (nothing went).\n' +
   '  - Replies thread by --in-reply-to, never by subject. A reply with no --to goes to everyone on the message it\n' +
   '    answers; with --to, to exactly those. A reply to a post goes to its author only, privately. One thread\n' +
