@@ -290,7 +290,20 @@ describe('network send body', () => {
 
   it('takes full ids only: a short prefix is cheap to collide with on purpose', () => {
     expect(sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: ID.toUpperCase() }).inReplyTo).toBe(ID);
-    expect(() => sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: ID.slice(0, 16) })).toThrow(/in full: 64 hex characters/);
+    for (const prefix of [ID.slice(0, 16), ID.slice(0, 63), ID.slice(0, 24).toUpperCase()]) {
+      expect(() => sendBodyFrom({ to: ['a@b.c'], text: 'x', inReplyTo: prefix })).toThrow(/in full: a message's "id" \(64 hex characters\)/);
+    }
+  });
+
+  it('a post id is taken as given, so a reply to a post goes to its author', () => {
+    expect(sendBodyFrom({ text: 'x', inReplyTo: 'post_7Hk2mQ9xLp4Rt8Vw' }).inReplyTo).toBe('post_7Hk2mQ9xLp4Rt8Vw');
+    expect(() => sendBodyFrom({ text: 'x', inReplyTo: 'short_id' })).toThrow(NetworkUsageError);
+  });
+
+  it('a reply needs no --to: it goes to everyone on the message (reply-all); --to adds people on top', () => {
+    expect(sendBodyFrom({ text: 'x', inReplyTo: ID })).toMatchObject({ to: [], inReplyTo: ID });
+    expect(sendBodyFrom({ to: ['c@d.e'], text: 'x', inReplyTo: ID }).to).toEqual(['c@d.e']);
+    expect(() => sendBodyFrom({ text: 'x', subject: 's' })).toThrow(/Give at least one --to.*A reply, --in-reply-to <id>, needs none/);
   });
 
   it('a new thread needs --subject; a reply keeps its thread\'s', () => {

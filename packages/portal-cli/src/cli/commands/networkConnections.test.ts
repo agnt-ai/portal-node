@@ -26,20 +26,32 @@ describe('network wait: a connection request', () => {
 });
 
 describe('connection commands', () => {
-  it('discover: a bare word is a name, a dotted one a domain, an @ an address; nothing at all is a usage error', async () => {
+  it('discover: free text goes whole as q; the older flags as before; nothing at all is a usage error', async () => {
     const discover = vi.fn().mockResolvedValue({ results: [], more: false });
     const client = fakeClient({ discover });
-    await networkDiscover(client, 'maria', {});
-    await networkDiscover(client, 'acme.example.net', {});
+    await networkDiscover(client, '  someone who caters weddings in Austin ', {});
     await networkDiscover(client, 'maria@acme.example.net', {});
     await networkDiscover(client, undefined, { name: 'bob', assistant: 'as1' });
+    await networkDiscover(client, undefined, { domain: 'acme.example.net' });
     expect(discover.mock.calls.map((c) => c[0])).toEqual([
-      { name: 'maria', domain: undefined, address: undefined, assistant: undefined },
-      { name: undefined, domain: 'acme.example.net', address: undefined, assistant: undefined },
-      { name: undefined, domain: undefined, address: 'maria@acme.example.net', assistant: undefined },
+      { q: 'someone who caters weddings in Austin', assistant: undefined },
+      { q: 'maria@acme.example.net', assistant: undefined },
       { name: 'bob', domain: undefined, address: undefined, assistant: 'as1' },
+      { name: undefined, domain: 'acme.example.net', address: undefined, assistant: undefined },
     ]);
     await expect(networkDiscover(client, undefined, {})).rejects.toBeInstanceOf(NetworkUsageError);
+    await expect(networkDiscover(client, '   ', {})).rejects.toBeInstanceOf(NetworkUsageError);
+  });
+
+  it('discover: the server\'s hint, else a plain line when nobody matched; never a word about connection requests', async () => {
+    const miss = await networkDiscover(fakeClient({ discover: vi.fn().mockResolvedValue({ results: [] }) }), 'zz', {});
+    expect(miss.notice).toMatch(/^note: nobody matched/);
+    expect(JSON.stringify(miss.result)).not.toMatch(/request/i);
+    const hinted = await networkDiscover(fakeClient({ discover: vi.fn().mockResolvedValue({ results: [], hint: ' From the server. ' }) }), 'zz', {});
+    expect(hinted.notice).toBe('note: From the server.');
+    const hit = await networkDiscover(fakeClient({ discover: vi.fn().mockResolvedValue({ results: [{ address: 'a@x.test', about: 'florist', matched: 'profile', score: 2 }] }) }), 'florist', {});
+    expect(hit.notice).toBeUndefined();
+    expect(hit.result.results[0]).toMatchObject({ address: 'a@x.test', matched: 'profile' });
   });
 
   it('requests, one request, decide, connections, disconnect and mutual call the matching resource method', async () => {

@@ -22,19 +22,22 @@ export interface NetworkDiscoverOptions extends NetworkBaseOptions { name?: stri
 
 /** Only agents that chose to be found are listed; an agent that did not, and an address nobody holds, look the same. */
 export async function networkDiscover(client: PortalClient, query: string | undefined, opts: NetworkDiscoverOptions) {
-  const name = opts.name ?? (query && !query.includes('@') && !query.includes('.') ? query : undefined);
-  const address = opts.address ?? (query?.includes('@') ? query : undefined);
-  const domain = opts.domain ?? (query && !query.includes('@') && query.includes('.') ? query : undefined);
-  if (!name && !domain && !address) {
-    throw new NetworkUsageError('Give a name, a domain or an address: network discover <name> | --domain <domain> | --address <Network ID>.');
+  // Free text goes to the server whole: it matches profiles and posts, and an exact email, phone or name as before.
+  // --name, --domain and --address are the older exact searches.
+  const q = query?.trim() || undefined;
+  if (!q && !opts.name && !opts.domain && !opts.address) {
+    throw new NetworkUsageError('Say what you are looking for: network discover "<a name, a company, an email, a phone, or what you need>".');
   }
-  const found = await client.network.discover({ name, domain, address, assistant: opts.assistant });
+  const found = await client.network.discover(q ? { q, assistant: opts.assistant } : { name: opts.name, domain: opts.domain, address: opts.address, assistant: opts.assistant });
+  const none = !found.results?.length;
+  const hint = typeof found.hint === 'string' && found.hint.trim() ? found.hint.trim() : undefined;
   return {
     result: {
       ...found,
-      note: 'Only agents whose person chose to be found are listed. "degree" 1 is a connection, 2 a friend of a connection. ' +
-        'Writing to someone you are not connected to sends them a request; they decide.',
+      note: 'Results are agents who listed themselves (a profile) or posted publicly (a post), best first. ' +
+        'Write to any of them with send --to <address>; answering a post (--in-reply-to its id) is a private message to its author.',
     },
+    ...(hint ? { notice: `note: ${hint}` } : none ? { notice: 'note: nobody matched. Try other words, or write to their email or phone with send: it reaches the assistant they chose.' } : {}),
   };
 }
 

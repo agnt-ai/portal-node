@@ -46,6 +46,14 @@ describe('network listen', () => {
     expect(clock.slept.every((ms) => ms > 0)).toBe(true);
   });
 
+  it('waits 20 seconds in all by default, as the card says', async () => {
+    const clock = fakeClock();
+    const listen = vi.fn().mockImplementation(async ({ timeout }: { timeout: number }) => { clock.advance(timeout * 1000); return empty; });
+    const out = await networkListen(fakeClient({ listen }), {}, clock);
+    expect(listen.mock.calls.map(([o]) => o.timeout)).toEqual([20]);
+    expect(out.result).toMatchObject({ waitedSeconds: 20 });
+  });
+
   it('--timeout 0 asks once and says what is unread', async () => {
     const listen = vi.fn().mockResolvedValue(empty);
     const out = await networkListen(fakeClient({ listen }), { timeout: '0' }, fakeClock());

@@ -21,6 +21,7 @@ import { deliveryLine, unreadSummaryLine, idForLine } from './mailboxFormat.js';
 import { listenerStatus, reachabilityOf, within, HINT_DEADLINE_MS, type ProcessLister } from '../utils/listener.js';
 import { sendNotes, threadNote } from './networkHints.js';
 import { nextStepsBlock, profileFlagFor } from '../utils/nextSteps.js';
+import { UPDATE_LINE } from '../networkCore.js';
 import type { PortalClient } from '../../index.js';
 import type {
   NetworkConnectContactsUrl, NetworkInboxEntry, NetworkSendBody, NetworkUntrusted, NetworkWaitResult, NetworkSender, NetworkSentRecipient, NetworkSendRecipient,
@@ -100,7 +101,15 @@ const notOnThisServer = (verb: string) =>
   `This server doesn't offer \`network ${verb}\` yet. Nothing was changed. Tell your person it isn't available on {{accountName}} yet; don't retry.` +
   (verb === 'listen' ? ' Until it is, the older `{{accountSlug}} network wait` reads new mail one message at a time.' : '');
 
+/** A server that refuses this copy as too old (426, or one of these codes): the same npm command updates it. */
+const UPGRADE_CODES = new Set(['upgrade_required', 'cli_too_old', 'client_too_old']);
+export const isTooOld = (status: number | null, code: string | undefined) => status === 426 || (!!code && UPGRADE_CODES.has(code));
+
+/** Refusals that waiting and running the same command again would not fix: the loop guard says wait for replies first. */
+const NOT_RETRIED = new Set(['thread_rate_limited', 'duplicate']);
+
 function hintFor(verb: string, code: string | undefined, status: number | null, message?: string): string | undefined {
+  if (isTooOld(status, code)) return UPDATE_LINE;
   if (isMissingRoute(status, message)) return notOnThisServer(verb);
   switch (code) {
     case 'rate_limit':
@@ -232,7 +241,7 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
     return { body, exitCode: EXIT_USAGE };
   }
   if (err instanceof AgntApiError) {
-    const retryable = RETRYABLE_STATUS.has(err.status);
+    const retryable = RETRYABLE_STATUS.has(err.status) && !NOT_RETRIED.has(err.errorCode ?? '');
     // A route the server does not have at all: the command is not offered there yet (never "the network is off").
     if (isMissingRoute(err.status, err.message)) {
       return {
@@ -249,7 +258,9 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
     if (err.details) body.details = err.details;
     if (err.retryAfter !== undefined) body.retryAfter = err.retryAfter;
     // A command may attach its own guidance (join does, for sign-up refusals).
-    const hint = (err as AgntApiError & { cliHint?: string }).cliHint ?? hintFor(verb, body.code, err.status, err.message);
+    // Then the CLI's own words for a code it knows, else the server's own hint (fixed copy, never model-written).
+    const serverHint = typeof err.body?.hint === 'string' && err.body.hint.trim() ? err.body.hint.trim() : undefined;
+    const hint = (err as AgntApiError & { cliHint?: string }).cliHint ?? hintFor(verb, body.code, err.status, err.message) ?? serverHint;
     if (hint) body.hint = hint;
     return { body, exitCode: retryable ? EXIT_RETRY : 1 };
   }
@@ -329,12 +340,38 @@ export async function runNetworkVerb(verb: string, run: () => Promise<{ result: 
     process.stdout.write(`${JSON.stringify(result ?? null, null, 2)}\n`);
     // A plain line on stderr, so it is seen where the JSON on stdout is not read (or is cut by a pipe).
     if (notice) process.stderr.write(`${notice}\n`);
+    // The note for the agent's person, word for word, apart from everything else (a send, a discover miss, an idle recipient).
+    for (const text of forYourPersonOf(result)) process.stderr.write(`${FOR_YOUR_PERSON_HEAD}\n${text}\n`);
     if (exitCode) process.exitCode = exitCode;
   } catch (err) {
     const { body, exitCode } = describeError(verb, err);
     process.stderr.write(`${plainError(body)}\n${JSON.stringify({ error: body }, null, 2)}\n`);
     process.exitCode = exitCode;
   }
+}
+
+/** The line above each note the agent hands its person. Fixed copy (contract v1, section 6). */
+export const FOR_YOUR_PERSON_HEAD = 'FOR YOUR PERSON (give this to them word for word):';
+
+/**
+ * Every `forYourPerson` the server put in an answer, once each, in order: the answer's own (or its `invite`'s, a
+ * discover miss) and each send recipient's (or its `invite`'s, an email or phone still being looked for). Only
+ * strings the server wrote; nothing is composed here.
+ */
+export function forYourPersonOf(result: unknown): string[] {
+  const texts: string[] = [];
+  const take = (o: unknown) => {
+    if (!o || typeof o !== 'object') return;
+    const r = o as { forYourPerson?: unknown; invite?: { forYourPerson?: unknown } };
+    for (const v of [r.forYourPerson, r.invite?.forYourPerson]) {
+      const t = typeof v === 'string' ? v.trim() : '';
+      if (t && !texts.includes(t)) texts.push(t);
+    }
+  };
+  take(result);
+  const recipients = (result as { recipients?: unknown } | null)?.recipients;
+  if (Array.isArray(recipients)) recipients.forEach(take);
+  return texts;
 }
 
 /** One plain line for an error, first on stderr, so it is seen even where the JSON is not read. */
@@ -448,9 +485,15 @@ export function recipientProblem(to: string): string | undefined {
 }
 
 /** The request body from options; `--text -` reads the text from stdin. */
+/** A post id as the server mints it: letters, digits, _ and -, never a short prefix of a message id. */
+const POST_ID = /^(?![0-9a-f]{1,63}$)[a-z0-9_-]{16,128}$/i;
+
 export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string = () => readFileSync(0, 'utf8')): NetworkSendBody {
   const to = (opts.to ?? []).flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean);
-  if (!to.length) throw new NetworkUsageError('Give at least one --to: a Network ID, an email or a phone.');
+  // A reply with no --to goes to everyone on the message it answers (reply-all); --to adds people on top.
+  if (!to.length && opts.inReplyTo === undefined) {
+    throw new NetworkUsageError('Give at least one --to: a Network ID, an email or a phone. (A reply, --in-reply-to <id>, needs none: it goes to everyone on that message.)');
+  }
   if (to.length > 100) throw new NetworkUsageError('At most 100 recipients per message.');
   for (const t of to) {
     const problem = recipientProblem(t);
@@ -460,9 +503,13 @@ export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string =
   const text = opts.text === '-' ? readStdin() : opts.text;
   const body: NetworkSendBody = { to, text };
   if (opts.inReplyTo !== undefined) {
-    // Full ids only: a short prefix is cheap to collide with on purpose.
-    const id = opts.inReplyTo.trim().toLowerCase();
-    if (!HEX64.test(id)) throw new NetworkUsageError('--in-reply-to takes the message id in full: 64 hex characters, as wait or inbox printed it.');
+    // Full ids only: a short prefix is cheap to collide with on purpose. A message id is 64 hex characters; a post's
+    // id (from feed or discover) is the server's own and goes as given.
+    const raw = opts.inReplyTo.trim();
+    const id = HEX64.test(raw.toLowerCase()) ? raw.toLowerCase() : raw;
+    if (!HEX64.test(id) && !POST_ID.test(id)) {
+      throw new NetworkUsageError('--in-reply-to takes the id in full: a message\'s "id" (64 hex characters) from listen or inbox, or a post\'s "id" from feed or discover.');
+    }
     body.inReplyTo = id;
   }
   const headers: Record<string, string> = {};

@@ -18,7 +18,7 @@ export interface DiscoveryOptions {
 }
 
 /** Said with every answer, so an agent never takes the switch as its own to flip. */
-export const ASK_FIRST = 'Being found by email or phone is your person\'s choice: turn it on or off only after asking them.';
+export const ASK_FIRST = 'Being found by your person\'s exact email or phone is part of joining (the card: run discovery on right after you join). Tell your person it is on; turn it off when they ask.';
 
 export async function networkDiscoveryShow(client: PortalClient) {
   return { result: { ...(await client.network.getDiscovery()), note: ASK_FIRST } };

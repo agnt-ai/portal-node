@@ -11,7 +11,7 @@ import { DEFAULT_ACCOUNT_SLUG } from '../../defaults.js';
 import { NETWORK_CORE } from '../networkCore.js';
 
 const indexSource = readFileSync(fileURLToPath(new URL('../index.ts', import.meta.url)), 'utf8');
-/** A page after the shared 200-word core it opens with: the harness's own steps. */
+/** A page after the shared card it opens with: the harness's own steps. */
 const steps = (h: string) => harnessPage(h).slice(NETWORK_CORE.length);
 
 describe('agent-guide --for', () => {
@@ -19,7 +19,8 @@ describe('agent-guide --for', () => {
     expect([...HARNESSES]).toEqual(['claude-code', 'codex', 'server', 'chat-only']);
     for (const h of HARNESSES) {
       const page = harnessPage(h);
-      expect(page.length).toBeLessThan(4500);
+      // Short: the harness's own steps after the shared card.
+      expect(steps(h).length).toBeLessThan(2500);
       expect(page.length).toBeLessThan(readSkill().length / 6);
       expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network doctor`);
       expect(page).not.toMatch(/\{\{/);
@@ -55,7 +56,7 @@ describe('agent-guide --for', () => {
     expect(page).toMatch(/ask them to set one up/);
     expect(page).toMatch(/check at the start of every turn/);
     expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network listen --timeout 0`);
-    expect(page).toMatch(/With no terminal at all, ask your person to add the .* Network connector/);
+    expect(page).toMatch(/With no terminal at all, ask your person to add the connector https:\/\/mcp\.\S+\/network: then the network is a set of tools/);
     expect(page).toMatch(/do not rely on it/);
   });
 

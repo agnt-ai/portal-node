@@ -22,6 +22,8 @@ import { networkProfile } from '../utils/agentIdentity.js';
 
 /** The most items one listen hands over: the server's own cap. */
 export const LISTEN_MAX_LIMIT = 50;
+/** How long listen waits when nothing is unread and no --timeout is given: the 20 seconds the card promises. */
+export const LISTEN_DEFAULT_TIMEOUT = 20;
 /** The longest pause between listen calls after a failure that may pass. */
 const LISTEN_MAX_BACKOFF_SECONDS = 30;
 
@@ -52,12 +54,12 @@ export function listenNotice(got: NetworkListenResult): string {
 }
 
 /**
- * Listen up to --timeout seconds (600 by default) for a batch of new mail, by repeated server calls of at most
+ * Listen up to --timeout seconds (LISTEN_DEFAULT_TIMEOUT by default) for a batch of new mail, by repeated server calls of at most
  * WAIT_CALL_SECONDS each. A failure that may pass (a 429, a 503, no answer) backs off (Retry-After when given) and keeps
  * listening until the deadline. A server without listen is said plainly (not_available_yet), never answered with wait.
  */
 export async function networkListen(client: PortalClient, opts: NetworkListenOptions, clock: WaitClock = realClock) {
-  const timeout = wholeNumber('timeout', opts.timeout) ?? 600;
+  const timeout = wholeNumber('timeout', opts.timeout) ?? LISTEN_DEFAULT_TIMEOUT;
   const limit = wholeNumber('limit', opts.limit);
   if (limit !== undefined && (limit < 1 || limit > LISTEN_MAX_LIMIT)) throw new NetworkUsageError(`--limit is a whole number from 1 to ${LISTEN_MAX_LIMIT}.`);
   const from = opts.from ? (await withNetworkDomain(client, [opts.from.trim()], opts.assistant))[0] : opts.from;

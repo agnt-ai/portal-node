@@ -18,10 +18,19 @@ const section = (title: string) => {
 };
 
 describe("the app's network skill (SKILL.md)", () => {
-  it('opens with the 200-word core word for word, right after the version line', () => {
-    const s = section('0. The whole thing in 200 words');
+  it('opens with the card word for word, right after the version line', () => {
+    const s = section('0. The whole thing on one card');
     expect(s).toContain(NETWORK_CORE);
-    expect(skill.indexOf('## 0. The whole thing in 200 words')).toBeLessThan(skill.indexOf('## 1. What this is'));
+    expect(skill.indexOf('## 0. The whole thing on one card')).toBeLessThan(skill.indexOf('## 1. What this is'));
+  });
+
+  it('says to hand over FOR YOUR PERSON word for word, right after the card, and how the three-part hints fit', () => {
+    expect(section('0. The whole thing on one card')).toContain(`${NETWORK_CORE}\n\nWhen the CLI prints FOR YOUR PERSON, give that note to your person word for word to forward.`);
+    const s = section('4. Having a conversation');
+    expect(s).toMatch(/`tellYourPerson` \(say it to them, as it is\s+or in your own words\) and `forYourPerson` \(a note for them to forward, word for word\)/);
+    expect(s).toMatch(/they sit inside\s+`invite`/);
+    expect(s).toMatch(/they sit beside `lastChecked`/);
+    expect(s).toMatch(/Never send the note yourself: your person forwards it\./);
   });
 
   it('is an Agent Skill: frontmatter with name and description, then a version line', () => {
@@ -33,10 +42,10 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(skill).toMatch(/^Skill version \d+ \(\d{4}-\d{2}-\d{2}\)\./m);
   });
 
-  it('has the 200-word core, then the eight sections, in order', () => {
+  it('has the card, then the eight sections, in order', () => {
     const titles = [...skill.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
     expect(titles).toEqual([
-      '0. The whole thing in 200 words', '1. What this is', '2. Your role', '3. Getting on: the first minute', '4. Having a conversation',
+      '0. The whole thing on one card', '1. What this is', '2. Your role', '3. Getting on: the first minute', '4. Having a conversation',
       '5. Stay reachable', '6. Safety', '7. When things go wrong', '8. Command reference',
     ]);
   });
@@ -107,8 +116,8 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(step).toMatch(/your import only fills the fields it has\s+empty, and never removes or overwrites what your person has/);
     expect(step).not.toMatch(/updated with/);
     expect(step).toMatch(/By policy, they don't count as people your person knows until your person has confirmed them\./);
-    expect(step).toMatch(/\*\*Being found\.\*\* Your person can be found on the network by their email or phone, but that is off by\s+default\./);
-    expect(step).toMatch(/You may turn it on for them, but ask your person first: it is their choice, and asking them is\s+your job\. With their yes:/);
+    expect(step).toMatch(/\*\*Being found\.\*\* Your person can be found on the network by their exact email or phone, but that is off\s+by default\./);
+    expect(step).toMatch(/Turn it on right after you join, so anyone with your person's exact email finds you, and tell\s+your person it is on:/);
     expect(step).toContain('network discovery on --profile <your profile>');
     expect(step).toMatch(/`network discovery off` turns it off when your person asks/);
   });
@@ -136,7 +145,8 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toContain('--subject "<a few words>"');
     expect(s).toMatch(/keep `listen` running in the background, and answer as soon as it\s+returns/);
     expect(s).toMatch(/from everyone/);
-    expect(s).not.toContain('--from'); // the conversation habits keep one standing listen for everyone; --from is for a named reply (section 5)
+    // The conversation habits keep one standing listen for everyone; listen --from is for a named reply (section 5).
+    expect(s).not.toMatch(/(listen|wait)[^\n]*--from/);
     expect(skill).not.toContain('--header subject');
     expect(s).toMatch(/Before you send in a thread, answer what is new first/);
     expect(s).toMatch(/\*\*Short turns\.\*\*/);
@@ -287,7 +297,8 @@ describe("the app's network skill (SKILL.md)", () => {
 
   it(`speaks of the app's network and SIMON, never of AGNT, and never calls a Network ID an email`, () => {
     // Error codes (agnt_*) are the server's identifiers, which an agent matches exactly; nothing else says AGNT.
-    expect(skill.replace(/`agnt_[a-z_]+`/g, '')).not.toMatch(/agnt/i);
+    // So is the npm package the install command names (@agnt-sdk/<app>): the agent types it exactly.
+    expect(skill.replace(/`agnt_[a-z_]+`/g, '').replace(/@agnt-sdk\/[a-z0-9{}A-Z-]+/g, '')).not.toMatch(/agnt/i);
     expect(skill).not.toMatch(/internal|producer contract|migration decision/i);
     expect(skill).not.toMatch(/Network ID is (an|your) email/i);
     expect(CONVERSATION).not.toMatch(/AGNT/);

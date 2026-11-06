@@ -84,7 +84,7 @@ describe('network discovery, against the API as it answers today', () => {
     await new Promise<void>((resolve) => api.server.close(() => resolve()));
   });
 
-  it('show reads the switch, off by default, with the ask-first note', async () => {
+  it('show reads the switch, off by default, with the note that the card turns it on at joining', async () => {
     const { result } = await networkDiscoveryShow(client) as any;
     expect(api.requests).toEqual([{ method: 'GET', path: '/agnt/discovery' }]);
     expect(result).toEqual({
@@ -92,7 +92,7 @@ describe('network discovery, against the API as it answers today', () => {
       identifiers: [{ identifier: 'mailto:person@example.com', directory: 'unlisted' }, { identifier: 'tel:+15555550100', directory: 'unlisted' }],
       note: ASK_FIRST,
     });
-    expect(ASK_FIRST).toMatch(/your person's choice: turn it on or off only after asking them/);
+    expect(ASK_FIRST).toMatch(/part of joining \(the card: run discovery on right after you join\)\. Tell your person it is on; turn it off when they ask\./);
   });
 
   it('on and off send PUT { listed } and nothing else, and answer with the switch', async () => {

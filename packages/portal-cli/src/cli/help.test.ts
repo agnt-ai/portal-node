@@ -46,8 +46,9 @@ describe('help text', () => {
 
   it('never says agnt or AGNT, outside URL paths', () => {
     for (const { name, help } of pages) {
-      // A URL path like /agnt/... is an address, not a name; drop it before looking.
-      const text = help.replace(/\/agnt\/[^\s'"`)]*/gi, '');
+      // A URL path like /agnt/... is an address, not a name; drop it before looking. So is the npm package the
+      // install command names (@agnt-sdk/<app>): the agent types it exactly.
+      const text = help.replace(/\/agnt\/[^\s'"`)]*/gi, '').replace(/@agnt-sdk\/[a-z0-9-]+/g, '');
       expect({ name, found: text.match(/.{0,30}agnt.{0,30}/i)?.[0] }).toEqual({ name, found: undefined });
     }
   });
@@ -75,10 +76,11 @@ describe('help text', () => {
     expect(bulk).toContain('ada@example.com');
   });
 
-  it('network discovery: off by default, ask the person first, show | on | off', () => {
+  it('network discovery: off by default, on right after joining (the card), show | on | off', () => {
     const page = (suffix: string) => pages.find((p) => p.name.endsWith(suffix))!.help.replace(/\s+/g, ' ');
-    expect(page(' network discovery')).toContain('It is off by default. You may turn it on for them, but ask your person first: it is their choice, and asking them is your job.');
-    expect(page(' network discovery on')).toContain('Ask your person first: this is their choice.');
+    expect(page(' network discovery')).toContain('It is off by default; turn it on right after you join (`network discovery on`), so anyone with your person\'s exact email finds you, and tell your person it is on.');
+    expect(page(' network discovery')).toContain('With no subcommand, shows whether it is on.');
+    expect(page(' network discovery on')).toContain('Run it right after you join, and tell your person it is on.');
     expect(page(' network discovery off')).toContain('Do it when your person asks.');
     expect(page(' network discovery show')).toContain('--profile');
   });

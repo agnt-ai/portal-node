@@ -457,20 +457,38 @@ describe('network: the compiled CLI against the API as it answers today, two age
     for (const out of [inbox, send, verify]) expect(out.stdout).not.toMatch(/--json/);
   });
 
-  it('the help leads with the 200 words and the six verbs, and listen says how to check', async () => {
+  it('the help leads with the card, before the usage line, then the network verbs, and listen says how to check', async () => {
     const { NETWORK_CORE } = await import('../networkCore.js');
+    // The source is hydrated before it is built and tested, so the card is already the app's own text.
+    const card = (t: string) => t;
+    const flat = (t: string) => t.replace(/\s+/g, ' ').trim();
     const network = await cli(['network', '--help']);
-    // The description is the core, word for word (commander wraps it, so compare with the spacing collapsed).
-    const flat = (t: string) => t.replace(/\s+/g, ' ');
-    expect(flat(network.stdout)).toContain(flat(NETWORK_CORE).replace(/\{\{accountSlug\}\}/g, 'test').replace(/\{\{accountName\}\}/g, 'Test Account'));
-    const start = network.stdout.indexOf('Start here (these six hold a whole conversation):');
+    const root = await cli(['--help']);
+    const bare = await cli([]);
+    // The card, word for word, is the first thing on each page (commander wraps it: compare with spacing collapsed).
+    for (const page of [network, root, bare]) {
+      expect(page.code).toBe(0);
+      expect(flat(page.stdout).startsWith(flat(card(NETWORK_CORE)))).toBe(true);
+    }
+    // No arguments is the same page as --help, on stdout.
+    expect(bare.stdout).toBe(root.stdout);
+    const { DEFAULT_ACCOUNT_SLUG } = await import('../../defaults.js');
+    expect(flat(root.stdout)).toContain(`Needs version 0.2.11 or later; an older copy must be updated with the same npm command: npm i -g @agnt-sdk/${DEFAULT_ACCOUNT_SLUG}`);
+    const start = network.stdout.indexOf('Start here:');
     const more = network.stdout.indexOf('\nMore:');
     expect(start).toBeGreaterThan(-1);
     expect(more).toBeGreaterThan(start);
     const core = network.stdout.slice(start, more);
-    for (const verb of ['join', 'send', 'listen', 'inbox', 'block', 'leave']) expect(core).toMatch(new RegExp(`\\n  ${verb}\\b`));
+    const verbs = ['join', 'whoami', 'profile', 'discover', 'send', 'post', 'feed', 'listen', 'inbox', 'block'];
+    const at = verbs.map((verb) => core.search(new RegExp(`\\n  ${verb}\\b`)));
+    expect(at.every((i) => i > -1)).toBe(true);
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
     // Connection requests are gone from the help: anyone with the address can write.
     expect(network.stdout).not.toMatch(/\n  (requests|accept|decline|connections)\b/);
+    // Nothing recommends the drain that prints and marks a whole backlog at once.
+    for (const page of [network, root, await cli(['network', 'watch', '--help']), await cli(['network', 'doctor', '--help'])]) {
+      expect(page.stdout).not.toMatch(/--drain --print|drain\s+--print/);
+    }
     const listen = await cli(['network', 'listen', '--help']);
     expect(listen.stdout).toMatch(/marks exactly those read as it hands them over/);
     expect(listen.stdout).toMatch(/never call it in a faster loop/);

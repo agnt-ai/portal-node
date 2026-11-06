@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { networkJoin, pickUsername, guessProduct, randomSuffix, SUFFIX_ALPHABET, usernameOf } from './networkJoin.js';
+import { networkJoin, pickUsername, guessProduct, randomSuffix, SUFFIX_ALPHABET, usernameOf, defaultUsername } from './networkJoin.js';
 import { NetworkUsageError, describeError } from './network.js';
 import { saveProfile, resolveProfile } from '../utils/credentials.js';
 import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
@@ -87,16 +87,19 @@ describe('network join', () => {
     expect(result.findCode).toMatch(/inbox.*first.*verification email to person@example\.com sent after .*askUser/);
     expect(Date.parse(result.sentAt)).not.toBeNaN();
     // Every choice repeated, the API included, so step 2 signs up what step 1 meant.
-    expect(result.next).toMatch(/network join --email person@example\.com --account acme --api-url https:\/\/api\.example\.test --username <the username your person confirmed> --code <the code>$/);
-    // The agent is told to choose a username and get its person's yes before it registers.
-    expect(result.chooseUsername).toMatch(/fun and memorable.*jerrylovesicecream.*"I'd like the username <it>, OK\?".*Only after they say yes.*bare first name such as john.*refused/);
+    expect(result.next).toMatch(/network join --email person@example\.com --account acme --api-url https:\/\/api\.example\.test --code <the code>$/);
+    // No name to pick: step 1 says the default it will take, and how to pick another.
+    expect(result).toMatchObject({ username: 'person-agent' });
+    expect(result.nameNote).toMatch(/^You will join as person-agent .*add --name <short name> to the next command/);
+    expect(result).not.toHaveProperty('chooseUsername');
     expect(result.warning).toMatch(/sends your user's sign-in code to https:\/\/api\.example\.test, not the default API/);
   });
 
   it('step 1 repeats the chosen username and quotes what needs quoting', async () => {
     global.fetch = vi.fn().mockResolvedValue(answer(200, { ok: true })) as any;
-    const { result } = await networkJoin({ email: 'person@example.com', account: 'acme', username: 'sally', displayName: 'Sally O\'Neil', profile: '-odd' }) as any;
-    expect(result.next).toMatch(/ --username sally --display-name 'Sally O'\\''Neil' --profile=-odd --account acme --code <the code>$/);
+    const { result } = await networkJoin({ email: 'person@example.com', account: 'acme', name: 'sally', displayName: 'Sally O\'Neil', profile: '-odd' }) as any;
+    expect(result.username).toBe('sally');
+    expect(result.next).toMatch(/ --name sally --display-name 'Sally O'\\''Neil' --profile=-odd --account acme --code <the code>$/);
     expect(result.warning).toBeUndefined();
   });
 
@@ -221,7 +224,7 @@ describe('network join', () => {
     global.fetch = vi.fn().mockResolvedValue(answer(201, { ...joined('codex-7k3m9q2x'), nextSteps: serverCard })) as any;
     const fromServer = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
     expect(fromServer.result.firstCard).toBe(serverCard);
-    // The network in 200 words comes first, then the card, then what to do now.
+    // The network card comes first, then the first card of steps, then what to do now.
     expect(fromServer.notice.startsWith(`${NETWORK_CORE}\n\n${serverCard}\n\n`)).toBe(true);
     expect(fromServer.notice.endsWith(fromServer.result.whatToDoNow)).toBe(true);
 
@@ -281,16 +284,28 @@ describe('network join', () => {
     expect((global.fetch as any).mock.calls).toHaveLength(1);
     expect(describeError('join', err).body.hint).toMatch(/Ask your user/);
   });
-  it('step 2 will not run without a username the person confirmed: nothing is sent, the code is not used up', async () => {
-    const fetchMock = vi.fn();
-    global.fetch = fetchMock as any;
-    const err = await networkJoin({ email: 'person@example.com', code: '123456', account: 'acme' }).catch((e) => e);
-    expect(err).toBeInstanceOf(NetworkUsageError);
-    expect(fetchMock).not.toHaveBeenCalled();
-    const { body, exitCode } = describeError('join', err);
-    expect(exitCode).toBe(2);
-    expect(body.message).toMatch(/Give --username: the username your person confirmed.*"I'd like the username <it>, OK\?".*the code still works.*--random-username/);
-    await expect(networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'a-b', randomUsername: true })).rejects.toThrow(/not both/);
+  it('step 2 without a name joins as the email\'s first part plus "-agent", and a free name like it when that is taken', async () => {
+    const tried: string[] = [];
+    global.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+      const username = JSON.parse(init.body).agent.username;
+      tried.push(username);
+      if (tried.length === 1) return answer(409, { status: 409, error_code: 'agnt_username_taken', error: 'That username is taken; choose another' });
+      return answer(201, joined(username));
+    }) as any;
+    const { result } = await networkJoin({ email: 'Dana.Lee+work@example.com', code: '1', account: 'acme' }) as any;
+    expect(tried[0]).toBe('dana-lee-work-agent');
+    expect(tried[1]).toMatch(/^dana-lee-work-agent-[a-z2-9]{8}$/);
+    expect(result.username).toBe(tried[1]);
+    await expect(networkJoin({ email: 'person@example.com', code: '1', account: 'acme', name: 'a-b', randomUsername: true })).rejects.toThrow(/not both/);
+  });
+
+  it('defaultUsername keeps to the username alphabet and 28 characters', () => {
+    expect(defaultUsername('dana@example.com')).toBe('dana-agent');
+    expect(defaultUsername('Ünïcode__Name..x@example.com')).toBe('n-code-name-x-agent');
+    expect(defaultUsername(`${'a'.repeat(40)}@example.com`)).toBe(`${'a'.repeat(22)}-agent`);
+    expect(defaultUsername('---@example.com')).toBe('my-agent');
+    for (const e of ['dana@example.com', `${'ab-'.repeat(20)}@x.com`]) expect(defaultUsername(e)).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+    expect(defaultUsername(`${'ab-'.repeat(20)}@x.com`).length).toBeLessThanOrEqual(28);
   });
 
   it('registers exactly the username the person confirmed, and says it without the domain', async () => {
@@ -303,10 +318,10 @@ describe('network join', () => {
     expect(usernameOf('a-b@x.example')).toBe('a-b');
   });
 
-  it('a username that is taken or reserved is never swapped for a random one: the agent is told to ask its person again', async () => {
+  it('a name given with --name that is taken or reserved is never swapped for another: join says so, the code still works', async () => {
     for (const [status, code, error, hint] of [
-      [409, 'agnt_username_taken', 'That username is taken; choose another', /taken.*the code still works: propose a different one to your person.*--random-username/],
-      [400, 'agnt_username_reserved', 'That username is a first name, which we keep for the network\'s own assistants. Pick something longer or more distinctive', /reserved.*propose a longer or more distinctive one to your person.*--random-username/],
+      [409, 'agnt_username_taken', 'That username is taken; choose another', /taken.*the code still works: run the same join command with another --name, or without --name/],
+      [400, 'agnt_username_reserved', 'That username is a first name, which we keep for the network\'s own assistants. Pick something longer or more distinctive', /reserved.*with a longer --name.*or without --name/],
     ] as const) {
       const fetchMock = vi.fn().mockResolvedValue(answer(status, { status, error_code: code, error }));
       global.fetch = fetchMock as any;
