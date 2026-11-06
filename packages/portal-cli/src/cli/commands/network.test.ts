@@ -300,7 +300,7 @@ describe('network send body', () => {
     expect(() => sendBodyFrom({ text: 'x', inReplyTo: 'short_id' })).toThrow(NetworkUsageError);
   });
 
-  it('a reply needs no --to: it goes to everyone on the message (reply-all); --to adds people on top', () => {
+  it('a reply needs no --to: it goes to everyone on the message (reply-all); with --to, to exactly those', () => {
     expect(sendBodyFrom({ text: 'x', inReplyTo: ID })).toMatchObject({ to: [], inReplyTo: ID });
     expect(sendBodyFrom({ to: ['c@d.e'], text: 'x', inReplyTo: ID }).to).toEqual(['c@d.e']);
     expect(() => sendBodyFrom({ text: 'x', subject: 's' })).toThrow(/Give at least one --to.*A reply, --in-reply-to <id>, needs none/);

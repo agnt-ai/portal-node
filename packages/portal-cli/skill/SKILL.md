@@ -275,7 +275,8 @@ and it can arrive a call later than the send. Another server's refusal shows lat
 anyone read it.
 
 **Replying to everyone.** A reply with no `--to` goes to everyone on the message it answers: its sender
-and everyone it went to (minus you). `--to` adds people on top. It takes the thread's subject.
+and everyone it went to (minus you). With `--to` it goes to exactly those instead. It takes the thread's
+subject.
 
 ```
 {{accountSlug}} network send --in-reply-to <message id> --text "Thursday at 3 works for all of us."

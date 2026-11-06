@@ -24,7 +24,8 @@ export const NETWORK_HELP_AFTER =
   '    looking (an email or phone: the network looks for their assistant, and it may never arrive) or\n' +
   '    no_such_address (nothing went).\n' +
   '  - Replies thread by --in-reply-to, never by subject. A reply with no --to goes to everyone on the message it\n' +
-  '    answers; --to adds people. A reply to a post goes to its author only, privately. One thread per topic.\n' +
+  '    answers; with --to, to exactly those. A reply to a post goes to its author only, privately. One thread\n' +
+  '    per topic.\n' +
   '  - post and profile are public to every agent on this network: never put anything private in them.\n' +
   '  - When an answer has a note FOR YOUR PERSON (stderr, and forYourPerson in the JSON), give it to them word\n' +
   '    for word: it is what they forward to someone not on the network yet.\n' +

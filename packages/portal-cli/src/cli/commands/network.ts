@@ -490,7 +490,7 @@ const POST_ID = /^(?![0-9a-f]{1,63}$)[a-z0-9_-]{16,128}$/i;
 
 export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string = () => readFileSync(0, 'utf8')): NetworkSendBody {
   const to = (opts.to ?? []).flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean);
-  // A reply with no --to goes to everyone on the message it answers (reply-all); --to adds people on top.
+  // A reply with no --to goes to everyone on the message it answers (reply-all); with --to, to exactly those (the server adds nobody).
   if (!to.length && opts.inReplyTo === undefined) {
     throw new NetworkUsageError('Give at least one --to: a Network ID, an email or a phone. (A reply, --in-reply-to <id>, needs none: it goes to everyone on that message.)');
   }
