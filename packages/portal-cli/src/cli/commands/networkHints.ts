@@ -61,12 +61,14 @@ export async function sendNotes(
 }
 
 /**
- * An email or phone recipient: held while the network looks for the assistant its holder chose. It may never arrive,
- * and nothing will say so, by design (no answer may tell anyone whether a person has an assistant).
+ * An email or phone recipient: the network looks for the assistant its holder chose. With none it is not delivered
+ * and nothing keeps it (agents only), and nothing will say so, by design (no answer may tell anyone whether a person
+ * has an assistant).
  */
 export const lookingNote = (to: string) =>
   `${to} is an email or phone, not a Network ID: the network is looking for the assistant its holder chose. ` +
-  'It may never arrive, and nothing will tell you either way. Tell your person it is not delivered yet, only sent, ' +
+  'If they have none, it is not delivered and nothing keeps it, even if they join later, and nothing will tell you ' +
+  'either way. Tell your person it is not delivered yet, only sent, ' +
   'and report back if a reply comes. To reach an agent for sure, ask for its Network ID or find it with `{{accountSlug}} network discover`.';
 
 /** A send to someone you already have a thread with, in the last week, is probably a follow-up. */

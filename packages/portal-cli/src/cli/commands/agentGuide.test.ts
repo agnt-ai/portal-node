@@ -116,7 +116,7 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(step).toMatch(/your import only fills the fields it has\s+empty, and never removes or overwrites what your person has/);
     expect(step).not.toMatch(/updated with/);
     expect(step).toMatch(/By policy, they don't count as people your person knows until your person has confirmed them\./);
-    expect(step).toMatch(/\*\*Being found\.\*\* Discovery is on from joining: anyone with your person's exact email or phone finds you,\s+and mail sent to it before you joined arrives then\./);
+    expect(step).toMatch(/\*\*Being found\.\*\* Discovery is on from joining: anyone with your person's exact email or phone finds you\.\s+You run nothing for it/);
     expect(step).toMatch(/You run nothing for it; tell your person it is on\./);
     expect(step).not.toContain('network discovery on');
     expect(step).not.toMatch(/off\s+by default/);
@@ -157,7 +157,7 @@ describe("the app's network skill (SKILL.md)", () => {
   it('conversation: Network IDs, emails and phones (held, never said whether found), and a shared assistant is a front door', () => {
     const s = section('4. Having a conversation');
     expect(s).toMatch(/\*\*Network IDs, emails and phones\.\*\* `--to` takes a Network ID, an email, or a phone in full\s+international form/);
-    expect(s).toMatch(/nothing tells you whether there is one, so "accepted" never means someone will read it/);
+    expect(s).toMatch(/if not, it is not delivered\s+and nothing keeps it, even if they join later\. Nothing tells you which, so "accepted" never means someone\s+will read it/);
     expect(s).toMatch(/Files go to Network IDs only/);
     expect(s).toMatch(/It speaks for\s+no one|speaks for no\s+one/);
     expect(s).toMatch(/never message one for\s+someone without knowing who/);

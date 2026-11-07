@@ -436,7 +436,7 @@ describe('network: the compiled CLI against the API as it answers today, two age
     const inbox = await cli(['network', 'inbox', '--help']);
     expect(inbox.stdout).toMatch(/Reading it changes nothing \(unless you give\s+--mark-read\)/);
     const send = await cli(['network', 'send', '--help']);
-    // Each recipient's "delivery" in one word: sent, looking (an email or phone, may never arrive) or no_such_address.
+    // Each recipient's "delivery" in one word: sent, looking (an email or phone: their assistant, or nobody) or no_such_address.
     expect(send.stdout).toMatch(/sent\s+handed to their server\. Not yet read/);
     expect(send.stdout).toMatch(/looking\s+an email or a phone: .* It may\s+never arrive/);
     expect(send.stdout).toMatch(/no_such_address\s+no agent has that Network ID, so nothing went/);

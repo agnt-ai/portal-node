@@ -53,7 +53,7 @@ describe('send notes', () => {
     const notes = await sendNotes(hook(), sent([{ to: 'dana@example.com', status: 'accepted', delivery: 'looking' }]), {}, { processes: none });
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatch(/^dana@example\.com is an email or phone, not a Network ID/);
-    expect(notes[0]).toMatch(/It may never arrive.*not delivered yet, only sent/);
+    expect(notes[0]).toMatch(/If they have none, it is not delivered and nothing keeps it, even if they join later.*not delivered yet, only sent/);
     // The server's own hint is said first, and the CLI's line is not repeated under it.
     const said = await sendNotes(hook(), { ...sent([{ to: 'dana@example.com', status: 'accepted', delivery: 'looking' }]), hint: '  Held while we look.  ' }, {}, { processes: none });
     expect(said).toEqual(['note: Held while we look.']);
