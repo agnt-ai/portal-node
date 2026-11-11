@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, mkdirSync, chmodSync, utimesSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -32,6 +32,8 @@ const deps = (over: Partial<UpdateCheckDeps> = {}): UpdateCheckDeps => ({
   ...over,
 });
 const state = () => JSON.parse(readFileSync(statePath, 'utf8'));
+const stampPath = () => join(dirname(statePath), 'update-notice');
+const stamp = () => Number(readFileSync(stampPath(), 'utf8'));
 const seed = (s: Record<string, unknown>) => {
   mkdirSync(dirname(statePath), { recursive: true });
   writeFileSync(statePath, JSON.stringify(s));
@@ -141,6 +143,24 @@ describe('startUpdateCheck', () => {
     expect(warnings).toEqual([]);
   });
 
+  it('the day is 24 hours', () => {
+    expect(CHECK_EVERY_MS).toBe(86_400_000);
+  });
+
+  it('a pre-release copy counts as its release number: 0.2.3-beta.1 is behind 0.2.11', async () => {
+    seed({ checkedAt: T0, latest: '0.2.11' });
+    await startUpdateCheck(['a'], '0.2.3-beta.1', deps());
+    expect(warnings).toEqual([noticeText('tool', [0, 2, 3], [0, 2, 11])]);
+  });
+
+  it('shows nothing when it cannot record that it showed the notice (it would show it every time)', async () => {
+    seed({ checkedAt: T0, latest: '0.2.11' });
+    mkdirSync(join(stampPath(), 'in-the-way'), { recursive: true }); // the stamp's place is taken by a directory
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(warnings).toEqual([]);
+    expect(existsSync(`${stampPath()}.lock`)).toBe(false);
+  });
+
   it('shows the notice once a day, not on every command', async () => {
     seed({ checkedAt: T0, latest: '0.2.11' });
     await startUpdateCheck(['a'], '0.2.3', deps());
@@ -148,6 +168,7 @@ describe('startUpdateCheck', () => {
     clock = T0 + DAY - 1;
     await startUpdateCheck(['c'], '0.2.3', deps());
     expect(warnings).toHaveLength(1);
+    expect(stamp()).toBe(T0);
     clock = T0 + DAY + 1;
     seed({ ...state(), checkedAt: clock }); // a fresh answer, so only the notice's own day is in question
     await startUpdateCheck(['d'], '0.2.3', deps());
@@ -205,15 +226,46 @@ describe('startUpdateCheck', () => {
     expect(warnings).toEqual([]);
   });
 
-  it('is silent when the notice itself cannot be written', async () => {
+  it('says nothing, and fails nothing, when the notice cannot be claimed because the directory cannot be written', async () => {
     seed({ checkedAt: T0, latest: '0.2.11' });
     chmodSync(dirname(statePath), 0o500);
     try {
-      await startUpdateCheck(['a'], '0.2.3', deps());
-      expect(warnings).toHaveLength(1);
+      await expect(startUpdateCheck(['a'], '0.2.3', deps())).resolves.toBeUndefined();
+      expect(warnings).toEqual([]); // it could not record that it was shown, so it would show every time: it does not show
     } finally {
       chmodSync(dirname(statePath), 0o700);
     }
+  });
+
+  it('records that the notice was shown BEFORE printing it, and does not leave its lock behind', async () => {
+    seed({ checkedAt: T0, latest: '0.2.11' });
+    let atPrint: { stamp?: number; lock?: boolean } = {};
+    await startUpdateCheck(['a'], '0.2.3', deps({ warn: () => { atPrint = { stamp: stamp(), lock: existsSync(`${stampPath()}.lock`) }; } }));
+    expect(atPrint).toEqual({ stamp: T0, lock: false });
+    expect(existsSync(`${stampPath()}.lock`)).toBe(false);
+  });
+
+  it('commands started at the same moment show the notice once: whoever holds the claim shows it, the rest do not', async () => {
+    seed({ checkedAt: T0, latest: '0.2.11' });
+    mkdirSync(`${stampPath()}.lock`); // another command is claiming right now
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(warnings).toEqual([]);
+    utimesSync(`${stampPath()}.lock`, 1, 1); // a lock left by a killed command is cleared (and the next command shows the notice)
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(warnings).toEqual([]);
+    expect(existsSync(`${stampPath()}.lock`)).toBe(false);
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('only a leading --version or -V is a request for the version: a value that looks like it is not', async () => {
+    getJson.mockReturnValue(new Promise(() => {}));
+    seed({ checkedAt: T0 - 2 * DAY, latest: '0.2.11' });
+    const started = Date.now();
+    await startUpdateCheck(['tasks', 'create', '--title', '-V'], '0.2.3', deps());
+    await startUpdateCheck(['tasks', 'create', '--title', '--version'], '0.2.3', deps());
+    expect(Date.now() - started).toBeLessThan(300); // it did not wait for the answer
+    expect(warnings).toHaveLength(1); // and the notice came under the once-a-day rule, not on demand
   });
 
   it('opt-out: NETWORK_NO_UPDATE_CHECK or NO_UPDATE_NOTIFIER stops the notice and the request', async () => {
@@ -259,7 +311,7 @@ describe('startUpdateCheck', () => {
     await startUpdateCheck(['a'], '0.2.3', deps());
     expect(warnings).toEqual([]);
     // and a state file edited by hand cannot make the notice say anything either
-    seed({ checkedAt: T0, latest: '9.9.9\nnpm i -g evil-package', noticeAt: 'x' });
+    seed({ checkedAt: T0, latest: '9.9.9\nnpm i -g evil-package' });
     await startUpdateCheck(['a'], '0.2.3', deps());
     expect(warnings).toEqual([]);
   });
@@ -288,7 +340,8 @@ describe('startUpdateCheck', () => {
   });
 
   it('a clock that ran backwards does not freeze the check', async () => {
-    seed({ checkedAt: T0 + 10 * DAY, latest: '0.2.11', noticeAt: T0 + 10 * DAY });
+    seed({ checkedAt: T0 + 10 * DAY, latest: '0.2.11' });
+    writeFileSync(stampPath(), `${T0 + 10 * DAY}\n`);
     await startUpdateCheck(['a'], '0.2.3', deps());
     await settle();
     expect(warnings).toHaveLength(1);
@@ -338,6 +391,16 @@ describe('the real dependencies', () => {
 
     it('reads a version document', async () => {
       await expect(real().getJson(url, 1000)).resolves.toEqual({ version: '0.2.11' });
+    });
+    it('refuses a VALID answer bigger than the cap, and a redirect or any status but 200', async () => {
+      respond = (res) => res.end(JSON.stringify({ version: '0.2.11', pad: 'x'.repeat(300 * 1024) }));
+      await expect(real().getJson(url, 1000)).rejects.toThrow(/too large/);
+      for (const status of [201, 204, 301, 302, 304]) {
+        respond = (res) => { res.statusCode = status; res.setHeader('location', url); res.end(JSON.stringify({ version: '0.2.11' })); };
+        await expect(real().getJson(url, 1000)).rejects.toThrow(new RegExp(`status ${status}`));
+      }
+      respond = (res) => res.end(JSON.stringify({ version: '0.2.11', pad: 'x'.repeat(100 * 1024) }));
+      await expect(real().getJson(url, 1000)).resolves.toMatchObject({ version: '0.2.11' }); // under the cap is fine
     });
     it('gives up on a slow server, a bad status, a bad body and an oversize body', async () => {
       respond = () => {};

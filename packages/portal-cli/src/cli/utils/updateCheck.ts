@@ -12,13 +12,13 @@
  *    most that timeout (the process exits at once when a command calls process.exit). The notice appears on the next run.
  *    Every failure is silent. The one command that waits for the answer first is an explicit `--version`: asking which
  *    version this is also asks whether it is current.
- *  - The notice is on STDERR only, at most once a day while the copy is out of date (always on `--version`). stdout, which
+ *  - The notice is on STDERR only, about once a day while the copy is out of date (on `--version`, whenever a newer copy is known). stdout, which
  *    agents parse as JSON, and every exit status are untouched.
  *  - Off with NETWORK_NO_UPDATE_CHECK=1 (or the common NO_UPDATE_NOTIFIER). Not switched off by CI: a clean CI machine has no state
  *    file, so it prints nothing and costs one background request at most, while agent harnesses often set CI.
  */
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { homedir } from 'node:os';
@@ -35,6 +35,9 @@ const PACKAGE_NAME = '@agnt-sdk/{{accountSlug}}';
 const COMMAND_NAME = '{{accountSlug}}';
 const ACCOUNT_DIR = '.{{accountSlug}}';
 const STATE_FILE = 'update-check.json';
+/** When the notice was last shown (ms): its own file, claimed under a lock, so commands running at once show it once. */
+const NOTICE_FILE = 'update-notice';
+const LOCK_STALE_MS = 10_000;
 
 export const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
 export const FETCH_TIMEOUT_MS = 1000;
@@ -70,8 +73,6 @@ interface State {
   checkedAt?: number;
   /** The latest release it named (a validated release number). */
   latest?: string;
-  /** When the notice was last shown (ms). */
-  noticeAt?: number;
 }
 
 export interface UpdateCheckDeps {
@@ -95,21 +96,63 @@ function readState(path: string): State {
     return {
       checkedAt: num(raw?.checkedAt),
       latest: parseVersion(raw?.latest) ? raw.latest : undefined,
-      noticeAt: num(raw?.noticeAt),
     };
   } catch {
     return {};
   }
 }
 
-function writeState(path: string, state: State): void {
+/** Writes a file whole or not at all; false when it could not (an unwritable directory just means the check runs again next time). */
+function writeAtomically(path: string, text: string): boolean {
   try {
     mkdirSync(dirname(path), { recursive: true });
     const tmp = `${path}.${process.pid}`;
-    writeFileSync(tmp, JSON.stringify(state) + '\n', 'utf8');
+    writeFileSync(tmp, text, 'utf8');
     renameSync(tmp, path);
+    return true;
   } catch {
-    /* an unwritable directory just means the check runs again next time */
+    return false;
+  }
+}
+
+const writeState = (path: string, state: State): boolean => writeAtomically(path, JSON.stringify(state) + '\n');
+
+/**
+ * True for the one command that may show the notice now: nothing was shown in the last 24 hours, and this command took the
+ * claim (a lock directory, which only one of several commands starting at once can create) and recorded it before anything is
+ * printed. When the claim cannot be made (a directory that cannot be written, or another command holding it), nobody prints.
+ */
+function claimNotice(deps: UpdateCheckDeps, now: number): boolean {
+  const stamp = join(dirname(deps.statePath), NOTICE_FILE);
+  const lock = `${stamp}.lock`;
+  try {
+    mkdirSync(dirname(stamp), { recursive: true });
+    mkdirSync(lock);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'EEXIST') {
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmSync(lock, { recursive: true, force: true }); // left by a killed command
+      } catch {
+        /* gone already */
+      }
+    }
+    return false;
+  }
+  try {
+    let last = NaN;
+    try {
+      last = Number(readFileSync(stamp, 'utf8').trim());
+    } catch {
+      /* never shown */
+    }
+    if (Number.isFinite(last) && last <= now && now - last < CHECK_EVERY_MS) return false;
+    return writeAtomically(stamp, `${now}\n`);
+  } finally {
+    try {
+      rmSync(lock, { recursive: true, force: true });
+    } catch {
+      /* the next command clears a stale one */
+    }
   }
 }
 
@@ -170,11 +213,12 @@ export function defaultUpdateCheckDeps(env: NodeJS.ProcessEnv = process.env): Up
     command: COMMAND_NAME,
     getJson,
     linger: true,
+    // fs.writeSync, not process.stderr.write: a closed pipe fails here, inside the try, instead of as an 'error' event no one catches.
     warn: (text) => {
       try {
-        process.stderr.write(text);
+        writeSync(2, text);
       } catch {
-        /* a closed stderr must not break the command */
+        /* a closed or full stderr must not break the command */
       }
     },
   };
@@ -218,7 +262,7 @@ export async function startUpdateCheck(args: readonly string[], currentVersion: 
     if (!deps || updateCheckDisabled(deps.env)) return;
     const current = parseCurrent(currentVersion);
     if (!current) return;
-    const asked = args.includes('--version') || args.includes('-V');
+    const asked = args[0] === '--version' || args[0] === '-V'; // the root flag only: `tasks create --title -V` is not a request for the version
     const now = deps.now();
     const first = readState(deps.statePath);
     const due = first.checkedAt === undefined || now - first.checkedAt >= CHECK_EVERY_MS || first.checkedAt > now;
@@ -226,12 +270,8 @@ export async function startUpdateCheck(args: readonly string[], currentVersion: 
     if (refreshing && asked) await holdOpenFor(refreshing); // only `--version` waits for it: it is how you ask what you have
     // A command that ends first (most of them are quick) gives the answer a moment once its own work is done, never before.
     else if (refreshing && deps.linger) process.once('beforeExit', () => void holdOpenFor(refreshing));
-    const state = asked ? readState(deps.statePath) : first;
-    const latest = parseVersion(state.latest);
-    if (latest && isNewer(latest, current) && (asked || state.noticeAt === undefined || now - state.noticeAt >= CHECK_EVERY_MS || state.noticeAt > now)) {
-      deps.warn(noticeText(deps.command, current, latest));
-      writeState(deps.statePath, { ...readState(deps.statePath), noticeAt: now });
-    }
+    const latest = parseVersion((asked ? readState(deps.statePath) : first).latest);
+    if (latest && isNewer(latest, current) && (asked || claimNotice(deps, now))) deps.warn(noticeText(deps.command, current, latest));
   } catch {
     /* never let the check touch the command */
   }
