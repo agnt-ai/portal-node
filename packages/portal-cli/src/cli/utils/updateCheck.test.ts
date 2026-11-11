@@ -102,6 +102,37 @@ describe('startUpdateCheck', () => {
     expect(warnings).toEqual([]);
   });
 
+  it('a command that ends first gives the answer a moment once its own work is done, never before', async () => {
+    const once = vi.spyOn(process, 'once').mockImplementation((() => process) as any);
+    try {
+      await startUpdateCheck(['tasks', 'list'], '0.2.3', deps({ linger: true }));
+      expect(once).toHaveBeenCalledTimes(1);
+      expect(once.mock.calls[0][0]).toBe('beforeExit');
+      let settled = false;
+      getJson.mockImplementation(() => new Promise((r) => setTimeout(() => { settled = true; r({ version: '0.2.11' }); }, 30)));
+      await startUpdateCheck(['tasks', 'list'], '0.2.3', deps({ linger: true, statePath: join(dir, 'other.json') }));
+      expect(settled).toBe(false); // starting it waited for nothing
+      (once.mock.calls[1][1] as () => void)(); // the process is about to exit: now it waits, for the answer
+      await new Promise((r) => setTimeout(r, 100));
+      expect(settled).toBe(true);
+    } finally {
+      once.mockRestore();
+    }
+  });
+
+  it('does not linger when it is not asking, or when --version already waited for the answer', async () => {
+    const once = vi.spyOn(process, 'once').mockImplementation((() => process) as any);
+    try {
+      seed({ checkedAt: T0, latest: '0.2.11' });
+      await startUpdateCheck(['a'], '0.2.3', deps({ linger: true }));
+      rmSync(statePath);
+      await startUpdateCheck(['--version'], '0.2.3', deps({ linger: true }));
+      expect(once).not.toHaveBeenCalled();
+    } finally {
+      once.mockRestore();
+    }
+  });
+
   it('equal or ahead says nothing', async () => {
     for (const current of ['0.2.11', '0.2.12', '1.0.0', '0.2.11-beta.1']) {
       seed({ checkedAt: T0, latest: '0.2.11' });

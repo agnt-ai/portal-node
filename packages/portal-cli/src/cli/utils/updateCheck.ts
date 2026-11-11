@@ -7,9 +7,11 @@
  *    numbers re-assembled from integers. No other string from the registry reaches the output, because the only install command an agent may
  *    trust is the one this CLI prints (no URL, release note or "install this" text can ride in on a registry answer).
  *  - It never blocks, slows or breaks a command. The check runs at most once every 24 hours; its answer is a small state file
- *    next to the credentials; the request is not waited for (it does not keep the process alive, and gives up after
- *    FETCH_TIMEOUT_MS), so the notice appears on the next run after the answer arrived. Every failure is silent.
- *    The one command that waits (up to that timeout) is an explicit `--version`: asking which version this is also asks whether it is current.
+ *    next to the credentials; the request never delays the command: it runs beside it and gives up after FETCH_TIMEOUT_MS. A
+ *    command that ends before the answer arrives lets the process wait for it, once its own work and output are done and for at
+ *    most that timeout (the process exits at once when a command calls process.exit). The notice appears on the next run.
+ *    Every failure is silent. The one command that waits for the answer first is an explicit `--version`: asking which
+ *    version this is also asks whether it is current.
  *  - The notice is on STDERR only, at most once a day while the copy is out of date (always on `--version`). stdout, which
  *    agents parse as JSON, and every exit status are untouched.
  *  - Off with NETWORK_NO_UPDATE_CHECK=1 (or the common NO_UPDATE_NOTIFIER). Not switched off by CI: a clean CI machine has no state
@@ -35,7 +37,7 @@ const ACCOUNT_DIR = '.{{accountSlug}}';
 const STATE_FILE = 'update-check.json';
 
 export const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
-export const FETCH_TIMEOUT_MS = 1500;
+export const FETCH_TIMEOUT_MS = 1000;
 const MAX_BODY_BYTES = 256 * 1024;
 
 export type Version = readonly [number, number, number];
@@ -82,6 +84,8 @@ export interface UpdateCheckDeps {
   getJson: (url: string, timeoutMs: number) => Promise<unknown>;
   /** Writes to stderr. */
   warn: (text: string) => void;
+  /** Whether a command that ends before the answer arrives waits for it (at most FETCH_TIMEOUT_MS) before the process exits. */
+  linger?: boolean;
 }
 
 function readState(path: string): State {
@@ -165,6 +169,7 @@ export function defaultUpdateCheckDeps(env: NodeJS.ProcessEnv = process.env): Up
     registryUrl,
     command: COMMAND_NAME,
     getJson,
+    linger: true,
     warn: (text) => {
       try {
         process.stderr.write(text);
@@ -173,6 +178,16 @@ export function defaultUpdateCheckDeps(env: NodeJS.ProcessEnv = process.env): Up
       }
     },
   };
+}
+
+/** Keeps the process alive while `pending` settles (the request itself does not), for at most the request's own timeout. */
+async function holdOpenFor(pending: Promise<void>): Promise<void> {
+  const timer = setTimeout(() => {}, FETCH_TIMEOUT_MS + 100);
+  try {
+    await pending;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const truthy = (v: string | undefined): boolean => !!v && !['0', 'false', 'no', 'off'].includes(v.trim().toLowerCase());
@@ -208,7 +223,9 @@ export async function startUpdateCheck(args: readonly string[], currentVersion: 
     const first = readState(deps.statePath);
     const due = first.checkedAt === undefined || now - first.checkedAt >= CHECK_EVERY_MS || first.checkedAt > now;
     const refreshing = due ? refresh(deps) : undefined;
-    if (asked) await refreshing; // only `--version` waits (at most FETCH_TIMEOUT_MS): it is how you ask what you have
+    if (refreshing && asked) await holdOpenFor(refreshing); // only `--version` waits for it: it is how you ask what you have
+    // A command that ends first (most of them are quick) gives the answer a moment once its own work is done, never before.
+    else if (refreshing && deps.linger) process.once('beforeExit', () => void holdOpenFor(refreshing));
     const state = asked ? readState(deps.statePath) : first;
     const latest = parseVersion(state.latest);
     if (latest && isNewer(latest, current) && (asked || state.noticeAt === undefined || now - state.noticeAt >= CHECK_EVERY_MS || state.noticeAt > now)) {

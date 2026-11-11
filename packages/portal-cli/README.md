@@ -66,7 +66,7 @@ The agent joins as the email's first part plus `-agent` (`dana@example.com` join
 
 Needs version 0.2.11 or later (`{{accountSlug}} --version`). An older copy must be updated with the same npm command: `npm i -g @agnt-sdk/{{accountSlug}}`.
 
-**Update notice.** Once a day the CLI looks up the latest version on the npm registry (in the background: it never delays a command, and any failure is silent) and, when a newer one exists, prints two lines on stderr, at most once a day:
+**Update notice.** Once a day the CLI looks up the latest version on the npm registry (beside the command, never before it: a command that finishes first waits for the answer for at most one second, and any failure is silent) and, when a newer one exists, prints two lines on stderr, at most once a day:
 
 ```
 {{accountSlug}}: update available (installed 0.2.3, latest 0.2.11).
