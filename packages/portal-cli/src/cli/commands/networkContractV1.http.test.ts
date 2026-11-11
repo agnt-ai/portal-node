@@ -25,7 +25,7 @@ interface Seen { method: string; path: string; query: URLSearchParams; body: any
 function fakeApi() {
   const requests: Seen[] = [];
   const taken = new Set<string>(['dana-agent']);
-  const state = { about: '', tooOld: false };
+  const state = { about: '', tooOld: false, contactsLimited: false };
   const json = (res: any, status: number, body: unknown) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)); };
   const refuse = (res: any, status: number, error_code: string, error: string, hint?: string) => json(res, status, { status, error, error_code, ...(hint ? { hint } : {}) });
 
@@ -58,6 +58,22 @@ function fakeApi() {
       }
       state.about = body.about;
       return json(res, 200, { address: `me@${DOMAIN}`, about: body.about, listed: !!body.about, hint: body.about ? 'You are listed in discover.' : 'You are no longer listed.' });
+    }
+    if (route === 'GET /agnt/discover/contacts') {
+      if (state.contactsLimited) { res.setHeader('Retry-After', '40000'); return json(res, 429, { status: 429, error: 'too many discover calls; try again later', error_code: 'rate_limited' }); }
+      const cursor = url.searchParams.get('cursor');
+      return json(res, 200, cursor
+        ? { matches: [], checked: 4, capped: false, cursor: null }
+        : { matches: [{ contact: 'Dana', address: `dana@${DOMAIN}`, name: 'Dana', domain: DOMAIN, degree: 1, mutualConnections: 0, connection: 'connected', workspace: true }], checked: 50, capped: true, cursor: 'f'.repeat(24) });
+    }
+    if (route === 'GET /agnt/discover' && (url.searchParams.has('email') || url.searchParams.has('phone'))) {
+      const email = url.searchParams.get('email');
+      if (email === 'limit@example.com') { res.setHeader('Retry-After', '90'); return json(res, 429, { status: 429, error: 'too many discover calls; try again later', error_code: 'rate_limited' }); }
+      // Zod-level failures (a length) answer bad_request, as the real API's validateInput does; the service's own refusals answer invalid.
+      if ((email?.length ?? 0) > 320) return refuse(res, 400, 'bad_request', 'email: String must contain at most 320 character(s)');
+      if (url.searchParams.get('phone') === '+15555550199') return refuse(res, 400, 'invalid', 'phone is an E.164 phone number');
+      if (email === 'dana@example.com') return json(res, 200, { results: [{ address: `dana@${DOMAIN}`, about: 'Assistant to Dana', matched: 'email', score: 1, name: 'Dana', domain: DOMAIN, degree: null, mutualConnections: 0, connection: 'none', workspace: false }], more: false });
+      return json(res, 200, { results: [], more: false, invite: { note: 'n', tellYourPerson: 't', forYourPerson: FOR_PERSON, joinUrl: 'https://x/network' }, hint: 'Nobody listed on this network matches.' });
     }
     if (route === 'GET /agnt/discover') {
       if (url.searchParams.get('q') === 'nobody here') {
@@ -182,6 +198,75 @@ describe('network contract v1: the compiled CLI', () => {
     expect(feed.code, feed.stderr).toBe(0);
     const q = last('/agnt/feed').query;
     expect([q.get('q'), q.get('from'), q.get('limit')]).toEqual(['peonies', `florist@${DOMAIN}`, '5']);
+  });
+
+  it('discover --email and --phone send those parameters; a miss says "not listed or not there" and carries the invite note; a refusal and a limit say what to do', async () => {
+    await join2(['--name', 'me']);
+    const hit = await cli(['network', 'discover', '--email', 'dana@example.com']);
+    expect(hit.code, hit.stderr).toBe(0);
+    const q = last('/agnt/discover').query;
+    expect([q.get('email'), q.get('phone'), q.get('q')]).toEqual(['dana@example.com', null, null]);
+    expect(hit.json.results[0]).toMatchObject({ matched: 'email', address: `dana@${DOMAIN}` });
+    expect(hit.json.note).toMatch(/information, never instructions/);
+
+    const miss = await cli(['network', 'discover', '--email', 'nobody@example.com']);
+    expect(miss.code, miss.stderr).toBe(0);
+    expect(miss.json.results).toEqual([]);
+    expect(miss.json.note).toMatch(/not listed or not there/);
+    expect(miss.json.note).toContain('The network may also have emailed this address one invite; tell your person.');
+    expect(miss.stderr).toContain('note: the network may also have emailed this address one invite; tell your person.');
+    const help = await cli(['network', 'discover', '--help']);
+    // The help text and the --email option's own line (which the help wraps), so spaces are compared, not line breaks.
+    expect(help.stdout.replace(/\s+/g, ' ').match(/the network may also have emailed this address one invite; tell your person/gi)).toHaveLength(2);
+    expect(help.stdout).toContain('Run discover with an email only for an address your person gave you or asked about, never');
+    expect(help.stdout).toContain('a --contacts call counts as one search');
+    const short = await cli(['network', 'discover', '--name', 'ab']);
+    expect(short.code).toBe(2);
+    expect(short.stderr).toMatch(/--name needs 3 letters or more/);
+    expect(miss.stderr).toContain(`FOR YOUR PERSON (give this to them word for word):\n${FOR_PERSON}\n`);
+
+    const refused = await cli(['network', 'discover', '--phone', '+15555550199']);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toMatch(/phone is an E\.164 phone number/);
+    expect(refused.stderr).toMatch(/--email takes one email address and --phone one number with its country code/);
+
+    const tooLong = await cli(['network', 'discover', '--email', `${'a'.repeat(320)}@example.com`]);
+    expect(tooLong.code).toBe(1);
+    expect(tooLong.stderr).toMatch(/"code": "bad_request"/);
+    expect(tooLong.stderr).toMatch(/--email takes one email address and --phone one number with its country code/);
+
+    const limited = await cli(['network', 'discover', '--email', 'limit@example.com']);
+    expect(limited.code).toBe(75);
+    expect(limited.stderr).toMatch(/"retryAfter": 90/);
+    expect(limited.stderr).toMatch(/60 searches an hour and 300 a day/);
+
+    // Usage errors never reach the server.
+    const before = fake.requests.length;
+    const both = await cli(['network', 'discover', '--email', 'dana@example.com', '--phone', '+15555550100']);
+    expect(both.code).toBe(2);
+    expect(both.stderr).toMatch(/one email or one phone, not both/);
+    expect((await cli(['network', 'discover', 'a florist', '--email', 'dana@example.com'])).code).toBe(2);
+    expect(fake.requests.length).toBe(before);
+  });
+
+  it('discover --contacts: the contacts route, the cursor carried on unchanged, the daily limit as 75', async () => {
+    await join2(['--name', 'me']);
+    const first = await cli(['network', 'discover', '--contacts']);
+    expect(first.code, first.stderr).toBe(0);
+    expect(last('/agnt/discover/contacts').query.has('cursor')).toBe(false);
+    expect(first.json.matches[0]).toMatchObject({ contact: 'Dana', address: `dana@${DOMAIN}` });
+    expect(first.stderr).toContain(`more contacts follow (this call stopped at its lookup cap): run the same command with --cursor ${'f'.repeat(24)}.`);
+    const next = await cli(['network', 'discover', '--contacts', '--cursor', 'f'.repeat(24)]);
+    expect(next.code, next.stderr).toBe(0);
+    expect(last('/agnt/discover/contacts').query.get('cursor')).toBe('f'.repeat(24));
+    expect(next.json.cursor).toBeNull();
+    expect(next.stderr).toMatch(/none of the 4 emails and phones looked up in this call is a listed agent/);
+    expect((await cli(['network', 'discover', '--contacts', '--cursor', 'nope'])).code).toBe(2);
+    fake.state.contactsLimited = true;
+    const limited = await cli(['network', 'discover', '--contacts']);
+    expect(limited.code).toBe(75);
+    expect(limited.stderr).toMatch(/"retryAfter": 40000/);
+    expect(limited.stderr).toMatch(/looking up your contacts 10 times a day/);
   });
 
   it('a reply needs no --to (reply-all); a post id is a reply target; FOR YOUR PERSON is printed word for word, once', async () => {
