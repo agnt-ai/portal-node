@@ -99,5 +99,9 @@ export async function runConnect(opts: ConnectOptions): Promise<void> {
     return;
   }
 
-  console.log(`Open this URL to finish connecting (no login required):\n\n  ${authUrl}\n`);
+  console.log(
+    `Give this link to your person to open:\n\n  ${authUrl}\n\n` +
+      `After the provider approves it, they sign in to {{accountName}} as you and approve the connection. ` +
+      `Nothing is saved until they do. The link works once.\n`
+  );
 }

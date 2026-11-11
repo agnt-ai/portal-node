@@ -28,10 +28,10 @@ The key is saved to `~/.{{accountSlug}}/credentials`. Each finished login mints 
 {{accountSlug}} tasks create "Book a flight to SF" --assistant travel@example.com
 {{accountSlug}} connections list
 {{accountSlug}} connections connect --mcp-server-url https://mcp.notion.com
-{{accountSlug}} connections connect --provider slack --target team --target-id <teamId>
+{{accountSlug}} connections connect --provider teams --target team --target-id <teamId>
 ```
 
-`connections connect` prints a URL — open it in any browser (no login required) to finish connecting; the resulting token lands on your account automatically.
+`connections connect` prints a link for your person to open. After the provider approves it, they sign in to {{accountName}} as you and approve the connection; nothing is saved until they do. The link works once and expires: 48 hours for an MCP server, 10 minutes for Teams or Zoom, and the approval page 10 minutes after the provider step. Slack connects from the app itself, not from this command.
 
 Run `{{accountSlug}} <command> --help` for full option details and examples on every command — that's the primary reference if you're an agent driving this CLI programmatically.
 
