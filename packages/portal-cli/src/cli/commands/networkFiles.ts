@@ -14,8 +14,8 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto';
-import { createReadStream, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, unlinkSync, type BigIntStats, type Stats } from 'node:fs';
-import { chmod, copyFile, constants as fsConstants, lstat, link, open, rename, stat, unlink } from 'node:fs/promises';
+import { createReadStream, lstatSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, unlinkSync, type Stats } from 'node:fs';
+import { chmod, copyFile, constants as fsConstants, lstat, link, open, rename, stat, unlink, type FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { Readable, Transform } from 'node:stream';
@@ -96,27 +96,46 @@ export function networkNameProblem(name: string): string | undefined {
   return undefined;
 }
 
-/** A file's or folder's identity on its disk: the same thing under any name, in any case, or through any link. */
-function idOf(info: BigIntStats): string | undefined {
-  return info.ino === 0n ? undefined : `${info.dev}:${info.ino}`;
+/** A file's or folder's identity on its disk: the same thing under any name, in any case, or through any link. Device AND inode. */
+export function idOf(info: { dev: bigint | number; ino: bigint | number }): string | undefined {
+  return BigInt(info.ino) === 0n ? undefined : `${info.dev}:${info.ino}`;
 }
 
-/** The identities of every file inside `dir` (to a bounded depth and count): hard links to them share them. */
-function filesIn(dir: string): Set<string> {
+/** How far into the settings folder the scan for hard links goes: this many files and folders, this many levels down. */
+export const SCAN_MAX_ENTRIES = 5000;
+export const SCAN_MAX_DEPTH = 5;
+
+/**
+ * The identities of the files in `dir`: first the two the CLI itself writes (`credentials` and `config`, whatever else is in
+ * there), then a breadth-first scan, folders counted like files toward a bound, never following a link (a link to a folder
+ * must not pull in the files of what it points at). A hard link to any of them shares its identity.
+ */
+export function settingsFileIds(dir: string, limits: { entries?: number; depth?: number } = {}): Set<string> {
+  const maxEntries = limits.entries ?? SCAN_MAX_ENTRIES;
+  const maxDepth = limits.depth ?? SCAN_MAX_DEPTH;
   const ids = new Set<string>();
-  const walk = (d: string, depth: number) => {
-    let names: string[];
-    try { names = readdirSync(d); } catch { return; }
-    for (const name of names) {
-      if (ids.size > 5000) return;
-      const p = join(d, name);
-      try {
-        const info = statSync(p, { bigint: true });
-        if (info.isDirectory()) { if (depth < 5) walk(p, depth + 1); } else { const id = idOf(info); if (id) ids.add(id); }
-      } catch { /* gone, or not readable */ }
+  for (const known of ['credentials', 'config']) {
+    try { const id = idOf(statSync(join(dir, known), { bigint: true })); if (id) ids.add(id); } catch { /* not there */ }
+  }
+  let level = [dir];
+  let seen = 0;
+  for (let depth = 0; level.length && depth <= maxDepth; depth++) {
+    const next: string[] = [];
+    for (const d of level) {
+      let names: string[];
+      try { names = readdirSync(d).sort(); } catch { continue; }
+      for (const name of names) {
+        if (++seen > maxEntries) return ids;
+        const path = join(d, name);
+        try {
+          const info = lstatSync(path, { bigint: true });
+          if (info.isDirectory()) next.push(path);
+          else if (info.isFile()) { const id = idOf(info); if (id) ids.add(id); }
+        } catch { /* gone, or not readable */ }
+      }
     }
-  };
-  walk(dir, 0);
+    level = next;
+  }
   return ids;
 }
 
@@ -135,7 +154,7 @@ export function isInside(dir: string, file: string): boolean {
   }
   try {
     const own = idOf(statSync(real, { bigint: true }));
-    return own !== undefined && filesIn(dir).has(own);
+    return own !== undefined && settingsFileIds(dir).has(own);
   } catch {
     return false;
   }
@@ -191,6 +210,55 @@ export async function hashFile(path: string): Promise<{ sha256: string; size: nu
   return { sha256: hash.digest('hex'), size };
 }
 
+/** The same, from a file already open: read from its start, and left open (the upload reads it again). */
+async function hashHandle(handle: FileHandle): Promise<{ sha256: string; size: number }> {
+  const hash = createHash('sha256');
+  let size = 0;
+  for await (const chunk of handle.createReadStream({ start: 0, autoClose: false, emitClose: false })) {
+    hash.update(chunk as Buffer);
+    size += (chunk as Buffer).length;
+  }
+  return { sha256: hash.digest('hex'), size };
+}
+
+const SETTINGS_REFUSED = (given: string, configDir: string) =>
+  new FilesUsageError(`--file ${given} is inside this CLI's own settings folder (${configDir}), which holds your API key: it is never sent. Nothing was sent.`);
+
+/** Whether an open file is one of the settings folder's own, by identity (device and inode). */
+function isSettingsFile(info: { dev: bigint | number; ino: bigint | number }, configDir: string): boolean {
+  const id = idOf(info);
+  return id !== undefined && settingsFileIds(configDir).has(id);
+}
+
+/**
+ * Open a file to send ONCE, and decide about THAT open file, not about a path that can change under us: its real path (links
+ * resolved) is not in the settings folder, it opens without following a link at the last step (O_NOFOLLOW), and the open
+ * file is a regular file within the size limit that is none of the settings folder's files (by device and inode, so a hard
+ * link is caught too). Everything after (the hash, the upload) reads from this same open file.
+ */
+export async function openToSend(path: string, configDir: string = accountConfigDir()): Promise<{ handle: FileHandle; size: number; id?: string }> {
+  let real: string;
+  try { real = realpathSync.native(path); } catch { throw new FilesUsageError(`--file ${path}: no such file, or it cannot be read.`); }
+  if (isInside(configDir, real)) throw SETTINGS_REFUSED(path, configDir);
+  let handle: FileHandle;
+  try {
+    handle = await open(real, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ELOOP') throw new PartsError('file_changed', `${path} became a link while it was being read. Nothing was sent.`, { retryable: false, hint: 'Run the same command again once the file has stopped changing.' });
+    throw new FilesUsageError(`--file ${path}: no such file, or it cannot be read.`);
+  }
+  try {
+    const info = await handle.stat({ bigint: true });
+    if (!info.isFile()) throw new FilesUsageError(`--file ${path} is not a file (a folder or a device cannot be sent): send a file, or zip the folder first.`);
+    if (isSettingsFile(info, configDir)) throw SETTINGS_REFUSED(path, configDir);
+    if (info.size > BigInt(FILE_BYTES)) throw new FilesUsageError(`--file ${path} is ${sizeWords(Number(info.size))}; a file on the network is at most ${LIMIT_WORDS}. Nothing was sent.`);
+    return { handle, size: Number(info.size), id: idOf(info) };
+  } catch (err) {
+    await handle.close().catch(() => undefined);
+    throw err;
+  }
+}
+
 /** The signed upload's address: https, or plain http only to this computer (a test server). Never anything else. */
 export function uploadUrlProblem(raw: unknown): string | undefined {
   let url: URL;
@@ -220,59 +288,68 @@ export async function uploadFiles(
   client: PortalClient,
   files: PlannedFile[],
   opts: { assistant?: string } = {},
-  deps: { now?: () => number } = {},
+  deps: { now?: () => number; configDir?: string; afterOpen?: () => void | Promise<void> } = {},
 ): Promise<NetworkFilePart[]> {
   const now = deps.now ?? Date.now;
+  const configDir = deps.configDir ?? accountConfigDir();
   const done = new Map<string, true>();
   const parts: NetworkFilePart[] = [];
   for (const file of files) {
-    const { sha256, size } = await hashFile(file.path);
-    if (size !== file.size) throw new PartsError('file_changed', `${file.path} changed while it was being read (it was ${file.size} bytes, now ${size}). Nothing was sent.`, { retryable: false, hint: 'Run the same command again once the file has stopped changing.' });
-    if (size > FILE_BYTES) throw new FilesUsageError(`--file ${file.path} is ${sizeWords(size)}; a file on the network is at most ${LIMIT_WORDS}. Nothing was sent.`);
-    parts.push({ type: file.type, sha256, size, name: file.name });
-    if (done.has(sha256)) continue;
-    let prepared;
+    const opened = await openToSend(file.path, configDir);
     try {
-      prepared = await client.network.uploadPart(sha256, size, { assistant: opts.assistant });
-    } catch (err) {
-      // The day's bound on uploads is the one refusal here the generic hint says wrongly.
-      if (err instanceof AgntApiError && err.status === 429) {
-        Object.assign(err, { cliHint: 'Over the number of files this agent may upload today. Nothing was sent. Wait retryAfter seconds (an hour if none is given), then run the same command once; if it is refused again, that is the day\'s limit: tell your person and send the text without the file meanwhile. Do not retry in a loop.' });
+      if (opened.size !== file.size) throw new PartsError('file_changed', `${file.path} changed since it was checked (it was ${file.size} bytes, now ${opened.size}). Nothing was sent.`, { retryable: false, hint: 'Run the same command again once the file has stopped changing.' });
+      await deps.afterOpen?.(); // for tests: the moment a path could be swapped
+      const { sha256, size } = await hashHandle(opened.handle);
+      parts.push({ type: file.type, sha256, size, name: file.name });
+      if (done.has(sha256)) continue;
+      let prepared;
+      try {
+        prepared = await client.network.uploadPart(sha256, size, { assistant: opts.assistant });
+      } catch (err) {
+        // The day's bound on uploads is the one refusal here the generic hint says wrongly.
+        if (err instanceof AgntApiError && err.status === 429) {
+          Object.assign(err, { cliHint: 'Over the number of files this agent may upload today. Nothing was sent. Wait retryAfter seconds (an hour if none is given), then run the same command once; if it is refused again, that is the day\'s limit: tell your person and send the text without the file meanwhile. Do not retry in a loop.' });
+        }
+        throw err;
       }
-      throw err;
-    }
-    const { upload } = prepared;
-    const problem = upload?.method === 'PUT' ? uploadUrlProblem(upload.url) : 'is not a PUT';
-    if (problem) throw new PartsError('upload_refused', `The upload the server signed ${problem}, so nothing was uploaded.`, { retryable: false, hint: 'Nothing was sent. Tell your person: this is a fault on the server side; trying again will not help.' });
-    const expires = Date.parse(upload.expiresAt);
-    if (Number.isFinite(expires) && expires + EXPIRY_SKEW_MS <= now()) {
-      throw new PartsError('upload_expired', 'The signed upload is more than five minutes past its time by this computer\'s clock (it is good for about five minutes, once): the upload ran out, or this clock is off.', { retryable: true, hint: `${UPLOAD_AGAIN} If it says this again at once, your computer's clock may be off.` });
-    }
-    // The file must still be the one hashed: a different size is caught here, the same size with other bytes by the server.
-    if (statSync(file.path).size !== size) throw new PartsError('file_changed', `${file.path} changed while it was being sent. Nothing was sent.`, { retryable: false, hint: 'Run the same command again once the file has stopped changing.' });
-    try {
-      await client.network.putPart(upload, size > 0 ? Readable.toWeb(createReadStream(file.path)) as ReadableStream<Uint8Array> : new Uint8Array(0), size);
-    } catch (err) {
-      if (!(err instanceof AgntApiError)) throw err;
-      // An answer that is a redirect is the server's fault, and the same on every try: never followed, never retried.
-      if (err.errorCode === 'upload_redirect' || (err.status >= 300 && err.status < 400)) {
-        throw new PartsError('upload_refused', `Your network server answered the upload of ${file.name} with a redirect, which is never followed.`, {
-          status: err.status, retryable: false, hint: 'Nothing was sent. Tell your person: this is a fault on the server side; trying again will not help.',
-        });
+      const { upload } = prepared;
+      const problem = upload?.method === 'PUT' ? uploadUrlProblem(upload.url) : 'is not a PUT';
+      if (problem) throw new PartsError('upload_refused', `The upload the server signed ${problem}, so nothing was uploaded.`, { retryable: false, hint: 'Nothing was sent. Tell your person: this is a fault on the server side; trying again will not help.' });
+      const expires = Date.parse(upload.expiresAt);
+      if (Number.isFinite(expires) && expires + EXPIRY_SKEW_MS <= now()) {
+        throw new PartsError('upload_expired', 'The signed upload is more than five minutes past its time by this computer\'s clock (it is good for about five minutes, once): the upload ran out, or this clock is off.', { retryable: true, hint: `${UPLOAD_AGAIN} If it says this again at once, your computer's clock may be off.` });
       }
-      const transient = err.status === 408 || err.status === 429 || err.status >= 500;
-      throw new PartsError(
-        transient ? 'upload_failed' : 'upload_refused',
-        `Your network server did not take ${file.name} (${err.status}${err.errorCode ? ` ${err.errorCode}` : ''}).`,
-        {
-          status: err.status, retryable: true, retryAfter: err.retryAfter,
-          hint: transient
-            ? `The upload did not go through just now. ${UPLOAD_AGAIN}`
-            : `Your network server refused the upload: it is good once, for about five minutes, for exactly the bytes that were named (a file that changed while it was sent is refused too). ${UPLOAD_AGAIN} If it is refused again, tell your person.`,
-        },
-      );
+      // Just before the bytes go: it is still the same open file, the same size, and still none of the settings folder's.
+      const again = await opened.handle.stat({ bigint: true });
+      if (Number(again.size) !== size || idOf(again) !== opened.id) throw new PartsError('file_changed', `${file.path} changed while it was being sent. Nothing was sent.`, { retryable: false, hint: 'Run the same command again once the file has stopped changing.' });
+      if (isSettingsFile(again, configDir)) throw SETTINGS_REFUSED(file.path, configDir);
+      try {
+        // The same open file the hash came from (never the path again): a swap of the path after the open changes nothing.
+        await client.network.putPart(upload, size > 0 ? Readable.toWeb(opened.handle.createReadStream({ start: 0, autoClose: false, emitClose: false })) as ReadableStream<Uint8Array> : new Uint8Array(0), size);
+      } catch (err) {
+        if (!(err instanceof AgntApiError)) throw err;
+        // An answer that is a redirect is the server's fault, and the same on every try: never followed, never retried.
+        if (err.errorCode === 'upload_redirect' || (err.status >= 300 && err.status < 400)) {
+          throw new PartsError('upload_refused', `Your network server answered the upload of ${file.name} with a redirect, which is never followed.`, {
+            status: err.status, retryable: false, hint: 'Nothing was sent. Tell your person: this is a fault on the server side; trying again will not help.',
+          });
+        }
+        const transient = err.status === 408 || err.status === 429 || err.status >= 500;
+        throw new PartsError(
+          transient ? 'upload_failed' : 'upload_refused',
+          `Your network server did not take ${file.name} (${err.status}${err.errorCode ? ` ${err.errorCode}` : ''}).`,
+          {
+            status: err.status, retryable: true, retryAfter: err.retryAfter,
+            hint: transient
+              ? `The upload did not go through just now. ${UPLOAD_AGAIN}`
+              : `Your network server refused the upload: it is good once, for about five minutes, for exactly the bytes that were named (a file that changed while it was sent is refused too). ${UPLOAD_AGAIN} If it is refused again, tell your person.`,
+          },
+        );
+      }
+      done.set(sha256, true);
+    } finally {
+      await opened.handle.close().catch(() => undefined);
     }
-    done.set(sha256, true);
   }
   return parts;
 }
@@ -436,7 +513,7 @@ export async function downloadPartTo(client: PortalClient, sha256: string, opts:
     if (madeDir) try { rmSync(madeDir, { recursive: true, force: true }); } catch { /* already gone */ }
   };
   const handlers = new Map<NodeJS.Signals, () => void>();
-  const stopListening = () => { for (const [signal, handler] of handlers) process.removeListener(signal, handler); handlers.clear(); };
+  const stopListening = () => { for (const [signal, handler] of handlers) process.removeListener(signal, handler); };
   for (const signal of HANDLED_SIGNALS) {
     const handler = () => { cleanUp(); stopListening(); process.kill(process.pid, signal); };
     handlers.set(signal, handler);
