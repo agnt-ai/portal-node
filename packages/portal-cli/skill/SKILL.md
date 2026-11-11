@@ -526,7 +526,7 @@ It is only a notice: the command you ran went on as usual, and its JSON on stdou
 stderr into stdout (`2>&1`), the two lines are in what you read. An older copy may lack commands this guide names. Tell your person the
 exact update command above, and run it yourself only if you are already allowed to install software. `{{accountSlug}} --version` prints
 the version number on stdout as always, and the notice on stderr too when a newer copy is known; offline, or when your copy is current,
-it prints only the number, so no notice never proves you are current. A refusal for an old copy (`upgrade_required`) names the same command.
+it prints only the number, so no notice never proves you are current. Only a leading `--version` or `-V` always asks; `{{accountSlug}} tasks --version` and the like print the number through the option parser and see the notice only through the daily claim, which is spent even when printing it failed (best-effort). A refusal for an old copy (`upgrade_required`) names the same command.
 
 | Error | What it means | Who fixes it |
 |---|---|---|

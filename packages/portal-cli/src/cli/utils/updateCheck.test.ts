@@ -143,6 +143,53 @@ describe('startUpdateCheck', () => {
     expect(warnings).toEqual([]);
   });
 
+  it('a copy that is current does not spend the day\'s claim', async () => {
+    seed({ checkedAt: T0, latest: '0.2.11' });
+    await startUpdateCheck(['a'], '0.2.11', deps());
+    expect(existsSync(stampPath())).toBe(false);
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('the day is exactly 24 hours for the notice, too: shown again at 24h, not a moment before', async () => {
+    seed({ checkedAt: T0, latest: '0.2.11' });
+    writeFileSync(stampPath(), `${T0 - DAY + 1}\n`);
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(warnings).toEqual([]);
+    writeFileSync(stampPath(), `${T0 - DAY}\n`);
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('a lock younger than ten seconds is respected; older, or stamped by a clock set back, is cleared', async () => {
+    seed({ checkedAt: T0, latest: '0.2.11' });
+    const lock = `${stampPath()}.lock`;
+    const at = (msFromNow: number) => { const t = (Date.now() + msFromNow) / 1000; utimesSync(lock, t, t); };
+    mkdirSync(lock);
+    at(-5000);
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(existsSync(lock)).toBe(true); // still held
+    at(-20_000);
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(existsSync(lock)).toBe(false);
+    mkdirSync(lock);
+    at(+60_000);
+    await startUpdateCheck(['a'], '0.2.3', deps());
+    expect(existsSync(lock)).toBe(false); // a lock from the future cannot be waited out
+    expect(warnings).toEqual([]);
+  });
+
+  it('a state directory that cannot be written means no lookup at all', async () => {
+    seed({ checkedAt: T0 - 2 * DAY, latest: '0.2.11' });
+    chmodSync(dirname(statePath), 0o500);
+    try {
+      await startUpdateCheck(['a'], '0.2.3', deps({ linger: true }));
+    } finally {
+      chmodSync(dirname(statePath), 0o700);
+    }
+    expect(getJson).not.toHaveBeenCalled();
+  });
+
   it('the day is 24 hours', () => {
     expect(CHECK_EVERY_MS).toBe(86_400_000);
   });
@@ -334,9 +381,10 @@ describe('startUpdateCheck', () => {
     expect(getJson).toHaveBeenCalledTimes(1);
     expect(warnings).toHaveLength(1);
     await startUpdateCheck(['-V'], '0.2.3', deps());
-    expect(warnings).toHaveLength(2);
+    await startUpdateCheck(['-V'], '0.2.3', deps());
+    expect(warnings).toHaveLength(3); // every time, `-V` as much as `--version`
     await startUpdateCheck(['-V'], '0.2.11', deps());
-    expect(warnings).toHaveLength(2); // current: nothing
+    expect(warnings).toHaveLength(3); // current: nothing
   });
 
   it('a clock that ran backwards does not freeze the check', async () => {

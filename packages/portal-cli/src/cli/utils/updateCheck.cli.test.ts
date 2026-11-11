@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createServer as createHttp, type Server } from 'node:http';
 import { createServer as createTcp, type Server as TcpServer, type Socket } from 'node:net';
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -150,6 +150,45 @@ describe('the compiled CLI with the update check on', () => {
     expect(runs.filter((r) => r.stderr.includes('update available'))).toHaveLength(1);
   });
 
+  /** Runs the compiled check alone in a process (nothing else keeps it alive) and times how long the process lives. */
+  const alone = (target: string, options: string) => new Promise<Run>((resolve, reject) => {
+    const script = `
+      const m = await import(${JSON.stringify(`file://${updateModule}`)});
+      const base = m.defaultUpdateCheckDeps({});
+      await m.startUpdateCheck(['tasks'], '0.0.1', { ...base, statePath: ${JSON.stringify(join(home, 'alone', 'update-check.json'))}, registryUrl: ${JSON.stringify(target)}, ${options} });
+    `;
+    const started = Date.now();
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script], { env: env(), stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+    const timer = setTimeout(() => child.kill(), 10_000);
+    child.stderr.on('data', (b) => { stderr += b; });
+    child.once('error', reject);
+    child.once('close', (code) => { clearTimeout(timer); resolve({ code, stdout: '', stderr, ms: Date.now() - started }); });
+  });
+
+
+  it('a first run against a registry that answers at once ends promptly: the wait for an answer is not kept after it comes', async () => {
+    const r = await alone(url, 'linger: true');
+    expect(r.code).toBe(0);
+    expect(hits).toBe(1);
+    expect(r.ms).toBeLessThan(700); // a wait that outlived the answer would last 1.1 seconds
+  });
+
+  it('a state directory that cannot be written means no request and no wait', async () => {
+    await mkdir(dir(), { recursive: true });
+    await chmod(dir(), 0o500);
+    try {
+      for (let i = 0; i < 2; i++) {
+        const r = await run(['profiles', 'list', '--json']);
+        expect(r).toMatchObject({ code: 0, stdout: '[]\n', stderr: '' });
+        expect(r.ms).toBeLessThan(700);
+      }
+    } finally {
+      await chmod(dir(), 0o700);
+    }
+    expect(hits).toBe(0);
+  });
+
   describe('a registry that never answers', () => {
     let hang: TcpServer;
     let sockets: Socket[];
@@ -165,22 +204,6 @@ describe('the compiled CLI with the update check on', () => {
       await new Promise<void>((resolve) => hang.close(() => resolve()));
     });
 
-    /** Runs the compiled check alone in a process (nothing else keeps it alive) and times how long the process lives. */
-    const alone = (options: string) => new Promise<Run>((resolve, reject) => {
-      const script = `
-        const m = await import(${JSON.stringify(`file://${updateModule}`)});
-        const base = m.defaultUpdateCheckDeps({});
-        await m.startUpdateCheck(['tasks'], '0.0.1', { ...base, statePath: ${JSON.stringify(join(home, 'alone', 'update-check.json'))}, registryUrl: ${JSON.stringify(hangUrl)}, ${options} });
-      `;
-      const started = Date.now();
-      const child = spawn(process.execPath, ['--input-type=module', '-e', script], { env: env(), stdio: ['ignore', 'pipe', 'pipe'] });
-      let stderr = '';
-      const timer = setTimeout(() => child.kill(), 10_000);
-      child.stderr.on('data', (b) => { stderr += b; });
-      child.once('error', reject);
-      child.once('close', (code) => { clearTimeout(timer); resolve({ code, stdout: '', stderr, ms: Date.now() - started }); });
-    });
-
     it('a quick command ends about one second after its own work, once, and exits 0 with its output intact', async () => {
       const r = await run(['profiles', 'list', '--json'], { env: { NETWORK_UPDATE_CHECK_URL: hangUrl } });
       expect(r).toMatchObject({ code: 0, stdout: '[]\n', stderr: '' });
@@ -190,14 +213,14 @@ describe('the compiled CLI with the update check on', () => {
     });
 
     it('the wait for an answer that never comes is bounded (about 1.1 seconds), not open-ended', async () => {
-      const r = await alone('getJson: () => new Promise(() => {}), linger: true');
+      const r = await alone(hangUrl, 'getJson: () => new Promise(() => {}), linger: true');
       expect(r.code).toBe(0);
       expect(r.ms).toBeGreaterThan(900); // it did wait for the answer once its own work was done
       expect(r.ms).toBeLessThan(2500);
     });
 
     it('the request itself does not keep the process alive: with nothing waiting, it ends at once', async () => {
-      const r = await alone('linger: false');
+      const r = await alone(hangUrl, 'linger: false');
       expect(r.code).toBe(0);
       expect(r.ms).toBeLessThan(700); // a request holding the loop would last until its one-second timeout
     });

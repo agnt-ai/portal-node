@@ -18,7 +18,7 @@
  *    file, so it prints nothing and costs one background request at most, while agent harnesses often set CI.
  */
 
-import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { accessSync, constants, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { homedir } from 'node:os';
@@ -115,6 +115,17 @@ function writeAtomically(path: string, text: string): boolean {
   }
 }
 
+/** Whether the state directory can be written (made if need be): when it cannot, no answer could be kept, so nothing is asked. */
+function canKeepState(path: string): boolean {
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    accessSync(dirname(path), constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const writeState = (path: string, state: State): boolean => writeAtomically(path, JSON.stringify(state) + '\n');
 
 /**
@@ -131,7 +142,9 @@ function claimNotice(deps: UpdateCheckDeps, now: number): boolean {
   } catch (err) {
     if ((err as NodeJS.ErrnoException)?.code === 'EEXIST') {
       try {
-        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmSync(lock, { recursive: true, force: true }); // left by a killed command
+        const age = Date.now() - statSync(lock).mtimeMs;
+        // left by a killed command, or stamped by a clock that has since been set back
+        if (age > LOCK_STALE_MS || age < -LOCK_STALE_MS) rmSync(lock, { recursive: true, force: true });
       } catch {
         /* gone already */
       }
@@ -265,7 +278,7 @@ export async function startUpdateCheck(args: readonly string[], currentVersion: 
     const asked = args[0] === '--version' || args[0] === '-V'; // the root flag only: `tasks create --title -V` is not a request for the version
     const now = deps.now();
     const first = readState(deps.statePath);
-    const due = first.checkedAt === undefined || now - first.checkedAt >= CHECK_EVERY_MS || first.checkedAt > now;
+    const due = (first.checkedAt === undefined || now - first.checkedAt >= CHECK_EVERY_MS || first.checkedAt > now) && canKeepState(deps.statePath);
     const refreshing = due ? refresh(deps) : undefined;
     if (refreshing && asked) await holdOpenFor(refreshing); // only `--version` waits for it: it is how you ask what you have
     // A command that ends first (most of them are quick) gives the answer a moment once its own work is done, never before.

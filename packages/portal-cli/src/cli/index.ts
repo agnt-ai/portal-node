@@ -180,7 +180,7 @@ const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8
 const program = new Command();
 
 setClientVersion(pkg.version);
-// Says on stderr, at most once a day, when a newer copy exists; never waits for the registry (except `--version`) and never writes stdout.
+// Says on stderr, about once a day, when a newer copy exists; never waits for the registry (except `--version`) and never writes stdout.
 await startUpdateCheck(process.argv.slice(2), pkg.version);
 
 program
