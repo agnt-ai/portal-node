@@ -456,7 +456,7 @@ tasksCmd
 
 const connectionsCmd = program
   .command('connections')
-  .description('Connect and manage third-party integrations (Slack, Teams, Zoom, Notion, Linear, Attio, and more)');
+  .description('Connect and manage third-party integrations (Teams, Zoom, Notion, Linear, Attio, and more)');
 
 connectionsCmd
   .command('list')
@@ -470,10 +470,11 @@ connectionsCmd
 connectionsCmd
   .command('connect')
   .description(
-    'Mint a connection link — hand this URL to a human to open in any browser\n' +
-    '(no portal login required). Two shapes:\n\n' +
+    'Mint a connection link for your person to open. After the provider approves it, they sign in to\n' +
+    '{{accountName}} as you and approve the connection; nothing is saved until they do. The link works\n' +
+    'once: 48 hours for an MCP server, 10 minutes for Teams or Zoom. Two shapes:\n\n' +
     `  Built-in (${BUILTIN_PROVIDERS.join('/')}), org/team-level:\n` +
-    '    {{accountSlug}} connections connect --provider slack --target team --target-id <teamId>\n\n' +
+    '    {{accountSlug}} connections connect --provider teams --target team --target-id <teamId>\n\n' +
     '  MCP-registry (Notion, Linear, Attio, Dropbox, etc.), per-user:\n' +
     '    {{accountSlug}} connections connect --mcp-server-url https://mcp.notion.com'
   )
@@ -481,7 +482,7 @@ connectionsCmd
   .option('--target <org|team>', 'Required with --provider — which level this connection binds at')
   .option('--target-id <id>', 'Required with --provider — the org or team id')
   .option('--mcp-server-url <url>', 'MCP server URL for a registry skill (Notion, Linear, Attio, etc.)')
-  .option('--scope <user|tenant>', 'Only with --mcp-server-url — "user" (default) or "tenant"-wide install')
+  .option('--scope <user|tenant>', 'Only with --mcp-server-url — "user" (default); a "tenant"-wide install is made from the console')
   .option('--profile <name>', 'Credentials profile to use')
   .option('--json', 'Print raw JSON')
   .action(async (opts) => {

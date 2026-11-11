@@ -1,7 +1,8 @@
 import type { HttpClient } from '../HttpClient.js';
 import type { Integration, ResourceAccessMode, ResourceAccessKind } from '../types.js';
 
-const BUILTIN_PROVIDERS = ['slack', 'teams', 'zoom'] as const;
+// Slack connects from the app itself (Settings > Connections), not from a link this CLI prints.
+const BUILTIN_PROVIDERS = ['teams', 'zoom'] as const;
 type BuiltinProvider = (typeof BUILTIN_PROVIDERS)[number];
 
 export interface ConnectMcpOptions {
@@ -32,10 +33,10 @@ export interface ConnectionIntent {
  * connectMcp()/connectBuiltin() are headless OAuth intents: these endpoints
  * already return a JSON { authUrl } (or { url }) rather than redirecting,
  * and already accept personal-API-key auth identically to a portal session
- * — see mcpOauthController.initiate, oauthController.{slack,teams,zoom}Authorize.
- * The CLI prints the URL for a human to open in any browser; the callback
- * needs no session of its own and writes the resulting token against the
- * key's own account/user.
+ * — see mcpOauthController.initiate, oauthController.{teams,zoom}Authorize.
+ * The CLI prints the URL for the key's own person to open. After the provider
+ * approves it, the person signs in to the app and approves the connection
+ * there; only then is anything saved, on the key's own account/user.
  */
 export class ConnectionsResource {
   constructor(private http: HttpClient) {}
@@ -71,7 +72,7 @@ export class ConnectionsResource {
     return { authUrl: r.mcp_oauth_initiate?.authUrl ?? r.authUrl };
   }
 
-  /** Connect a built-in org/team-level integration (Slack, Teams, or Zoom). */
+  /** Connect a built-in org/team-level integration (Teams or Zoom). */
   async connectBuiltin(opts: ConnectBuiltinOptions): Promise<ConnectionIntent> {
     if (!BUILTIN_PROVIDERS.includes(opts.provider)) {
       throw new Error(`Unknown built-in provider "${opts.provider}" — expected one of: ${BUILTIN_PROVIDERS.join(', ')}`);
