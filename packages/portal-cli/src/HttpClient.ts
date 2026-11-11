@@ -169,6 +169,49 @@ export class HttpClient {
   }
 
   /**
+   * GETs bytes: the response body as a stream, so a large file is never held in memory here. A non-ok answer is the
+   * same AgntApiError as any other call. The caller reads the body to its end (or cancels it).
+   */
+  async getStream(path: string, params?: Record<string, any>, opts: { timeoutMs?: number } = {}): Promise<{ body: ReadableStream<Uint8Array>; contentLength?: number }> {
+    let url = `${this.apiUrl}${path}`;
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params ?? {})) if (v !== undefined && v !== null) qs.set(k, String(v));
+    if ([...qs].length) url += `?${qs.toString()}`;
+    const init: RequestInit = { method: 'GET', headers: { Authorization: `Bearer ${this.apiKey}`, ...versionHeader() } };
+    if (opts.timeoutMs !== undefined) init.signal = AbortSignal.timeout(opts.timeoutMs);
+    const response = await fetch(url, init);
+    if (!response.ok) throw errorFromResponse(response, await response.text());
+    if (!response.body) throw new AgntApiError(502, 'The answer had no body.', 'empty_body');
+    const length = Number(response.headers.get('content-length'));
+    return { body: response.body, ...(Number.isSafeInteger(length) && length >= 0 && response.headers.get('content-length') !== null ? { contentLength: length } : {}) };
+  }
+
+  /**
+   * PUTs bytes to a signed upload URL the API handed out (a file's upload to the agent's own network server), with
+   * exactly the headers it named. Never carries this client's API key or version: the URL is another server's, and it
+   * needs only its own signature. A redirect is never followed. `body` is the file's `size` bytes, as a stream (not held in memory)
+   * or bytes already in memory. A non-ok answer is an AgntApiError.
+   */
+  async putSigned(url: string, headers: Record<string, string>, body: ReadableStream<Uint8Array> | Uint8Array, size: number, opts: { timeoutMs?: number } = {}): Promise<void> {
+    const sent: Record<string, string> = {};
+    // The length is this call's own, from the file; a hop-by-hop header named by the server must not change it.
+    for (const [k, v] of Object.entries(headers)) if (!/^(content-length|host|connection|transfer-encoding)$/i.test(k)) sent[k] = v;
+    sent['Content-Length'] = String(size);
+    const init: RequestInit & { duplex?: 'half' } = { method: 'PUT', headers: sent, redirect: 'manual' };
+    if (size > 0) {
+      init.body = body as any;
+      if (!(body instanceof Uint8Array)) init.duplex = 'half';
+    }
+    if (opts.timeoutMs !== undefined) init.signal = AbortSignal.timeout(opts.timeoutMs);
+    const response = await fetch(url, init);
+    if (response.ok) {
+      await response.body?.cancel();
+      return;
+    }
+    throw errorFromResponse(response, await response.text());
+  }
+
+  /**
    * POSTs to a Server-Sent-Events endpoint (e.g. /chats/:id/process) and
    * yields each parsed { event, data } as it arrives — for a live, token-
    * by-token-feeling reply rather than waiting for the whole response.
