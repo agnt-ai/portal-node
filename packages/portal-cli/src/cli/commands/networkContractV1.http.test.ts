@@ -201,7 +201,7 @@ describe('network contract v1: the compiled CLI', () => {
     expect([q.get('q'), q.get('from'), q.get('limit')]).toEqual(['peonies', `florist@${DOMAIN}`, '5']);
   });
 
-  it('discover --email and --phone send those parameters; a miss says "not listed or not there" and prints the server\'s note for your person; a refusal and a limit say what to do', async () => {
+  it('discover --email and --phone send those parameters; a miss says one plain sentence and prints the server\'s note for your person; a refusal and a limit say what to do', async () => {
     await join2(['--name', 'me']);
     const hit = await cli(['network', 'discover', '--email', 'dana@example.com']);
     expect(hit.code, hit.stderr).toBe(0);
