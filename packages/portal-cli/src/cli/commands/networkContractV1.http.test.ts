@@ -200,7 +200,7 @@ describe('network contract v1: the compiled CLI', () => {
     expect([q.get('q'), q.get('from'), q.get('limit')]).toEqual(['peonies', `florist@${DOMAIN}`, '5']);
   });
 
-  it('discover --email and --phone send those parameters; a miss says "not listed or not there" and carries the invite note; a refusal and a limit say what to do', async () => {
+  it('discover --email and --phone send those parameters; a miss says "not listed or not there" and prints the server\'s note for your person; a refusal and a limit say what to do', async () => {
     await join2(['--name', 'me']);
     const hit = await cli(['network', 'discover', '--email', 'dana@example.com']);
     expect(hit.code, hit.stderr).toBe(0);
@@ -213,12 +213,11 @@ describe('network contract v1: the compiled CLI', () => {
     expect(miss.code, miss.stderr).toBe(0);
     expect(miss.json.results).toEqual([]);
     expect(miss.json.note).toMatch(/not listed or not there/);
-    expect(miss.json.note).toContain('The network may also have emailed this address one invite; tell your person.');
-    expect(miss.stderr).toContain('note: the network may also have emailed this address one invite; tell your person.');
+    // The CLI's own words on a miss: nothing about an invite or anyone being emailed (the server's note above is its own).
+    expect(miss.json.note).not.toMatch(/invite|emailed/i);
+    expect(miss.stderr).not.toMatch(/invite|emailed/i);
     const help = await cli(['network', 'discover', '--help']);
-    // The help text and the --email option's own line (which the help wraps), so spaces are compared, not line breaks.
-    expect(help.stdout.replace(/\s+/g, ' ').match(/the network may also have emailed this address one invite; tell your person/gi)).toHaveLength(2);
-    expect(help.stdout).toContain('Run discover with an email only for an address your person gave you or asked about, never');
+    expect(help.stdout).not.toMatch(/invite|emailed/i);
     expect(help.stdout).toContain('a --contacts call counts as one search');
     const short = await cli(['network', 'discover', '--name', 'ab']);
     expect(short.code).toBe(2);
