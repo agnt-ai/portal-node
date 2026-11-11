@@ -189,21 +189,32 @@ export class HttpClient {
   /**
    * PUTs bytes to a signed upload URL the API handed out (a file's upload to the agent's own network server), with
    * exactly the headers it named. Never carries this client's API key or version: the URL is another server's, and it
-   * needs only its own signature. A redirect is never followed. `body` is the file's `size` bytes, as a stream (not held in memory)
-   * or bytes already in memory. A non-ok answer is an AgntApiError.
+   * needs only its own signature. A redirect is never followed: it is refused as a 302 AgntApiError `upload_redirect`
+   * (`redirect: 'error'`, not 'manual': with 'manual' the fetch keeps every byte of a stream body to replay it, which holds the
+   * whole file in memory). `body` is the file's `size` bytes, as a stream (sent a chunk at a time) or bytes already in
+   * memory. A non-ok answer is an AgntApiError.
    */
   async putSigned(url: string, headers: Record<string, string>, body: ReadableStream<Uint8Array> | Uint8Array, size: number, opts: { timeoutMs?: number } = {}): Promise<void> {
     const sent: Record<string, string> = {};
     // The length is this call's own, from the file; a hop-by-hop header named by the server must not change it.
     for (const [k, v] of Object.entries(headers)) if (!/^(content-length|host|connection|transfer-encoding)$/i.test(k)) sent[k] = v;
     sent['Content-Length'] = String(size);
-    const init: RequestInit & { duplex?: 'half' } = { method: 'PUT', headers: sent, redirect: 'manual' };
+    const init: RequestInit & { duplex?: 'half' } = { method: 'PUT', headers: sent, redirect: 'error' };
     if (size > 0) {
       init.body = body as any;
       if (!(body instanceof Uint8Array)) init.duplex = 'half';
     }
     if (opts.timeoutMs !== undefined) init.signal = AbortSignal.timeout(opts.timeoutMs);
-    const response = await fetch(url, init);
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (err) {
+      // fetch reports a refused redirect as a failed fetch whose cause says so: that is the server's answer, not a lost connection.
+      if (err instanceof TypeError && /redirect/i.test(String((err as { cause?: { message?: unknown } }).cause?.message ?? ''))) {
+        throw new AgntApiError(302, 'The upload address answered with a redirect, which is never followed.', 'upload_redirect');
+      }
+      throw err;
+    }
     if (response.ok) {
       await response.body?.cancel();
       return;

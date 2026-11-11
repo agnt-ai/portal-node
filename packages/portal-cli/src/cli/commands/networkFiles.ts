@@ -7,19 +7,22 @@
  * Nothing here imports network.ts: its callers map the two errors below (a usage error is exit 2; a PartsError carries its own
  * code, hint and whether running the same command again may help).
  *
- * Memory: a file is hashed and uploaded as a stream, read from disk twice, never held whole; a download is streamed to a
- * temporary file in its destination directory (checked against its hash there), then put in place. At most a chunk is held at a time.
+ * Memory: a file is read from disk twice, once to hash it and once to upload it, each time as a stream, so it is never held
+ * whole (the upload's fetch must not follow redirects, or it would keep every byte: see HttpClient.putSigned); a download is
+ * streamed to a temporary file in its destination directory (checked against its hash there), then put in place. At most a
+ * few chunks are held at a time.
  */
 
 import { createHash, randomBytes } from 'node:crypto';
-import { createReadStream, statSync, type Stats } from 'node:fs';
-import { chmod, copyFile, constants as fsConstants, lstat, link, mkdtemp, open, rename, rm, stat, unlink } from 'node:fs/promises';
+import { createReadStream, mkdtempSync, realpathSync, rmSync, statSync, unlinkSync, type Stats } from 'node:fs';
+import { chmod, copyFile, constants as fsConstants, lstat, link, open, rename, stat, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { PortalClient } from '../../index.js';
 import { AgntApiError } from '../../HttpClient.js';
+import { accountConfigDir } from '../utils/credentials.js';
 import type { NetworkFilePart } from '../../types.js';
 
 const MiB = 1024 * 1024;
@@ -76,14 +79,39 @@ export interface PlannedFile {
   size: number;
 }
 
-const sizeWords = (n: number) => (n >= MiB ? `${(n / MiB).toFixed(1)} MiB` : `${n} bytes`);
+/** A size as the exact number of bytes (25 MiB and one byte must not read as 25 MiB). */
+const sizeWords = (n: number) => `${n} bytes`;
+const LIMIT_WORDS = `25 MiB (${FILE_BYTES} bytes)`;
+
+/**
+ * A file name the network takes (simon-protocol's part names): 1 to 255 BYTES, no `/` or `\`, no control characters, and no
+ * characters that change the text's direction (which can make a name read as another). Why not, or undefined.
+ */
+// eslint-disable-next-line no-control-regex
+const NOT_IN_NAME = /[/\\\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+export function networkNameProblem(name: string): string | undefined {
+  const bytes = Buffer.byteLength(name);
+  if (bytes < 1 || bytes > 255) return `its name is ${bytes} bytes; a name is 1 to 255 bytes (a character can take up to 4)`;
+  if (NOT_IN_NAME.test(name)) return 'its name has a / or \\, a control character or a character that changes the text\'s direction, which a name on the network cannot have';
+  return undefined;
+}
+
+/** Whether `file` is inside `dir`, links resolved (a link to a file in it counts). */
+function isInside(dir: string, file: string): boolean {
+  const real = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } };
+  const rel = relative(real(dir), real(file));
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+}
 
 /**
  * The files to send, checked as far as the disk and the network's limits tell, before anything is sent or any key is
  * read: each exists and is a regular file (a link to one is followed), is at most 25 MiB; at most 31; all together
- * with the text at most 50 MiB. The name is the file's base name: never a directory.
+ * with the text at most 50 MiB; its name is one the network takes; and it is not in this CLI's own settings folder (the
+ * API key lives there: never sent). The name is the file's base name: never a directory.
  */
-export function planFiles(paths: string[] | undefined, textBytes = 0, statFn: (p: string) => Stats = statSync): PlannedFile[] {
+export function planFiles(
+  paths: string[] | undefined, textBytes = 0, statFn: (p: string) => Stats = statSync, configDir: string = accountConfigDir(),
+): PlannedFile[] {
   const list = paths ?? [];
   if (list.length > MAX_FILES) throw new FilesUsageError(`A message carries at most ${MAX_FILES} files; ${list.length} were given.`);
   let total = textBytes;
@@ -97,15 +125,19 @@ export function planFiles(paths: string[] | undefined, textBytes = 0, statFn: (p
     }
     if (!info.isFile()) throw new FilesUsageError(`--file ${given} is not a file (a folder or a device cannot be sent): send a file, or zip the folder first.`);
     if (info.size > FILE_BYTES) {
-      throw new FilesUsageError(`--file ${given} is ${sizeWords(info.size)}; a file on the network is at most 25 MiB. Nothing was sent.`);
+      throw new FilesUsageError(`--file ${given} is ${sizeWords(info.size)}; a file on the network is at most ${LIMIT_WORDS}. Nothing was sent.`);
+    }
+    if (isInside(configDir, given)) {
+      throw new FilesUsageError(`--file ${given} is inside this CLI's own settings folder (${configDir}), which holds your API key: it is never sent. Nothing was sent.`);
     }
     const name = basename(given);
-    if (!name || name.length > 255) throw new FilesUsageError(`--file ${given}: the file's name must be 1 to 255 characters.`);
+    const problem = networkNameProblem(name);
+    if (problem) throw new FilesUsageError(`--file ${given}: ${problem}. Copy it to a plain name first. Nothing was sent.`);
     total += info.size;
     return { path: given, name, type: mediaTypeFor(name), size: info.size } satisfies PlannedFile;
   });
   if (total > MESSAGE_BYTES) {
-    throw new FilesUsageError(`The message adds up to ${sizeWords(total)}, text and files together; a message is at most 50 MiB. Send the files in more than one message.`);
+    throw new FilesUsageError(`The message adds up to ${sizeWords(total)}, text and files together; a message is at most 50 MiB (${MESSAGE_BYTES} bytes). Send the files in more than one message.`);
   }
   return planned;
 }
@@ -129,10 +161,15 @@ export function uploadUrlProblem(raw: unknown): string | undefined {
   } catch {
     return 'is not an address';
   }
+  // A user name or password in the address is never part of a signed upload: it would also make fetch refuse the call.
+  if (url.username || url.password) return 'has a user name or password in it';
   if (url.protocol === 'https:') return undefined;
   if (url.protocol === 'http:' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(url.hostname)) return undefined;
   return 'is not an https address';
 }
+
+/** How far past `expiresAt` this computer's clock may read before the signed upload is called expired: its own clock may be off. */
+export const EXPIRY_SKEW_MS = 5 * 60_000;
 
 const UPLOAD_AGAIN = 'Nothing was sent. Run the same command once: it signs and uploads again (an upload is good once, for about five minutes).';
 
@@ -153,7 +190,7 @@ export async function uploadFiles(
   for (const file of files) {
     const { sha256, size } = await hashFile(file.path);
     if (size !== file.size) throw new PartsError('file_changed', `${file.path} changed while it was being read (it was ${file.size} bytes, now ${size}). Nothing was sent.`, { retryable: false, hint: 'Run the same command again once the file has stopped changing.' });
-    if (size > FILE_BYTES) throw new FilesUsageError(`--file ${file.path} is ${sizeWords(size)}; a file on the network is at most 25 MiB. Nothing was sent.`);
+    if (size > FILE_BYTES) throw new FilesUsageError(`--file ${file.path} is ${sizeWords(size)}; a file on the network is at most ${LIMIT_WORDS}. Nothing was sent.`);
     parts.push({ type: file.type, sha256, size, name: file.name });
     if (done.has(sha256)) continue;
     let prepared;
@@ -170,8 +207,8 @@ export async function uploadFiles(
     const problem = upload?.method === 'PUT' ? uploadUrlProblem(upload.url) : 'is not a PUT';
     if (problem) throw new PartsError('upload_refused', `The upload the server signed ${problem}, so nothing was uploaded.`, { retryable: false, hint: 'Nothing was sent. Tell your person: this is a fault on the server side; trying again will not help.' });
     const expires = Date.parse(upload.expiresAt);
-    if (Number.isFinite(expires) && expires <= now()) {
-      throw new PartsError('upload_expired', 'The signed upload ran out before the bytes were sent (it is good for about five minutes, once).', { retryable: true, hint: UPLOAD_AGAIN });
+    if (Number.isFinite(expires) && expires + EXPIRY_SKEW_MS <= now()) {
+      throw new PartsError('upload_expired', 'The signed upload is more than five minutes past its time by this computer\'s clock (it is good for about five minutes, once): the upload ran out, or this clock is off.', { retryable: true, hint: `${UPLOAD_AGAIN} If it says this again at once, your computer's clock may be off.` });
     }
     // The file must still be the one hashed: a different size is caught here, the same size with other bytes by the server.
     if (statSync(file.path).size !== size) throw new PartsError('file_changed', `${file.path} changed while it was being sent. Nothing was sent.`, { retryable: false, hint: 'Run the same command again once the file has stopped changing.' });
@@ -179,6 +216,12 @@ export async function uploadFiles(
       await client.network.putPart(upload, size > 0 ? Readable.toWeb(createReadStream(file.path)) as ReadableStream<Uint8Array> : new Uint8Array(0), size);
     } catch (err) {
       if (!(err instanceof AgntApiError)) throw err;
+      // An answer that is a redirect is the server's fault, and the same on every try: never followed, never retried.
+      if (err.errorCode === 'upload_redirect' || (err.status >= 300 && err.status < 400)) {
+        throw new PartsError('upload_refused', `Your network server answered the upload of ${file.name} with a redirect, which is never followed.`, {
+          status: err.status, retryable: false, hint: 'Nothing was sent. Tell your person: this is a fault on the server side; trying again will not help.',
+        });
+      }
       const transient = err.status === 408 || err.status === 429 || err.status >= 500;
       throw new PartsError(
         transient ? 'upload_failed' : 'upload_refused',
@@ -198,11 +241,17 @@ export async function uploadFiles(
 
 // ── receiving ─────────────────────────────────────────────────────────────────
 
-/** A file name that is only a name: what the person or the agent chose, never a path or what a message said. */
+/** Names Windows will not make as a file, with or without an extension. */
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/i;
+
+/**
+ * A file name that is only a name: what the person or the agent chose, never a path or what a message said. The network's
+ * own rules for a name (1 to 255 bytes, no / or \\, no control or direction-changing characters), and no name Windows
+ * cannot make: a reserved one (CON, NUL, COM1 ...), a trailing dot or space, or one of : * ? " < > |.
+ */
 export function plainFileName(name: string): string {
-  // eslint-disable-next-line no-control-regex
-  if (!name || name === '.' || name === '..' || /[/\\\u0000-\u001f\u007f]/.test(name) || Buffer.byteLength(name) > 255) {
-    throw new FilesUsageError('--name must be a plain file name (1 to 255 bytes, no / or \\ and no control characters), never a path. Choose it yourself: the name a message gave is its sender\'s word.');
+  if (!name || name === '.' || name === '..' || networkNameProblem(name) || /[:*?"<>|]/.test(name) || /[. ]$/.test(name) || WINDOWS_RESERVED.test(name)) {
+    throw new FilesUsageError('--name must be a plain file name, never a path: 1 to 255 bytes, no / \\ : * ? " < > |, no control or direction-changing characters, not ending in a dot or a space, and not a name Windows reserves (CON, NUL, COM1 ...). Choose it yourself: the name a message gave is its sender\'s word.');
   }
   return name;
 }
@@ -265,8 +314,11 @@ async function destinationFor(opts: PartDownloadOptions, sha256: string): Promis
   return { dir: dirname(path), path, made: false };
 }
 
-/** Refuses what must never be written over: a link (never followed), a folder, and (without force) any file. */
-async function checkNotThere(path: string, force: boolean | undefined, given: string): Promise<void> {
+/**
+ * Refuses what must never be written over: a link (never followed), a folder, and (without force) any file. `fetched`
+ * says whether the bytes are already down (the second look, just before they are put in place).
+ */
+async function checkNotThere(path: string, force: boolean | undefined, given: string, fetched = false): Promise<void> {
   let info: Stats;
   try {
     info = await lstat(path);
@@ -275,7 +327,17 @@ async function checkNotThere(path: string, force: boolean | undefined, given: st
   }
   if (info.isSymbolicLink()) throw new FilesUsageError(`${given} is a symbolic link: a link is never followed or replaced. Choose another path.`);
   if (!info.isFile()) throw new FilesUsageError(`${given} exists and is not a file: it is never replaced. Choose another path.`);
-  if (!force) throw new FilesUsageError(`${given} already exists, and nothing was fetched. Choose another path or name, or add --force to replace it.`);
+  if (!force) {
+    throw new FilesUsageError(fetched
+      ? `${given} appeared while the file was coming down; nothing was replaced and nothing was kept. Choose another path or name, or add --force.`
+      : `${given} already exists, and nothing was fetched. Choose another path or name, or add --force to replace it.`);
+  }
+}
+
+/** A failure of the connection itself (dropped mid-stream, reset, timed out), as opposed to the disk or the answer. */
+function isConnectionFailure(err: unknown): boolean {
+  const code = (e: unknown) => String((e as { code?: unknown } | undefined)?.code ?? '');
+  return err instanceof TypeError || /^(UND_ERR|ECONN|EPIPE|ETIMEDOUT|ENOTFOUND|EAI_)/.test(code(err)) || /^(UND_ERR|ECONN|EPIPE|ETIMEDOUT)/.test(code((err as { cause?: unknown } | undefined)?.cause));
 }
 
 /** Counts, hashes and bounds what passes through: past `limit` bytes it stops with `too_large`. */
@@ -296,12 +358,14 @@ function counting(limit: number) {
 /**
  * Download a file a message carried, by the SHA-256 of its part, to a path that was chosen (never one a message gave): the
  * bytes stream into a temporary file (mode 0600) next to it, are checked against the hash (and the size, when given), and only
- * then put in place; a mismatch keeps nothing. An existing file is not replaced without `force`, a link never.
+ * then put in place; a mismatch keeps nothing. An existing file is not replaced without `force`, a link never. Ctrl-C or a
+ * SIGTERM while it runs removes the temporary file (and the folder made for it) before the process ends. `deps.beforePlace`
+ * is for tests: it runs after the last look at the destination and before the file is put there.
  */
-export async function downloadPartTo(client: PortalClient, sha256: string, opts: PartDownloadOptions = {}): Promise<SavedPart> {
+export async function downloadPartTo(client: PortalClient, sha256: string, opts: PartDownloadOptions = {}, deps: { beforePlace?: () => void | Promise<void> } = {}): Promise<SavedPart> {
   if (!SHA256.test(sha256)) throw new FilesUsageError('part takes the file\'s sha256: 64 lower-case hex digits, from the message part\'s "sha256".');
   if (opts.size !== undefined && (!Number.isSafeInteger(opts.size) || opts.size < 0)) throw new FilesUsageError('--size takes the part\'s size in bytes, a whole number.');
-  if (opts.size !== undefined && opts.size > FILE_BYTES) throw new FilesUsageError(`A file on the network is at most 25 MiB, so a part of ${opts.size} bytes is not one: nothing was fetched.`);
+  if (opts.size !== undefined && opts.size > FILE_BYTES) throw new FilesUsageError(`A file on the network is at most ${LIMIT_WORDS}, so a part of ${opts.size} bytes is not one: nothing was fetched.`);
   const where = await destinationFor(opts, sha256);
   if (where.path) await checkNotThere(where.path, opts.force, opts.out ?? where.path);
 
@@ -315,48 +379,80 @@ export async function downloadPartTo(client: PortalClient, sha256: string, opts:
   let dir = where.dir;
   let path = where.path;
   let madeDir: string | undefined;
-  if (where.made) {
-    madeDir = await mkdtemp(join(tmpdir(), '{{accountSlug}}-part-'));
-    dir = madeDir;
-    path = join(dir, opts.name === undefined ? sha256 : plainFileName(opts.name));
-  }
-  const tmp = join(dir!, `.${sha256.slice(0, 8)}-${randomBytes(6).toString('hex')}.part`);
-  const handle = await open(tmp, 'wx', 0o600);
+  let tmp: string | undefined;
+  // What a Ctrl-C or a SIGTERM must not leave behind: the half-written file and the folder made for it. Then the signal
+  // takes its usual course (the process ends by it, as the shell expects).
+  const cleanUp = () => {
+    if (tmp) try { unlinkSync(tmp); } catch { /* not there */ }
+    if (madeDir) try { rmSync(madeDir, { recursive: true, force: true }); } catch { /* already gone */ }
+  };
+  const onSigint = () => { cleanUp(); stopListening(); process.kill(process.pid, 'SIGINT'); };
+  const onSigterm = () => { cleanUp(); stopListening(); process.kill(process.pid, 'SIGTERM'); };
+  const stopListening = () => { process.removeListener('SIGINT', onSigint); process.removeListener('SIGTERM', onSigterm); };
+  process.once('SIGINT', onSigint);
+  process.once('SIGTERM', onSigterm);
   try {
-    const count = counting(limit);
-    await pipeline(Readable.fromWeb(body as never), count.stream, handle.createWriteStream());
-    if (count.digest() !== sha256) {
-      throw new PartsError('part_mismatch', 'The file that came back does not match its hash; nothing was kept.', { status: 502, retryable: false, hint: 'Nothing was kept. Do not use these bytes; tell your person.' });
+    if (where.made) {
+      madeDir = mkdtempSync(join(tmpdir(), '{{accountSlug}}-part-'));
+      dir = madeDir;
+      path = join(dir, opts.name === undefined ? sha256 : plainFileName(opts.name));
     }
-    if (opts.size !== undefined && count.size() !== opts.size) {
-      throw new PartsError('part_mismatch', `The file is ${count.size()} bytes, not the ${opts.size} the part names; nothing was kept.`, { status: 502, retryable: false, hint: 'Nothing was kept. Do not use these bytes; tell your person.' });
-    }
-    // Checked again just before it is put in place (a link may have appeared meanwhile).
-    await checkNotThere(path!, opts.force, opts.out ?? path!);
-    if (opts.force) {
-      await rename(tmp, path!);
-    } else {
+    tmp = join(dir!, `.${sha256.slice(0, 8)}-${randomBytes(6).toString('hex')}.part`);
+    const handle = await open(tmp, 'wx', 0o600);
+    try {
+      const count = counting(limit);
       try {
-        await link(tmp, path!);
-        await unlink(tmp);
+        await pipeline(Readable.fromWeb(body as never), count.stream, handle.createWriteStream());
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'EEXIST') throw new FilesUsageError(`${opts.out ?? path} already exists; nothing was replaced. Choose another path or name, or add --force.`);
+        if (err instanceof PartsError || err instanceof FilesUsageError || !isConnectionFailure(err)) throw err;
+        throw new PartsError('network_error', `The connection dropped while the file was coming down (${err instanceof Error ? err.message : String(err)}).`, {
+          retryable: true, hint: 'Nothing was kept. Check the connection, then run the same command once.',
+        });
+      }
+      if (count.digest() !== sha256) {
+        throw new PartsError('part_mismatch', 'The file that came back does not match its hash; nothing was kept.', { status: 502, retryable: false, hint: 'Nothing was kept. Do not use these bytes; tell your person.' });
+      }
+      if (opts.size !== undefined && count.size() !== opts.size) {
+        throw new PartsError('part_mismatch', `The file is ${count.size()} bytes, not the ${opts.size} the part names; nothing was kept.`, { status: 502, retryable: false, hint: 'Nothing was kept. Do not use these bytes; tell your person.' });
+      }
+      // Looked at again just before it is put in place (a file or a link may have appeared meanwhile).
+      await checkNotThere(path!, opts.force, opts.out ?? path!, true);
+      await deps.beforePlace?.();
+      if (opts.force) {
+        await rename(tmp, path!);
+      } else {
+        // link() never replaces: the file is there whole or not at all.
+        let linked = true;
+        try {
+          await link(tmp, path!);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'EEXIST') throw new FilesUsageError(`${opts.out ?? path} already exists; nothing was replaced. Choose another path or name, or add --force.`);
+          linked = false;
+        }
         // A filesystem without links: copy, still refusing to replace.
-        await copyFile(tmp, path!, fsConstants.COPYFILE_EXCL);
-        await chmod(path!, 0o600);
+        if (!linked) {
+          try {
+            await copyFile(tmp, path!, fsConstants.COPYFILE_EXCL);
+          } catch (err) {
+            if ((err as NodeJS.ErrnoException).code === 'EEXIST') throw new FilesUsageError(`${opts.out ?? path} already exists; nothing was replaced. Choose another path or name, or add --force.`);
+            throw err;
+          }
+          await chmod(path!, 0o600);
+        }
         await unlink(tmp);
       }
+      tmp = undefined;
+      madeDir = undefined;
+      return {
+        saved: true, path: path!, sha256, size: count.size(), ...(opts.type !== undefined ? { type: opts.type } : {}), file: UNTRUSTED_FILE,
+      };
+    } finally {
+      await handle.close().catch(() => undefined);
     }
-    return {
-      saved: true, path: path!, sha256, size: count.size(), ...(opts.type !== undefined ? { type: opts.type } : {}), file: UNTRUSTED_FILE,
-    };
   } catch (err) {
-    await handle.close().catch(() => undefined);
-    await unlink(tmp).catch(() => undefined);
-    if (madeDir) await rm(madeDir, { recursive: true, force: true }).catch(() => undefined);
+    cleanUp();
     throw err;
   } finally {
-    await handle.close().catch(() => undefined);
+    stopListening();
   }
 }
-

@@ -208,7 +208,7 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
     case 'no_such_address':
       return 'None of those Network IDs exists, so nothing was delivered (details.recipients names each). Check the spelling with whoever gave it to you; do not retry the same address.';
     case 'held_parts_unsupported':
-      return 'Files go to Network IDs only for now, not to an email or a phone. Send the text alone to them.';
+      return "Files go only to Network IDs on {{accountName}}'s own domains for now: not to an email, a phone, a Network ID on another network, or a reply to a thread that has one of those on it. The file was uploaded but nothing was sent. Send the text alone to them, or send the file in a message to the Network IDs only (--to).";
     case 'part_not_uploaded':
       return "Your network server did not have a file's bytes when the send was made. Nothing was sent. Run the same command once: it uploads each file again.";
     case 'needs_more_space':
@@ -533,12 +533,15 @@ export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string =
   }
   const files = opts.file ?? [];
   if (opts.text === undefined && !files.length) throw new NetworkUsageError('Give --text, the message (or --text - to read it from stdin), or a --file to send.');
-  // Files go to Network IDs only for now: the server refuses a message with files to an email or a phone, and it is said before anything is uploaded.
+  // Files go only to Network IDs on the app's own domains for now: the server refuses a message with files to anything else
+  // (400 held_parts_unsupported), after the upload. A phone and a mailto: address are plain to see here and are refused before
+  // anything is uploaded; a name@domain that is an email, or on another network, cannot be told from here: the server says.
   if (files.length && to.some((t) => PHONE.test(t) || /^mailto:/i.test(t))) {
-    throw new NetworkUsageError('Files go to Network IDs only for now, not to an email or a phone. Send the text alone to them, and the files to their Network ID.');
+    throw new NetworkUsageError('Files go only to Network IDs for now, not to an email or a phone. Send the text alone to them, and the files to their Network ID.');
   }
   const text = opts.text === undefined ? undefined : opts.text === '-' ? readStdin() : opts.text;
-  const body: NetworkSendBody = { to, ...(text !== undefined ? { text } : {}) };
+  // An empty text beside a file is no text: the message is its files.
+  const body: NetworkSendBody = { to, ...(text !== undefined && !(text === '' && files.length) ? { text } : {}) };
   if (opts.inReplyTo !== undefined) {
     // Full ids only: a short prefix is cheap to collide with on purpose. A message id is 64 hex characters; a post's
     // id (from feed or discover) is the server's own and goes as given.

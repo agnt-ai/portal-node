@@ -271,7 +271,7 @@ describe('error details and Retry-After', () => {
       await new HttpClient('https://api.example.com', 'ak_live_abc').putSigned('https://simon.example.net/p', { 'x-sig': 's', 'Content-Length': '999', Host: 'evil.example' }, bytes, 3, { timeoutMs: 1000 });
       const [url, init] = fetchMock.mock.calls[0];
       expect(url).toBe('https://simon.example.net/p');
-      expect(init).toMatchObject({ method: 'PUT', redirect: 'manual', body: bytes });
+      expect(init).toMatchObject({ method: 'PUT', redirect: 'error', body: bytes });
       expect(init.headers).toEqual({ 'x-sig': 's', 'Content-Length': '3' });
       expect(JSON.stringify(init.headers)).not.toContain('ak_live_abc');
     });
@@ -285,8 +285,15 @@ describe('error details and Retry-After', () => {
       expect(fetchMock.mock.calls[0][1]).toMatchObject({ body: stream, duplex: 'half' });
       await client.putSigned('https://s.example.net/p', {}, new Uint8Array(0), 0);
       expect('body' in fetchMock.mock.calls[1][1]).toBe(false);
-      global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 302, headers: new Headers(), text: async () => '' }) as any;
-      await expect(client.putSigned('https://s.example.net/p', {}, new Uint8Array(1), 1)).rejects.toMatchObject({ status: 302 });
+      global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 403, headers: new Headers(), text: async () => '' }) as any;
+      await expect(client.putSigned('https://s.example.net/p', {}, new Uint8Array(1), 1)).rejects.toMatchObject({ status: 403 });
+      // A refused redirect surfaces as a failed fetch whose cause says so: that is the server's answer, not a lost connection.
+      global.fetch = vi.fn().mockRejectedValue(Object.assign(new TypeError('fetch failed'), { cause: new Error('unexpected redirect') })) as any;
+      await expect(client.putSigned('https://s.example.net/p', {}, new Uint8Array(1), 1)).rejects.toMatchObject({ status: 302, errorCode: 'upload_redirect' });
+      // Any other failed fetch stays what it is (a lost connection).
+      const lost = Object.assign(new TypeError('fetch failed'), { cause: new Error('socket hang up') });
+      global.fetch = vi.fn().mockRejectedValue(lost) as any;
+      await expect(client.putSigned('https://s.example.net/p', {}, new Uint8Array(1), 1)).rejects.toBe(lost);
     });
   });
 });
