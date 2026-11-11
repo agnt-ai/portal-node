@@ -665,6 +665,32 @@ describe('network files', () => {
       expect(uploadedText()).toEqual(['x'.repeat(size)]);
     });
 
+    it('a hard link swapped in between the path check and the open is refused by the open file\'s identity', async () => {
+      const { cfg, key, size } = settings();
+      const plain = file('plain.txt', Buffer.alloc(size, 'x'));
+      const plan = planFiles([plain], 0, statSync, cfg);
+      await expect(uploadFiles(client, plan, {}, { configDir: cfg, beforeOpen: () => { unlinkSync(plain); linkSync(key, plain); } })).rejects.toThrow(/own settings folder/);
+      expect(fake.calls).toHaveLength(0);
+    });
+
+    it('a folder is not a file to send, even if it gets as far as the open', async () => {
+      const { cfg } = settings();
+      const folder = join(dir, 'a-folder'); mkdirSync(folder);
+      await expect(uploadFiles(client, [{ path: folder, name: 'a-folder', type: 'application/octet-stream', size: 0 }], {}, { configDir: cfg })).rejects.toThrow(/is not a file/);
+      expect(fake.calls).toHaveLength(0);
+    });
+
+    it('every file it opens is closed again, after a send and after a refusal', async () => {
+      const { cfg } = settings();
+      const fds = () => { try { return readdirSync('/dev/fd').length; } catch { return -1; } };
+      const before = fds();
+      await uploadFiles(client, planFiles([file('a.txt', 'one'), file('b.txt', 'two')], 0, statSync, cfg), {}, { configDir: cfg });
+      fake.mode.putStatus = 403;
+      await uploadFiles(client, planFiles([file('c.txt', 'three')], 0, statSync, cfg), {}, { configDir: cfg }).catch(() => undefined);
+      await expect(uploadFiles(client, [{ path: join(dir, 'nope'), name: 'nope', type: 'text/plain', size: 1 }], {}, { configDir: cfg })).rejects.toBeInstanceOf(FilesUsageError);
+      if (before >= 0) expect(fds()).toBe(before);
+    });
+
     it('a file far down in the settings folder (past the scan) is refused by its folders, through a link as well', async () => {
       const { cfg } = settings();
       let deep = cfg;

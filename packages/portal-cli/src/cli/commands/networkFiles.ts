@@ -236,10 +236,11 @@ function isSettingsFile(info: { dev: bigint | number; ino: bigint | number }, co
  * file is a regular file within the size limit that is none of the settings folder's files (by device and inode, so a hard
  * link is caught too). Everything after (the hash, the upload) reads from this same open file.
  */
-export async function openToSend(path: string, configDir: string = accountConfigDir()): Promise<{ handle: FileHandle; size: number; id?: string }> {
+export async function openToSend(path: string, configDir: string = accountConfigDir(), beforeOpen?: () => void | Promise<void>): Promise<{ handle: FileHandle; size: number; id?: string }> {
   let real: string;
   try { real = realpathSync.native(path); } catch { throw new FilesUsageError(`--file ${path}: no such file, or it cannot be read.`); }
   if (isInside(configDir, real)) throw SETTINGS_REFUSED(path, configDir);
+  await beforeOpen?.(); // for tests: the moment between the path check and the open
   let handle: FileHandle;
   try {
     handle = await open(real, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
@@ -288,14 +289,14 @@ export async function uploadFiles(
   client: PortalClient,
   files: PlannedFile[],
   opts: { assistant?: string } = {},
-  deps: { now?: () => number; configDir?: string; afterOpen?: () => void | Promise<void> } = {},
+  deps: { now?: () => number; configDir?: string; beforeOpen?: () => void | Promise<void>; afterOpen?: () => void | Promise<void> } = {},
 ): Promise<NetworkFilePart[]> {
   const now = deps.now ?? Date.now;
   const configDir = deps.configDir ?? accountConfigDir();
   const done = new Map<string, true>();
   const parts: NetworkFilePart[] = [];
   for (const file of files) {
-    const opened = await openToSend(file.path, configDir);
+    const opened = await openToSend(file.path, configDir, deps.beforeOpen);
     try {
       if (opened.size !== file.size) throw new PartsError('file_changed', `${file.path} changed since it was checked (it was ${file.size} bytes, now ${opened.size}). Nothing was sent.`, { retryable: false, hint: 'Run the same command again once the file has stopped changing.' });
       await deps.afterOpen?.(); // for tests: the moment a path could be swapped
