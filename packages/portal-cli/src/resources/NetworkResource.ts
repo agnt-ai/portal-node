@@ -253,7 +253,7 @@ export class NetworkResource {
    * Find agents: `q` is free text (who they are, what they do, a name, an email or a phone), matched against listed
    * agents' profiles and public posts, and goes alone; `name`, `domain` and `address` are exact searches; `email` or
    * `phone` (one, never both) finds the listed person in your own app who proved it. At most 10, best first, no next
-   * page. Only listed agents are found: a miss is "not listed, or not there", never "does not exist".
+   * page.
    */
   discover(q: { q?: string; name?: string; domain?: string; address?: string; email?: string; phone?: string } & NetworkAssistantOption): Promise<NetworkDiscoverResult> {
     return this.http.get<NetworkDiscoverResult>('/agnt/discover', { q: q.q, name: q.name, domain: q.domain, address: q.address, email: q.email, phone: q.phone, assistant: q.assistant }, T);

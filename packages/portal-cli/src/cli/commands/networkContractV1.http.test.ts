@@ -73,6 +73,7 @@ function fakeApi() {
       if ((email?.length ?? 0) > 320) return refuse(res, 400, 'bad_request', 'email: String must contain at most 320 character(s)');
       if (url.searchParams.get('phone') === '+15555550199') return refuse(res, 400, 'invalid', 'phone is an E.164 phone number');
       if (email === 'dana@example.com') return json(res, 200, { results: [{ address: `dana@${DOMAIN}`, about: 'Assistant to Dana', matched: 'email', score: 1, name: 'Dana', domain: DOMAIN, degree: null, mutualConnections: 0, connection: 'none', workspace: false }], more: false });
+      if (email === 'plain@example.com') return json(res, 200, { results: [], more: false });
       return json(res, 200, { results: [], more: false, invite: { note: 'n', tellYourPerson: 't', forYourPerson: FOR_PERSON, joinUrl: 'https://x/network' }, hint: 'Nobody listed on this network matches.' });
     }
     if (route === 'GET /agnt/discover') {
@@ -200,7 +201,7 @@ describe('network contract v1: the compiled CLI', () => {
     expect([q.get('q'), q.get('from'), q.get('limit')]).toEqual(['peonies', `florist@${DOMAIN}`, '5']);
   });
 
-  it('discover --email and --phone send those parameters; a miss says "not listed or not there" and carries the invite note; a refusal and a limit say what to do', async () => {
+  it('discover --email and --phone send those parameters; a miss says one plain sentence and prints the server\'s note for your person; a refusal and a limit say what to do', async () => {
     await join2(['--name', 'me']);
     const hit = await cli(['network', 'discover', '--email', 'dana@example.com']);
     expect(hit.code, hit.stderr).toBe(0);
@@ -212,13 +213,21 @@ describe('network contract v1: the compiled CLI', () => {
     const miss = await cli(['network', 'discover', '--email', 'nobody@example.com']);
     expect(miss.code, miss.stderr).toBe(0);
     expect(miss.json.results).toEqual([]);
-    expect(miss.json.note).toMatch(/not listed or not there/);
-    expect(miss.json.note).toContain('The network may also have emailed this address one invite; tell your person.');
-    expect(miss.stderr).toContain('note: the network may also have emailed this address one invite; tell your person.');
+    expect(miss.json.note).toBe("Sorry, this person wasn't found.");
+    // The CLI's own words on a miss: nothing about an invite or anyone being emailed (the server's note above is its own).
+    expect(miss.json.note).not.toMatch(/invite|emailed/i);
+    expect(miss.stderr).not.toMatch(/invite|emailed/i);
+    // With no note from the server, stderr is the CLI's one sentence and nothing else; stdout carries the same.
+    const plain = await cli(['network', 'discover', '--email', 'plain@example.com']);
+    expect(plain.code, plain.stderr).toBe(0);
+    expect(plain.stderr).toBe("note: Sorry, this person wasn't found.\n");
+    expect(plain.json).toEqual({ results: [], more: false, note: "Sorry, this person wasn't found." });
+    const topic = await cli(['network', 'discover', 'nobody here']);
+    expect(topic.json.note).toBe('Sorry, no one was found.');
     const help = await cli(['network', 'discover', '--help']);
-    // The help text and the --email option's own line (which the help wraps), so spaces are compared, not line breaks.
-    expect(help.stdout.replace(/\s+/g, ' ').match(/the network may also have emailed this address one invite; tell your person/gi)).toHaveLength(2);
-    expect(help.stdout).toContain('Run discover with an email only for an address your person gave you or asked about, never');
+    expect(help.stdout).not.toMatch(/invite|emailed|not listed|not there|does not exist|left discovery|chose to be found/i);
+    expect(help.stdout).toContain("\"Sorry, this person wasn't found.\"");
+    expect(help.stdout).toContain('"Sorry, no one was found."');
     expect(help.stdout).toContain('a --contacts call counts as one search');
     const short = await cli(['network', 'discover', '--name', 'ab']);
     expect(short.code).toBe(2);
@@ -260,7 +269,7 @@ describe('network contract v1: the compiled CLI', () => {
     expect(next.code, next.stderr).toBe(0);
     expect(last('/agnt/discover/contacts').query.get('cursor')).toBe('f'.repeat(24));
     expect(next.json.cursor).toBeNull();
-    expect(next.stderr).toMatch(/none of the 4 emails and phones looked up in this call is a listed agent/);
+    expect(next.stderr).toBe('note: Sorry, no one was found.\n');
     expect((await cli(['network', 'discover', '--contacts', '--cursor', 'nope'])).code).toBe(2);
     fake.state.contactsLimited = true;
     const limited = await cli(['network', 'discover', '--contacts']);
