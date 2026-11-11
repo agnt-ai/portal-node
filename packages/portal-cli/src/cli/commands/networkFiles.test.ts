@@ -533,6 +533,15 @@ describe('network files', () => {
       expect(() => planFiles([join(cfg, '..x')], 0, statSync, via)).toThrow(/own settings folder/);
     });
 
+    it('a file deeper in the folder than the hard-link scan goes is still inside it (by its folders)', () => {
+      const { cfg } = settings();
+      let deep = cfg;
+      for (let i = 0; i < 8; i++) deep = join(deep, `d${i}`);
+      mkdirSync(deep, { recursive: true });
+      writeFileSync(join(deep, 'secret'), 's');
+      expect(() => planFiles([join(deep, 'secret')], 0, statSync, cfg)).toThrow(/own settings folder/);
+    });
+
     it('a folder that does not exist protects nothing, and a file next to it is fine', () => {
       expect(planFiles([file('a.txt', 'x')], 0, statSync, join(dir, '.nothing-here'))).toHaveLength(1);
     });
