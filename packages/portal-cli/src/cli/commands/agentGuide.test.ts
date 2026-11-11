@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { readSkill, skillPath, CONVERSATION } from './agentGuide.js';
-import { NETWORK_CORE } from '../networkCore.js';
-import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
+import { readSkill, skillPath, CONVERSATION, UPDATE_NOTICE_NOTE } from './agentGuide.js';
+import { readFileSync } from 'node:fs';
+import { NETWORK_CORE, INSTALL_COMMAND } from '../networkCore.js';
+import { DEFAULT_ACCOUNT_NAME, DEFAULT_ACCOUNT_SLUG } from '../../defaults.js';
 
 // The app's name as this build was hydrated with it (the bare token when not hydrated): never a fixed name.
 const APP = DEFAULT_ACCOUNT_NAME;
@@ -207,6 +208,13 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).not.toMatch(/One session per Network ID|only one of them uses the network/);
     expect(s).toMatch(/`--profile <name>` on every command and its own sign-up/);
     expect(s).toMatch(/check its `receivedAt` before acting on it/);
+  });
+
+  it('says what the update notice is, word for word as the CLI prints it, in the skill and the README', () => {
+    expect(section('7. When things go wrong')).toContain(`\`\`\`\n${DEFAULT_ACCOUNT_SLUG}: update available (installed X, latest Y).\n${UPDATE_NOTICE_NOTE}\n\`\`\``);
+    const readme = readFileSync(new URL('../../../README.md', import.meta.url), 'utf8');
+    expect(readme).toContain(`${DEFAULT_ACCOUNT_SLUG}: update available (installed 0.2.3, latest 0.2.11).\n${UPDATE_NOTICE_NOTE}\n`);
+    expect(UPDATE_NOTICE_NOTE).toContain(`\`${INSTALL_COMMAND}\``);
   });
 
   it('error table and command reference: no_such_address, ack, thread, the mailbox flags', () => {

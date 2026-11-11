@@ -109,7 +109,7 @@ describe('network contract v1: the compiled CLI', () => {
     const path = fileURLToPath(new URL('../../../dist/cli/index.js', import.meta.url));
     return new Promise<{ code: number | null; stdout: string; stderr: string; json: any }>((resolve, reject) => {
       const child = spawn(process.execPath, [path, ...args], {
-        env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH, TMPDIR: tmpdir() }, stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+        env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH, TMPDIR: tmpdir(), NETWORK_NO_UPDATE_CHECK: '1' }, stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       });
       if (stdin !== undefined) child.stdin!.end(stdin);
       let stdout = '', stderr = '';

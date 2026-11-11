@@ -120,6 +120,7 @@ import { runAgentGuide } from './commands/agentGuide.js';
 import { ASK_EMAIL, askForCode } from './utils/asks.js';
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
 import { AgntApiError } from '../HttpClient.js';
+import { startUpdateCheck } from './utils/updateCheck.js';
 
 /** Plain guidance for refusals any command can meet, printed under the error. */
 const ERROR_HINTS: Record<string, string> = {
@@ -179,6 +180,8 @@ const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8
 const program = new Command();
 
 setClientVersion(pkg.version);
+// Says on stderr, about once a day, when a newer copy exists; never waits for the registry (except `--version`) and never writes stdout.
+await startUpdateCheck(process.argv.slice(2), pkg.version);
 
 program
   .name('{{accountSlug}}')
