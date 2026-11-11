@@ -27,7 +27,7 @@ interface Fake {
     putStatus?: number;
     expiresAt?: () => string;
     uploadUrl?: (base: string, sha: string) => string;
-    download?: (id: string) => { status: number; body?: Buffer | string; headers?: Record<string, string>; json?: unknown };
+    download?: (id: string) => { status: number; body?: Buffer | string; headers?: Record<string, string>; json?: unknown; stream?: 'chunked' | 'hang' };
     sendStatus?: number;
   };
 }
@@ -87,6 +87,9 @@ function startFake(): Promise<{ fake: Fake; server: Server }> {
       for (const [k, v] of Object.entries(answer.headers ?? {})) res.setHeader(k, v);
       if (answer.json !== undefined) { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(answer.json)); }
       res.setHeader('Content-Type', 'application/octet-stream');
+      // No length announced (chunked), or a length announced and then no more bytes.
+      if (answer.stream === 'chunked') { const b = Buffer.from(answer.body ?? ''); res.write(b.subarray(0, 10)); return setTimeout(() => res.end(b.subarray(10)), 20); }
+      if (answer.stream === 'hang') { res.setHeader('Content-Length', '100'); return void res.write('x'); }
       return res.end(answer.body);
     }
     if (route === 'GET /agnt/whoami') return json(200, { address: 'me@openassistant.test' });
@@ -384,6 +387,14 @@ describe('network files', () => {
       expect(readdirSync(dir)).toEqual([]);
     });
 
+    it('a body with no announced length that runs past the size stops being read at the limit; an announced length past it is refused without waiting for the bytes', async () => {
+      fake.mode.download = () => ({ status: 200, body: Buffer.alloc(100), stream: 'chunked' });
+      await expect(downloadPartTo(client, sha(Buffer.alloc(100)), { out: join(dir, 'c'), size: 10 })).rejects.toMatchObject({ code: 'part_mismatch', message: expect.stringMatching(/larger than 10 bytes/) });
+      fake.mode.download = () => ({ status: 200, stream: 'hang' });
+      await expect(downloadPartTo(client, sha('x'), { out: join(dir, 'd'), size: 10 })).rejects.toMatchObject({ code: 'part_mismatch', message: expect.stringMatching(/announced 100 bytes/) });
+      expect(readdirSync(dir)).toEqual([]);
+    }, 3000);
+
     it('a directory: the file is saved inside it as its sha256, or as a plain --name you chose', async () => {
       const id = serve('dirbytes');
       const saved = await downloadPartTo(client, id, { out: dir });
@@ -401,6 +412,8 @@ describe('network files', () => {
         await expect(downloadPartTo(client, id, { out: inner, name }), JSON.stringify(name)).rejects.toThrow(FilesUsageError);
       }
       expect(() => plainFileName('../x')).toThrow(/never a path/);
+      expect(() => plainFileName('..')).toThrow(/never a path/);
+      expect(() => plainFileName('.')).toThrow(/never a path/);
       expect(plainFileName('contract (final).pdf')).toBe('contract (final).pdf');
       expect(downloads()).toHaveLength(0);
       expect(existsSync(join(dir, 'escape.txt'))).toBe(false);
