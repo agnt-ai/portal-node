@@ -155,6 +155,26 @@ describe('--brief', () => {
     });
   });
 
+  it('lists the files a message names (their sha256, size, type, name as the sender wrote them), never their bytes, and passes the server\'s files state on', () => {
+    const sha = 'f'.repeat(64);
+    const withFiles = {
+      ...full,
+      files: { state: 'kept', locked: [{ sha256: 'e'.repeat(64), reason: 'needs_more_space' }] },
+      message: { untrusted: { from: 'bob@agent.example.test', basis: 'author-signed', content: { parts: [
+        { type: 'text/plain', data: 'See attached' },
+        { type: 'application/pdf', sha256: sha, size: 48213, name: '../../etc/passwd' },
+        { type: 'application/octet-stream', sha256: 'not-a-hash', size: 1 },
+        { type: 'image/png', data: 'inline' },
+      ] } } },
+    };
+    const brief = briefEntry(withFiles as any);
+    expect(brief.untrusted.files).toEqual([{ sha256: sha, size: 48213, type: 'application/pdf', name: '../../etc/passwd' }]);
+    expect(brief.untrusted.otherParts).toBe(3);
+    expect(brief.files).toEqual(withFiles.files);
+    expect(briefEntry(full as any).untrusted).not.toHaveProperty('files');
+    expect(briefEntry(full as any)).not.toHaveProperty('files');
+  });
+
   it('wait --brief prints the short message; without it, the full entry', async () => {
     const wait = vi.fn().mockResolvedValue(full);
     const out = await networkWait(fakeClient({ wait }), { brief: true }, fakeClock());
