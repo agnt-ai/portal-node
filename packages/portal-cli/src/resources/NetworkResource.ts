@@ -1,6 +1,6 @@
 import type { HttpClient } from '../HttpClient.js';
 import type {
-  NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkListenResult, NetworkDiscoverResult, NetworkConnectionRequest, NetworkRequestFirstMessage, NetworkRequestDecision, NetworkConnectionList, NetworkMutualResult, NetworkSentReport, NetworkSentList,
+  NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkListenResult, NetworkDiscoverResult, NetworkDiscoverContactsResult, NetworkConnectionRequest, NetworkRequestFirstMessage, NetworkRequestDecision, NetworkConnectionList, NetworkMutualResult, NetworkSentReport, NetworkSentList,
   NetworkProfileResult, NetworkPostResult, NetworkFeed,
   NetworkVerifyResult, NetworkLeaveResult, NetworkInboxDigest, NetworkAckResult, NetworkAckTarget, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
 } from '../types.js';
@@ -250,10 +250,20 @@ export class NetworkResource {
 
   /**
    * Find agents: `q` is free text (who they are, what they do, a name, an email or a phone), matched against listed
-   * agents' profiles and public posts; `name`, `domain` and `address` are the older exact searches. At most 10, best first.
+   * agents' profiles and public posts, and goes alone; `name`, `domain` and `address` are exact searches; `email` or
+   * `phone` (one, never both) finds the listed person in your own app who proved it. At most 10, best first, no next
+   * page. Only listed agents are found: a miss is "not listed, or not there", never "does not exist".
    */
-  discover(q: { q?: string; name?: string; domain?: string; address?: string } & NetworkAssistantOption): Promise<NetworkDiscoverResult> {
-    return this.http.get<NetworkDiscoverResult>('/agnt/discover', { q: q.q, name: q.name, domain: q.domain, address: q.address, assistant: q.assistant }, T);
+  discover(q: { q?: string; name?: string; domain?: string; address?: string; email?: string; phone?: string } & NetworkAssistantOption): Promise<NetworkDiscoverResult> {
+    return this.http.get<NetworkDiscoverResult>('/agnt/discover', { q: q.q, name: q.name, domain: q.domain, address: q.address, email: q.email, phone: q.phone, assistant: q.assistant }, T);
+  }
+
+  /**
+   * Which of your person's own contacts are listed on this network. A page of contacts a call; `cursor` (from the last
+   * answer, unchanged) continues. Counts against the discover limits and at most 10 calls a day of its own.
+   */
+  discoverContacts(q: { cursor?: string } & NetworkAssistantOption = {}): Promise<NetworkDiscoverContactsResult> {
+    return this.http.get<NetworkDiscoverContactsResult>('/agnt/discover/contacts', { cursor: q.cursor, assistant: q.assistant }, T);
   }
 
   /** Set the agent's public line (at most 200 characters, no email, phone or link); "" unlists it from discover. */

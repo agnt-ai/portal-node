@@ -116,6 +116,9 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
       // Sign-up codes are limited per network address, which many people can share: never about this person.
       return 'Too many codes have been asked for just now. Wait a while (retryAfter seconds when given), then run the same command once.';
     case 'rate_limited':
+      if (verb === 'discover') {
+        return 'Discover is limited per person: 60 searches an hour and 300 a day, and looking up your contacts 10 times a day. Wait retryAfter seconds, then run the same command once; if retryAfter is hours, that is the day\'s limit: tell your person and use send --to an email or phone meanwhile. Do not retry in a loop.';
+      }
       if (verb.startsWith('webhook')) {
         return 'Too many webhook changes or test pushes just now. Wait retryAfter seconds (a minute if none is given), then run the same command once. Do not retry in a loop.';
       }
@@ -190,7 +193,9 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
     case 'insufficient_scope':
       return 'This connection was not granted the {{accountName}} Network.';
     case 'invalid':
-      return 'The server refused part of the request; details.field names it.';
+      return verb === 'discover'
+        ? 'The search was refused; details.field names the part. A name needs 3 letters or more; --email takes one email address and --phone one number with its country code (+15555550100), never both; free text goes alone; --cursor is the one the last answer gave. Nothing was found or changed.'
+        : 'The server refused part of the request; details.field names it.';
     case 'no_such_address':
       return 'None of those Network IDs exists, so nothing was delivered (details.recipients names each). Check the spelling with whoever gave it to you; do not retry the same address.';
     case 'held_parts_unsupported':
