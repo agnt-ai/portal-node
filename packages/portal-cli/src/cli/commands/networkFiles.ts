@@ -14,10 +14,10 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto';
-import { createReadStream, mkdtempSync, realpathSync, rmSync, statSync, unlinkSync, type Stats } from 'node:fs';
+import { createReadStream, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, unlinkSync, type BigIntStats, type Stats } from 'node:fs';
 import { chmod, copyFile, constants as fsConstants, lstat, link, open, rename, stat, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { PortalClient } from '../../index.js';
@@ -88,19 +88,57 @@ const LIMIT_WORDS = `25 MiB (${FILE_BYTES} bytes)`;
  * characters that change the text's direction (which can make a name read as another). Why not, or undefined.
  */
 // eslint-disable-next-line no-control-regex
-const NOT_IN_NAME = /[/\\\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+const NOT_IN_NAME = /[/\\\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 export function networkNameProblem(name: string): string | undefined {
   const bytes = Buffer.byteLength(name);
   if (bytes < 1 || bytes > 255) return `its name is ${bytes} bytes; a name is 1 to 255 bytes (a character can take up to 4)`;
-  if (NOT_IN_NAME.test(name)) return 'its name has a / or \\, a control character or a character that changes the text\'s direction, which a name on the network cannot have';
+  if (NOT_IN_NAME.test(name)) return 'its name has a / or \\, a control character, a character that changes the text\'s direction, or broken text, which a name on the network cannot have';
   return undefined;
 }
 
-/** Whether `file` is inside `dir`, links resolved (a link to a file in it counts). */
-function isInside(dir: string, file: string): boolean {
-  const real = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } };
-  const rel = relative(real(dir), real(file));
-  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+/** A file's or folder's identity on its disk: the same thing under any name, in any case, or through any link. */
+function idOf(info: BigIntStats): string | undefined {
+  return info.ino === 0n ? undefined : `${info.dev}:${info.ino}`;
+}
+
+/** The identities of every file inside `dir` (to a bounded depth and count): hard links to them share them. */
+function filesIn(dir: string): Set<string> {
+  const ids = new Set<string>();
+  const walk = (d: string, depth: number) => {
+    let names: string[];
+    try { names = readdirSync(d); } catch { return; }
+    for (const name of names) {
+      if (ids.size > 5000) return;
+      const p = join(d, name);
+      try {
+        const info = statSync(p, { bigint: true });
+        if (info.isDirectory()) { if (depth < 5) walk(p, depth + 1); } else { const id = idOf(info); if (id) ids.add(id); }
+      } catch { /* gone, or not readable */ }
+    }
+  };
+  walk(dir, 0);
+  return ids;
+}
+
+/**
+ * Whether `file` is `dir`'s own, by identity, not by name: the file's real path (links resolved, the disk's own spelling of
+ * its case) has `dir` among its folders, or the file is one of the files in `dir` under another name (a hard link). So
+ * neither another spelling of the folder's name on a case-insensitive disk, nor a link to a file in it, gets past.
+ */
+export function isInside(dir: string, file: string): boolean {
+  let dirId: string | undefined;
+  try { dirId = idOf(statSync(dir, { bigint: true })); } catch { return false; } // no such folder: nothing in it to protect
+  let real: string;
+  try { real = realpathSync.native(file); } catch { real = resolve(file); }
+  for (let p = real, prev = ''; p !== prev; prev = p, p = dirname(p)) {
+    try { if (dirId && idOf(statSync(p, { bigint: true })) === dirId) return true; } catch { /* not readable: not it */ }
+  }
+  try {
+    const own = idOf(statSync(real, { bigint: true }));
+    return own !== undefined && filesIn(dir).has(own);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -245,13 +283,15 @@ export async function uploadFiles(
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/i;
 
 /**
- * A file name that is only a name: what the person or the agent chose, never a path or what a message said. The network's
- * own rules for a name (1 to 255 bytes, no / or \\, no control or direction-changing characters), and no name Windows
- * cannot make: a reserved one (CON, NUL, COM1 ...), a trailing dot or space, or one of : * ? " < > |.
+ * A file name that is only a name: what the person or the agent chose, never a path or what a message said. Everywhere: the
+ * network's own rules for a name (1 to 255 bytes, well-formed text, no / or \\, no control or direction-changing characters),
+ * and not `.` or `..`. On Windows also what it cannot make: a reserved name (CON, NUL, COM1 ...), a trailing dot or space,
+ * or one of : * ? " < > | (these are fine names on macOS and Linux, so they are only refused there).
  */
-export function plainFileName(name: string): string {
-  if (!name || name === '.' || name === '..' || networkNameProblem(name) || /[:*?"<>|]/.test(name) || /[. ]$/.test(name) || WINDOWS_RESERVED.test(name)) {
-    throw new FilesUsageError('--name must be a plain file name, never a path: 1 to 255 bytes, no / \\ : * ? " < > |, no control or direction-changing characters, not ending in a dot or a space, and not a name Windows reserves (CON, NUL, COM1 ...). Choose it yourself: the name a message gave is its sender\'s word.');
+export function plainFileName(name: string, platform: NodeJS.Platform = process.platform): string {
+  const windows = platform === 'win32' && (/[:*?"<>|]/.test(name) || /[. ]$/.test(name) || WINDOWS_RESERVED.test(name));
+  if (!name || name === '.' || name === '..' || networkNameProblem(name) || windows) {
+    throw new FilesUsageError(`--name must be a plain file name, never a path: 1 to 255 bytes, no / or \\, no control or direction-changing characters${platform === 'win32' ? ', no : * ? " < > |, not ending in a dot or a space, and not a name Windows reserves (CON, NUL, COM1 ...)' : ''}. Choose it yourself: the name a message gave is its sender's word.`);
   }
   return name;
 }
@@ -334,10 +374,19 @@ async function checkNotThere(path: string, force: boolean | undefined, given: st
   }
 }
 
-/** A failure of the connection itself (dropped mid-stream, reset, timed out), as opposed to the disk or the answer. */
-function isConnectionFailure(err: unknown): boolean {
-  const code = (e: unknown) => String((e as { code?: unknown } | undefined)?.code ?? '');
-  return err instanceof TypeError || /^(UND_ERR|ECONN|EPIPE|ETIMEDOUT|ENOTFOUND|EAI_)/.test(code(err)) || /^(UND_ERR|ECONN|EPIPE|ETIMEDOUT)/.test(code((err as { cause?: unknown } | undefined)?.cause));
+/** Ctrl-C, a plain kill, and a closed terminal. (SIGKILL cannot be caught: it leaves the half-written file.) */
+const HANDLED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+
+const CONNECTION_CODES = /^(UND_ERR|ECONN|EPIPE|ETIMEDOUT|ENOTFOUND|EAI_)/;
+
+/**
+ * A failure of the connection itself (reset, dropped mid-stream, not found, timed out), as opposed to the disk or the answer:
+ * by its code or its cause's, or fetch's own "terminated" for a body cut short. Any other TypeError is a bug, not a lost line.
+ */
+export function isConnectionFailure(err: unknown): boolean {
+  const code = (e: unknown) => String((e as { code?: unknown } | null | undefined)?.code ?? '');
+  const cause = (err as { cause?: unknown } | null | undefined)?.cause;
+  return CONNECTION_CODES.test(code(err)) || CONNECTION_CODES.test(code(cause)) || (err instanceof TypeError && err.message === 'terminated');
 }
 
 /** Counts, hashes and bounds what passes through: past `limit` bytes it stops with `too_large`. */
@@ -359,7 +408,7 @@ function counting(limit: number) {
  * Download a file a message carried, by the SHA-256 of its part, to a path that was chosen (never one a message gave): the
  * bytes stream into a temporary file (mode 0600) next to it, are checked against the hash (and the size, when given), and only
  * then put in place; a mismatch keeps nothing. An existing file is not replaced without `force`, a link never. Ctrl-C or a
- * SIGTERM while it runs removes the temporary file (and the folder made for it) before the process ends. `deps.beforePlace`
+ * SIGTERM or SIGHUP while it runs removes the temporary file (and the folder made for it) before the process ends. `deps.beforePlace`
  * is for tests: it runs after the last look at the destination and before the file is put there.
  */
 export async function downloadPartTo(client: PortalClient, sha256: string, opts: PartDownloadOptions = {}, deps: { beforePlace?: () => void | Promise<void> } = {}): Promise<SavedPart> {
@@ -380,17 +429,19 @@ export async function downloadPartTo(client: PortalClient, sha256: string, opts:
   let path = where.path;
   let madeDir: string | undefined;
   let tmp: string | undefined;
-  // What a Ctrl-C or a SIGTERM must not leave behind: the half-written file and the folder made for it. Then the signal
+  // What a Ctrl-C, a SIGTERM or a closed terminal must not leave behind: the half-written file and the folder made for it. Then the signal
   // takes its usual course (the process ends by it, as the shell expects).
   const cleanUp = () => {
     if (tmp) try { unlinkSync(tmp); } catch { /* not there */ }
     if (madeDir) try { rmSync(madeDir, { recursive: true, force: true }); } catch { /* already gone */ }
   };
-  const onSigint = () => { cleanUp(); stopListening(); process.kill(process.pid, 'SIGINT'); };
-  const onSigterm = () => { cleanUp(); stopListening(); process.kill(process.pid, 'SIGTERM'); };
-  const stopListening = () => { process.removeListener('SIGINT', onSigint); process.removeListener('SIGTERM', onSigterm); };
-  process.once('SIGINT', onSigint);
-  process.once('SIGTERM', onSigterm);
+  const handlers = new Map<NodeJS.Signals, () => void>();
+  const stopListening = () => { for (const [signal, handler] of handlers) process.removeListener(signal, handler); handlers.clear(); };
+  for (const signal of HANDLED_SIGNALS) {
+    const handler = () => { cleanUp(); stopListening(); process.kill(process.pid, signal); };
+    handlers.set(signal, handler);
+    process.once(signal, handler);
+  }
   try {
     if (where.made) {
       madeDir = mkdtempSync(join(tmpdir(), '{{accountSlug}}-part-'));
