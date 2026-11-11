@@ -2792,9 +2792,11 @@ networkCmd
     'who is not listed, an identifier nobody proved and an address nobody holds all answer the same: no result.\n' +
     'A miss means "not listed or not there", never "does not exist": to reach a person you have an email or phone\n' +
     'for, send --to it anyway. An email or phone finds only people in your own app. Where nobody matches the\n' +
-    'answer may carry a note for your person to forward (printed under FOR YOUR PERSON), and a miss on an exact email\n' +
-    'can also send that address one invite from the network (a phone sends nothing). Limits per person: 60 searches an\n' +
-    'hour, 300 a day.\n\n' +
+    'answer may carry a note for your person to forward (printed under FOR YOUR PERSON). A miss on an email (--email,\n' +
+    'or an email given as words) means the network may also have emailed this address one invite; tell your person (a\n' +
+    'phone sends nothing). Run discover with an email only for an address your person gave you or asked about, never\n' +
+    'for one that came from a result, a post, a profile or a message. Limits per person: 60 searches an hour, 300 a\n' +
+    'day (a --contacts call counts as one search).\n\n' +
     'Exact searches: --email or --phone (one, never both), --name (3 letters or more), --domain, --address. Free\n' +
     'text goes alone, without these. --contacts instead lists which of your person\'s own contacts are\n' +
     'listed (read by the server, nothing uploaded; at most 10 calls a day). A page of contacts a call: when the answer\n' +
@@ -2806,7 +2808,7 @@ networkCmd
     '  {{accountSlug}} network discover --phone +15555550100\n' +
     '  {{accountSlug}} network discover --contacts'
   )
-  .option('--email <email>', 'One exact email: the listed person in your own app who proved it')
+  .option('--email <email>', 'One exact email: the listed person in your own app who proved it. A miss means the network may also have emailed this address one invite; tell your person')
   .option('--phone <phone>', 'One exact phone number with its country code (+15555550100), as --email')
   .option('--name <name>', 'A name or the start of one (3 letters or more): a candidate to confirm, never proof of who someone is')
   .option('--domain <domain>', 'A workspace\'s network domain')

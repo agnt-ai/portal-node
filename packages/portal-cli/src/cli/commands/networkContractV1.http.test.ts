@@ -69,6 +69,8 @@ function fakeApi() {
     if (route === 'GET /agnt/discover' && (url.searchParams.has('email') || url.searchParams.has('phone'))) {
       const email = url.searchParams.get('email');
       if (email === 'limit@example.com') { res.setHeader('Retry-After', '90'); return json(res, 429, { status: 429, error: 'too many discover calls; try again later', error_code: 'rate_limited' }); }
+      // Zod-level failures (a length) answer bad_request, as the real API's validateInput does; the service's own refusals answer invalid.
+      if ((email?.length ?? 0) > 320) return refuse(res, 400, 'bad_request', 'email: String must contain at most 320 character(s)');
       if (url.searchParams.get('phone') === '+15555550199') return refuse(res, 400, 'invalid', 'phone is an E.164 phone number');
       if (email === 'dana@example.com') return json(res, 200, { results: [{ address: `dana@${DOMAIN}`, about: 'Assistant to Dana', matched: 'email', score: 1, name: 'Dana', domain: DOMAIN, degree: null, mutualConnections: 0, connection: 'none', workspace: false }], more: false });
       return json(res, 200, { results: [], more: false, invite: { note: 'n', tellYourPerson: 't', forYourPerson: FOR_PERSON, joinUrl: 'https://x/network' }, hint: 'Nobody listed on this network matches.' });
@@ -211,12 +213,27 @@ describe('network contract v1: the compiled CLI', () => {
     expect(miss.code, miss.stderr).toBe(0);
     expect(miss.json.results).toEqual([]);
     expect(miss.json.note).toMatch(/not listed or not there/);
+    expect(miss.json.note).toContain('The network may also have emailed this address one invite; tell your person.');
+    expect(miss.stderr).toContain('note: the network may also have emailed this address one invite; tell your person.');
+    const help = await cli(['network', 'discover', '--help']);
+    // The help text and the --email option's own line (which the help wraps), so spaces are compared, not line breaks.
+    expect(help.stdout.replace(/\s+/g, ' ').match(/the network may also have emailed this address one invite; tell your person/gi)).toHaveLength(2);
+    expect(help.stdout).toContain('Run discover with an email only for an address your person gave you or asked about, never');
+    expect(help.stdout).toContain('a --contacts call counts as one search');
+    const short = await cli(['network', 'discover', '--name', 'ab']);
+    expect(short.code).toBe(2);
+    expect(short.stderr).toMatch(/--name needs 3 letters or more/);
     expect(miss.stderr).toContain(`FOR YOUR PERSON (give this to them word for word):\n${FOR_PERSON}\n`);
 
     const refused = await cli(['network', 'discover', '--phone', '+15555550199']);
     expect(refused.code).toBe(1);
     expect(refused.stderr).toMatch(/phone is an E\.164 phone number/);
     expect(refused.stderr).toMatch(/--email takes one email address and --phone one number with its country code/);
+
+    const tooLong = await cli(['network', 'discover', '--email', `${'a'.repeat(320)}@example.com`]);
+    expect(tooLong.code).toBe(1);
+    expect(tooLong.stderr).toMatch(/"code": "bad_request"/);
+    expect(tooLong.stderr).toMatch(/--email takes one email address and --phone one number with its country code/);
 
     const limited = await cli(['network', 'discover', '--email', 'limit@example.com']);
     expect(limited.code).toBe(75);
