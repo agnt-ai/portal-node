@@ -244,4 +244,56 @@ describe('error details and Retry-After', () => {
     expect(parseRetryAfter('soon')).toBeUndefined();
     expect(parseRetryAfter(null)).toBeUndefined();
   });
+  describe('files: getStream and putSigned', () => {
+    it('getStream sends the bearer token and the query, and hands the body back as a stream with its length', async () => {
+      const body = new ReadableStream();
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, body, headers: new Headers({ 'content-length': '12' }) });
+      global.fetch = fetchMock as any;
+      const got = await new HttpClient('https://api.example.com', 'ak_live_abc').getStream('/agnt/parts/x', { assistant: 'a1', skip: undefined }, { timeoutMs: 5000 });
+      expect(got).toEqual({ body, contentLength: 12 });
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe('https://api.example.com/agnt/parts/x?assistant=a1');
+      expect(init.headers.Authorization).toBe('Bearer ak_live_abc');
+      expect(init.signal).toBeDefined();
+    });
+
+    it('getStream turns a non-ok answer into an AgntApiError with its code and Retry-After', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false, status: 503, headers: new Headers({ 'retry-after': '7' }), text: async () => JSON.stringify({ error: 'still arriving', error_code: 'unavailable' }),
+      }) as any;
+      await expect(new HttpClient('https://api.example.com', 'k').getStream('/agnt/parts/x')).rejects.toMatchObject({ status: 503, errorCode: 'unavailable', retryAfter: 7 });
+    });
+
+    it('putSigned sends exactly the given headers and its own length, never the API key, and follows no redirect', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204, body: null });
+      global.fetch = fetchMock as any;
+      const bytes = new Uint8Array([1, 2, 3]);
+      await new HttpClient('https://api.example.com', 'ak_live_abc').putSigned('https://simon.example.net/p', { 'x-sig': 's', 'Content-Length': '999', Host: 'evil.example' }, bytes, 3, { timeoutMs: 1000 });
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe('https://simon.example.net/p');
+      expect(init).toMatchObject({ method: 'PUT', redirect: 'error', body: bytes });
+      expect(init.headers).toEqual({ 'x-sig': 's', 'Content-Length': '3' });
+      expect(JSON.stringify(init.headers)).not.toContain('ak_live_abc');
+    });
+
+    it('putSigned: a stream body goes half-duplex, an empty file has no body, a refusal is an AgntApiError', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, body: null });
+      global.fetch = fetchMock as any;
+      const client = new HttpClient('https://api.example.com', 'k');
+      const stream = new ReadableStream();
+      await client.putSigned('https://s.example.net/p', {}, stream, 5);
+      expect(fetchMock.mock.calls[0][1]).toMatchObject({ body: stream, duplex: 'half' });
+      await client.putSigned('https://s.example.net/p', {}, new Uint8Array(0), 0);
+      expect('body' in fetchMock.mock.calls[1][1]).toBe(false);
+      global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 403, headers: new Headers(), text: async () => '' }) as any;
+      await expect(client.putSigned('https://s.example.net/p', {}, new Uint8Array(1), 1)).rejects.toMatchObject({ status: 403 });
+      // A refused redirect surfaces as a failed fetch whose cause says so: that is the server's answer, not a lost connection.
+      global.fetch = vi.fn().mockRejectedValue(Object.assign(new TypeError('fetch failed'), { cause: new Error('unexpected redirect') })) as any;
+      await expect(client.putSigned('https://s.example.net/p', {}, new Uint8Array(1), 1)).rejects.toMatchObject({ status: 302, errorCode: 'upload_redirect' });
+      // Any other failed fetch stays what it is (a lost connection).
+      const lost = Object.assign(new TypeError('fetch failed'), { cause: new Error('socket hang up') });
+      global.fetch = vi.fn().mockRejectedValue(lost) as any;
+      await expect(client.putSigned('https://s.example.net/p', {}, new Uint8Array(1), 1)).rejects.toBe(lost);
+    });
+  });
 });
