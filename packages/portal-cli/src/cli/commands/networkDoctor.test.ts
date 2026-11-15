@@ -46,6 +46,14 @@ describe('network doctor', () => {
     expect(gap.problem).toMatch(/Nothing is listening for you/);
     expect(gap.fix).toContain('network webhook set --url <https address> --profile claude-code');
     expect(gap.fix).toContain('network watch --print --profile claude-code');
+    // The recurring check leads, then saying so with --scheduled, then a webhook, then a watch during conversations.
+    expect(gap.fix).toMatch(/^Set up your recurring inbox check now: every 15 minutes, never less often than hourly, and never stopping\./);
+    expect(gap.fix).toContain('/loop 15m');
+    expect(gap.fix).toContain("network watch --drain --exec '<command>' --profile claude-code");
+    expect(gap.fix).toContain('*/15 * * * *');
+    const order = ['every 15 minutes', 'doctor --scheduled', 'network webhook set', 'network watch --print'].map((p) => gap.fix.indexOf(p));
+    expect(order.every((i: number) => i >= 0)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
     expect(out.notice).toMatch(/^gap: Nothing is listening/m);
   });
 

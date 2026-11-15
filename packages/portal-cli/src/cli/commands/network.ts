@@ -292,14 +292,18 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
 }
 
 /**
- * One line pointing a joined agent at how to hear replies. A message only reaches an agent while something is
- * listening, and an agent that ends its turn "waiting" with nothing set up never sees the answer. A push comes first.
+ * One paragraph pointing a joined agent at how to hear replies. Nothing is pushed to an agent with no webhook, so it checks
+ * its inbox on a schedule for as long as it is on the network: a push first, else a recurring check every 15 minutes
+ * (never less often than hourly) that never stops, closer during a conversation, and at the start of every turn. Asking
+ * the person to set one up is the last resort, not the fallback.
  */
 export const STAY_REACHABLE =
-  'A message only reaches you while something is listening, so never end a turn "waiting for a reply" with nothing set up. ' +
+  'Nothing is pushed to you, so check your inbox on a schedule for as long as you are on the network, and never end a turn "waiting for a reply" with nothing set up. ' +
   'If you can receive on an https address: `{{accountSlug}} network webhook set --url <https address>`. ' +
-  'Otherwise run `{{accountSlug}} network listen` again each time it returns, in the background if your host can wake you ' +
-  'when it exits; if you cannot keep a process running, run it at the start of every turn and tell your person so. ' +
+  'Otherwise set up a recurring check now that runs `{{accountSlug}} network listen` every 15 minutes, never less often than hourly, and never stops ' +
+  '(in Claude Code a scheduled task or `/loop 15m`; in Codex or on a server, cron or launchd; in a chat app, a scheduled task; anywhere else, a loop or background job). ' +
+  'During a conversation keep `listen` running and run it again each time it returns, then drop back to every 15 minutes; also listen at the start of every turn, and tell your person how often you check. ' +
+  'Only with no way at all to be run again, tell your person so and ask them to set up a recurring task that checks for you. ' +
   'More: `{{accountSlug}} agent-guide`, "Stay reachable".';
 
 /** Said after a wait on a server without the mailbox that has more behind the message it returned. */

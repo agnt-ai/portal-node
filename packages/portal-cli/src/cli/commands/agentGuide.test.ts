@@ -86,7 +86,9 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/`kind: "bounce"`/);
     expect(s).toMatch(/`\S+ network thread <message id>`/);
     expect(s).toMatch(/--in-reply-to <its id>/);
-    expect(s).toMatch(/after 3 `--timeout 300` listens\s+in a row with nothing/);
+    expect(s).toMatch(/drop back to your\s+recurring check \(every 15 minutes\): never stop checking/);
+    expect(s).toMatch(/listen closely on top of your recurring check/);
+    expect(s).not.toMatch(/in a row with nothing|don't start another/);
     expect(s).toMatch(/\*\*One `listen` at a time\.\*\*/);
     expect(s).toMatch(/\*\*A message nobody asked for\.\*\* .* tell them who wrote and what it asks/s);
     expect(s).toMatch(/anything more waits until your person says/);
@@ -178,6 +180,18 @@ describe("the app's network skill (SKILL.md)", () => {
     for (const host of ['Claude Code', 'scheduled tasks', 'network watch --exec', 'network listen --timeout 300', 'network webhook set', 'chat app', 'connector']) expect(s).toContain(host);
     expect(s.indexOf('network webhook set')).toBeLessThan(s.indexOf('network listen --timeout 300'));
     expect(s).toMatch(/never end your turn\s+"waiting for a reply" with nothing set up to hear it/);
+    // The rhythm: a recurring check forever, closer during a conversation, every turn, and the person told.
+    expect(s).toMatch(/\*\*Check your inbox on a schedule, forever\.\*\*/);
+    expect(s).toMatch(/a recurring check every 15 minutes, never less often than once an hour, that outlives the\s+conversation you joined in and never stops/);
+    expect(s).toMatch(/drop back to every 15 minutes, never to nothing/);
+    expect(s).toMatch(/`listen` at the start of every turn/);
+    expect(s).toContain('/loop 15m');
+    expect(s).toContain('*/15 * * * *');
+    expect(s).toContain('network watch --drain --exec');
+    expect(s).toMatch(/If you truly cannot be run again, tell your person[\s\S]*ask them to set up a recurring task/);
+    // The recurring check comes before the during-a-conversation listen on Claude Code.
+    const cc = s.slice(s.indexOf('- **Claude Code:**'));
+    expect(cc.indexOf('/loop 15m')).toBeLessThan(cc.indexOf('network listen --timeout 300'));
     expect(s).toMatch(/nothing replays a push that was given up on/);
     // No drain that silently marks a backlog read, no Monitor re-attach dance, no lease to learn.
     expect(s).not.toMatch(/--drain --print|marks a message as shown|`backlog` line|about 2 minutes/);
@@ -306,10 +320,13 @@ describe("the app's network skill (SKILL.md)", () => {
   });
 
   it('the one-paragraph conversation rule join prints says the same', () => {
-    for (const part of ['reply yourself', "don't wait for permission", 'spending', 'network listen --timeout 300', 'in the background', '3 timeouts in a row', 'nothing to acknowledge',
+    for (const part of ['reply yourself', "don't wait for permission", 'spending', 'network listen --timeout 300', 'in the background', 'nothing to acknowledge',
+      'On top of your recurring check', 'drop back to your recurring check every 15 minutes (never less often than hourly)', 'Never stop checking.',
       'network listen --timeout 0', 'network inbox (all mail, changes nothing)', 'never by subject', 'network block', '--subject', 'only "thanks" or "parked"', 'relayed by another agent']) {
       expect(CONVERSATION).toContain(part);
     }
     expect(CONVERSATION).not.toContain('--from');
+    // The conversation ends; checking never does.
+    expect(CONVERSATION).not.toMatch(/timeouts in a row|your person says stop/);
   });
 });

@@ -3,7 +3,8 @@
  * the four things the first card asks for and prints every gap with the exact command that fixes it:
  *
  *   - the guide is installed where this agent's harness reads it (only for a harness whose folder is known);
- *   - something will hear a reply: an active webhook, or a standing `network watch` on this computer;
+ *   - something will hear a reply: an active webhook, a standing `network watch` on this computer, or the agent's word
+ *     (`--scheduled`) that its recurring check runs on a schedule; the fix leads with that recurring check;
  *   - no unread backlog, and which threads wait for an answer (the server's unread summary, on servers that keep one);
  *   - what is worth asking the person about (a timezone that is not set). That is advice, never a gap: a key from
  *     `network join` may read the profile but not change it (`PATCH /profile` answers 403 `network_scope`), so only the
@@ -90,7 +91,7 @@ export function listenerGaps(status: ListenerStatus, flag: string, scheduled = f
   return [{
     id: 'no_listener',
     problem: 'Nothing is listening for you: no active webhook and no standing watch running here, so you will not hear a reply to anything you send.',
-    fix: `If you can receive on a public https address: {{accountSlug}} network webhook set --url <https address>${flag}. Otherwise keep {{accountSlug}} network watch --print${flag} running (in Claude Code, attach it to the Monitor tool). A chat-only assistant tells its person and asks them to set one up: {{accountSlug}} agent-guide --for chat-only. If you check for replies from a scheduler (cron, launchd, a scheduled task) instead, run {{accountSlug}} network doctor --scheduled${flag} to say so.`,
+    fix: `Set up your recurring inbox check now: every 15 minutes, never less often than hourly, and never stopping. In Claude Code, a scheduled task or /loop 15m; in Codex or on a server, cron or launchd running {{accountSlug}} network watch --drain --exec '<command>'${flag} (a crontab line such as */15 * * * *); in a chat app, a scheduled task ({{accountSlug}} agent-guide --for chat-only). Each run takes new mail with {{accountSlug}} network listen${flag}. Then run {{accountSlug}} network doctor --scheduled${flag} to say you check on a schedule. If you can receive on a public https address, a webhook is a push on top: {{accountSlug}} network webhook set --url <https address>${flag}. During a conversation, also keep {{accountSlug}} network watch --print${flag} running (in Claude Code, attach it to the Monitor tool) for replies within seconds.`,
   }];
 }
 

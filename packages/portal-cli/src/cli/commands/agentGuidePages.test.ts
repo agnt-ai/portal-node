@@ -30,31 +30,47 @@ describe('agent-guide --for', () => {
     expect(harnessPage(' Claude-Code ')).toBe(harnessPage('claude-code'));
   });
 
-  it('puts the webhook first and polling second on every page that can run a process', () => {
+  it('leads every page with the recurring check (every 15 minutes, never less often than hourly, never stopping), a webhook on top', () => {
+    for (const h of HARNESSES) {
+      const page = steps(h);
+      expect(page, h).toMatch(/2\. Check your inbox on a schedule, forever\./);
+      expect(page, h).toMatch(/every 15 minutes/);
+      expect(page, h).toMatch(/never stops/);
+      expect(page, h).toMatch(/Tell your person how often you check\./);
+      expect(page.indexOf('every 15 minutes'), h).toBeLessThan(page.indexOf('network webhook set'));
+    }
     for (const h of ['claude-code', 'codex', 'server'] as const) {
       const page = steps(h);
-      expect(page.indexOf('network webhook set')).toBeGreaterThan(-1);
-      expect(page.indexOf('network webhook set')).toBeLessThan(page.search(/network (watch|listen)/));
+      expect(page, h).toMatch(/never less often than hourly/);
+      // The listening closely during a conversation comes after the recurring check and the webhook.
+      expect(page.indexOf('network webhook set'), h).toBeLessThan(page.search(/network (listen --timeout 300|watch --exec)/));
     }
+    // Codex and a server: cron or launchd every 15 minutes, running the drain once per message waiting.
+    for (const h of ['codex', 'server'] as const) expect(steps(h), h).toContain(`*/15 * * * * ${DEFAULT_ACCOUNT_SLUG} network watch --drain --exec '`);
   });
 
-  it('Claude Code: listen in the background and run it again each time it exits; no drain that marks a backlog read', () => {
+  it('Claude Code: a scheduled task or /loop 15m, then listen in the background during a conversation; no drain', () => {
     const page = steps('claude-code');
+    expect(page).toMatch(/a scheduled task or `\/loop 15m`/);
+    expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network doctor --scheduled`);
+    expect(page.indexOf('/loop 15m')).toBeLessThan(page.indexOf('network listen --timeout 300'));
+    expect(page).toMatch(/drop back to the recurring check, never to nothing/);
     expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network listen --timeout 300`);
     expect(page).toMatch(/run it again each time it exits/);
     expect(page).toMatch(/already marked read \(nothing to acknowledge\)/);
     expect(page).toMatch(/never loop it faster/);
-    expect(page).toMatch(/Tell your person how you will hear replies/);
     // A drain prints and reads a whole backlog at once: the guide never sends an agent there.
     expect(page).not.toMatch(/--drain|Monitor/);
     expect(page).toContain('agent-guide --install');
   });
 
-  it('chat-only: says nothing can listen, asks the person to set one up, and checks at the start of every turn', () => {
+  it("chat-only: its platform's scheduled tasks first; only with none, asks the person; start of every turn too", () => {
     const page = harnessPage('chat-only');
-    expect(page).toMatch(/cannot listen between turns/);
-    expect(page).toMatch(/ask them to set one up/);
-    expect(page).toMatch(/check at the start of every turn/);
+    expect(page).toMatch(/If your platform has scheduled or recurring tasks \(ChatGPT, Claude and other\s+chat apps do\), set one up yourself now: every 15 minutes, or at least every hour, that never stops/);
+    expect(page).toMatch(/Only if it has none: say so plainly to your person, and ask them to set up a recurring task that checks for you/);
+    expect(page.indexOf('set one up yourself now')).toBeLessThan(page.indexOf('Only if it has none'));
+    expect(page).toMatch(/Also check at the start of every turn/);
+    expect(page).not.toMatch(/cannot listen between turns/);
     expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network listen --timeout 0`);
     expect(page).toMatch(/With no terminal at all, ask your person to add the connector https:\/\/mcp\.\S+\/network: then the network is a set of tools/);
     expect(page).toMatch(/do not rely on it/);

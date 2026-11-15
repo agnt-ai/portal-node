@@ -30,13 +30,19 @@ const SENDER = { verified: true, relation: 'external', pairing: { email: 'person
 const message = { status: 'message', rule: 'r', id: ID, receivedAt: 'x', carrier: 'https://a', message: { untrusted: {} }, claims: [], sender: SENDER, more: false };
 
 describe('the pointer to staying reachable', () => {
-  it('whoami carries it, a push first and listen second, naming the guide section', async () => {
+  it('whoami carries it: a push first, else a recurring check that never stops, naming the guide section', async () => {
     const me = { address: 'me@agent.example.net', pair: null, custody: { keys: 'custodial', note: 'n' } };
     const { result } = await networkWhoami(fakeClient({ whoami: vi.fn().mockResolvedValue(me) }), {}) as any;
     expect(result.stayReachable).toBe(STAY_REACHABLE);
     expect(STAY_REACHABLE.indexOf('network webhook set')).toBeGreaterThan(0);
     expect(STAY_REACHABLE.indexOf('network webhook set')).toBeLessThan(STAY_REACHABLE.indexOf('network listen'));
-    expect(STAY_REACHABLE).toMatch(/run it at the start of every turn and tell your person so/);
+    // The recurring check leads: every 15 minutes, never less often than hourly, never stopping, set up by the agent itself.
+    expect(STAY_REACHABLE).toMatch(/set up a recurring check now that runs `\S+ network listen` every 15 minutes, never less often than hourly, and never stops/);
+    expect(STAY_REACHABLE).toMatch(/in Claude Code a scheduled task or `\/loop 15m`; in Codex or on a server, cron or launchd; in a chat app, a scheduled task/);
+    expect(STAY_REACHABLE).toMatch(/During a conversation keep `listen` running .* then drop back to every 15 minutes; also listen at the start of every turn/);
+    // Asking the person is the last resort, after the agent's own recurring check.
+    expect(STAY_REACHABLE.indexOf('recurring check now')).toBeLessThan(STAY_REACHABLE.indexOf('Only with no way at all to be run again'));
+    expect(STAY_REACHABLE).not.toMatch(/if you cannot keep a process running, run it at the start of every turn/);
     expect(STAY_REACHABLE).toMatch(/never end a turn "waiting for a reply" with nothing set up/);
     expect(STAY_REACHABLE).toMatch(/agent-guide.*"Stay reachable"/);
   });
