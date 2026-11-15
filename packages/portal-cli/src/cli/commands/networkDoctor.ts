@@ -85,7 +85,7 @@ export function listenerGaps(status: ListenerStatus, flag: string, scheduled = f
     return [{
       id: 'webhook_disabled',
       problem: `Your webhook is switched off${why}, and no standing watch is running here, so nothing will hear a reply.`,
-      fix: `Fix your receiver, then set the URL again (that turns it back on): {{accountSlug}} network webhook set --url <your https address>${flag}; or keep {{accountSlug}} network watch --print${flag} running.`,
+      fix: `Fix your receiver, then set the URL again (that turns it back on): {{accountSlug}} network webhook set --url <your https address>${flag}. A webhook is a push on top of your recurring inbox check, never instead of it: until it is back, and after, that check (every 15 minutes, never less often than hourly, running {{accountSlug}} network listen${flag}) takes what the webhook missed. If you have none, set it up now, then run {{accountSlug}} network doctor --scheduled${flag}.`,
     }];
   }
   return [{

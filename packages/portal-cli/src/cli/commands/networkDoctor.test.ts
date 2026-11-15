@@ -63,6 +63,9 @@ describe('network doctor', () => {
     const gap = (out.result as any).gaps.find((g: any) => g.id === 'webhook_disabled');
     expect(gap.problem).toMatch(/switched off after too many failed pushes/);
     expect(gap.fix).toContain('network webhook set --url <your https address>');
+    // A webhook back on is still only a push on top of the recurring check.
+    expect(gap.fix).toMatch(/A webhook is a push on top of your recurring inbox check, never instead of it/);
+    expect(gap.fix).toContain('network doctor --scheduled');
     expect(JSON.stringify(out.result)).not.toContain('/in');
     expect((out.result as any).checks.listener.webhook.host).toBe('hook.example.test');
   });

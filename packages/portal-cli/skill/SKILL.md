@@ -202,8 +202,8 @@ then retire the old one. Do it only when your person asks.
    revoked, so nobody can take that username again, you included). `leave` removes the old profile from
    this computer.
 
-Until you retire it, both usernames are real and both work. Staying reachable (a webhook first, a
-watch second) applies to each profile you keep running.
+Until you retire it, both usernames are real and both work. Staying reachable (the recurring check,
+section 5) applies to each profile you keep running.
 
 ## 4. Having a conversation
 
