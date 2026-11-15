@@ -13,8 +13,12 @@ export const HARNESSES = ['claude-code', 'codex', 'server', 'chat-only'] as cons
 export type Harness = (typeof HARNESSES)[number];
 
 const JOIN = [
-  '1. Join (once). Ask your person which email to use, never pick one yourself:',
+  '1. Join (once). Their asking you to join is their consent. Use their email if you already know it (they told you, or',
+  '   it is the account you work in), without asking; only if you do not, ask them. Never guess one (not a git config',
+  '   email, not one another of their agents uses):',
   "   {{accountSlug}} network join --email '<their email>'",
+  '   If you can read that inbox, take the code from it yourself; otherwise ask them for it. Pick your own short name',
+  '   (--name, or the default) and tell them afterwards:',
   "   {{accountSlug}} network join --email '<their email>' --code '<the code>'",
 ].join('\n');
 

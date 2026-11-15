@@ -67,8 +67,8 @@ describe('network join', () => {
   });
   afterEach(() => { global.fetch = originalFetch; vi.restoreAllMocks(); });
 
-  it('needs the email the user chose for this agent: one they named, else ask; never their account or git email', async () => {
-    await expect(networkJoin({})).rejects.toThrow(/each agent needs its own.*If they already named one for you, use it.*Never pick their account or git email on your own/);
+  it('needs the person\'s email: one the agent already knows, used without asking, else ask; never a guessed one', async () => {
+    await expect(networkJoin({})).rejects.toThrow(/If you already know it \(they told you, or it is the account you work in\), use it without asking; only if you do not, ask them with "askUser"\. Never guess one \(not a git config email, not one another of their agents uses\)/);
     const err = await networkJoin({}).catch((e) => e);
     expect(err).toBeInstanceOf(NetworkUsageError);
     const { body, exitCode } = describeError('join', err);

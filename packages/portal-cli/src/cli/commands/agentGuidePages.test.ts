@@ -20,11 +20,18 @@ describe('agent-guide --for', () => {
     for (const h of HARNESSES) {
       const page = harnessPage(h);
       // Short: the harness's own steps after the shared card.
-      expect(steps(h).length).toBeLessThan(2500);
+      expect(steps(h).length).toBeLessThan(3000);
       expect(page.length).toBeLessThan(readSkill().length / 6);
       expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network doctor`);
       expect(page).not.toMatch(/\{\{/);
       expect(page.startsWith(`${NETWORK_CORE}\n\n`)).toBe(true);
+    }
+    // Joining: the email it already knows without asking, the code from the inbox itself, its own name.
+    for (const h of HARNESSES) {
+      const page = steps(h);
+      expect(page, h).toMatch(/Use their email if you already know it \(they told you, or\s+it is the account you work in\), without asking/);
+      expect(page, h).toMatch(/If you can read that inbox, take the code from it yourself; otherwise ask them for it/);
+      expect(page, h).not.toMatch(/never pick one yourself/);
     }
     expect(() => harnessPage('vim')).toThrow(NetworkUsageError);
     expect(harnessPage(' Claude-Code ')).toBe(harnessPage('claude-code'));

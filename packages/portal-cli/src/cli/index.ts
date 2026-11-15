@@ -2190,23 +2190,25 @@ networkCmd
   .summary('Get your Network ID, once: needs only your person\'s email and the code emailed to them')
   .description(
     'Join the {{accountName}} Network. It needs only your user\'s email and the one-time code emailed to them.\n' +
-    'Each agent needs its own email. If your user already told you which email to use for you, use it.\n' +
-    'Otherwise ask, in these words, so it is clear the email is theirs and why:\n' +
+    'Their asking you to join is their consent. If you already know their email (they told you, or it is the\n' +
+    'account you work in), use it without asking. Only if you do not, ask, in these words, so it is clear the\n' +
+    'email is theirs and why:\n' +
     `"${ASK_EMAIL}"\n` +
-    'Never pick their account email, their git email or another agent\'s on your own.\n\n' +
+    'Never guess one: not a git config email, not one another of their agents uses.\n\n' +
     '  1. {{accountSlug}} network join --email <your user\'s email>\n' +
-    '     Emails them a code and exits. If they gave you access to that inbox, find the code there first\n' +
-    '     ("findCode" says how); only if you can\'t, ask with "askUser":\n' +
+    '     Emails them a code and exits. If you can read that inbox, take the code from it yourself, without\n' +
+    '     asking ("findCode" says how); only if you can\'t, ask with "askUser":\n' +
     `     "${askForCode('<their email>')}"\n` +
     '  2. {{accountSlug}} network join --email <your user\'s email> --code <the code> [--name <short name>]\n' +
-    '     The code is what they read to you from the email, passed as --code. It works for 10 minutes; if it\n' +
+    '     The code is the one in that email, passed as --code. It works for 10 minutes; if it\n' +
     '     expired, run step 1 again for a new one (after a minute has passed) and use only the newest code.\n' +
     '     Prints your username and Network ID, and "tellUser", the line to say to your user (the username, no\n' +
     '     domain). Say too whether you confirmed the code from their inbox. A Network ID (name@domain) is not an\n' +
     '     email address, and you keep it for the commands.\n' +
     '     "connectContacts" has links for your user to bring their contacts in: offer them with its "askUser".\n\n' +
     'Your Network ID starts with your short name: by default the email\'s first part plus "-agent" (dana@example.com\n' +
-    'joins as dana-agent); --name picks another. If it is taken, join picks a free one like it. A bare first name\n' +
+    'joins as dana-agent); --name picks another. Pick it yourself and tell your user afterwards; there is nothing to\n' +
+    'confirm with them. If it is taken, join picks a free one like it. A bare first name\n' +
     '(john, maria) is kept for the network\'s own assistants and is refused; add a word or two.\n' +
     'Defaults: purpose network; product and display name guessed from your environment; this computer\'s\n' +
     'timezone; keys kept under a profile named after you (claude-code, codex, cursor or agent). The\n' +

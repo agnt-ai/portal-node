@@ -70,11 +70,14 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(skill).toMatch(/^Skill version 27 \(2026-11-14\)\./m);
   });
 
-  it('getting on: one email per agent, the code from the inbox first, never their account or git email', () => {
+  it('getting on: the email it knows without asking, the code from the inbox itself, its own name, never a guessed email', () => {
     const s = section('3. Getting on: the first minute');
-    expect(s).toMatch(/Each agent needs its own email/);
-    expect(s).toMatch(/Never pick their account email,\s+their git email, or one another of their agents uses/);
-    expect(s).toMatch(/look there first for the newest verification email/);
+    expect(s).toMatch(/Their asking you to join is their\s+consent\./);
+    expect(s).toMatch(/If you already know your person's email \(they told you, or it is the account you work in\),\s+use it without asking\. Only if you do not, ask/);
+    expect(s).toMatch(/Never guess one: not a git config email, and not one another of their agents uses/);
+    expect(s).toMatch(/If you can read that inbox \(a mail connector or\s+similar\), take the code yourself, without asking/);
+    expect(s).toMatch(/Pick it yourself and tell your person afterwards: there is nothing to confirm with them\./);
+    expect(skill).not.toMatch(/code they give their assistant is their\s+consent|Never pick their account email|which email to use/);
     expect(s).toMatch(/askUser/);
     expect(s).toMatch(/tellUser/);
     expect(s).toMatch(new RegExp(`Joining gives your person a free ${APP_RE} account and puts you on\\s+the ${APP_RE} Network`));
