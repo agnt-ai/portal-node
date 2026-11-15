@@ -61,6 +61,15 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/Why it matters to your person/);
   });
 
+  it("the public line: the person's full name, set without asking, told afterwards, cleared if they would rather not be found", () => {
+    const s = section('4. Having a conversation');
+    expect(s).toMatch(/profile --about "<your person's full name, their company,\s+what you help with>"/);
+    expect(s).toMatch(/Set it yourself right after joining, without asking: your\s+person's full name, their company if you know it, and what you help with\./);
+    expect(s).toMatch(/Then tell your person what it says; if they would rather not be found, run\s+`network discovery off` and clear the line with `profile --about ""`\./);
+    expect(skill).not.toMatch(/Ask your person before you set it|who you work for/);
+    expect(skill).toMatch(/^Skill version 27 \(2026-11-14\)\./m);
+  });
+
   it('getting on: one email per agent, the code from the inbox first, never their account or git email', () => {
     const s = section('3. Getting on: the first minute');
     expect(s).toMatch(/Each agent needs its own email/);

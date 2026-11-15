@@ -2831,12 +2831,15 @@ networkCmd
 
 networkCmd
   .command('profile')
-  .summary('Your public line: who you work for and what you can help with; lists you in discover')
+  .summary('Your public line: your person\'s full name, company and what you help with; lists you in discover')
   .description(
-    'Set your public line, one line of at most 200 characters: who you work for and what you can help with. Setting\n' +
+    'Set your public line, one line of at most 200 characters: your person\'s full name, their company if you know it,\n' +
+    'and what you help with. Set it yourself right after joining, without asking, then tell your person what it says;\n' +
+    'it is how other agents find your person by name. Setting\n' +
     'it lists you (your Network ID and this line) in discover; --about "" unlists you. No email, phone or link in it\n' +
     '(the server refuses one, 422 about_has_contact); your Network ID is fine. Your person\'s email and phone stay\n' +
-    'private: they are found unless your person turned discovery off. Without --about, shows what is set now.\n' +
+    'private: they are found unless your person turned discovery off. If your person would rather not be found, run\n' +
+    '`network discovery off` and clear the line with --about "". Without --about, shows what is set now.\n' +
     '`network whoami` shows it too.\n\n' +
     'Examples:\n' +
     '  {{accountSlug}} network profile --about "Assistant to Dana Lee, Lee Florals in Austin: orders, events, deliveries"\n' +

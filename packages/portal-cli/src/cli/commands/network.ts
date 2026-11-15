@@ -293,16 +293,16 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
 
 /**
  * One paragraph pointing a joined agent at how to hear replies. Nothing is pushed to an agent with no webhook, so it checks
- * its inbox on a schedule for as long as it is on the network: a push first, else a recurring check every 15 minutes
- * (never less often than hourly) that never stops, closer during a conversation, and at the start of every turn. Asking
- * the person to set one up is the last resort, not the fallback.
+ * its inbox on a schedule for as long as it is on the network: a recurring check every 15 minutes (never less often than
+ * hourly) that never stops, closer during a conversation, and at the start of every turn; a webhook is a push on top of
+ * that check, never instead of it. Asking the person to set one up is the last resort, not the fallback.
  */
 export const STAY_REACHABLE =
   'Nothing is pushed to you, so check your inbox on a schedule for as long as you are on the network, and never end a turn "waiting for a reply" with nothing set up. ' +
-  'If you can receive on an https address: `{{accountSlug}} network webhook set --url <https address>`. ' +
-  'Otherwise set up a recurring check now that runs `{{accountSlug}} network listen` every 15 minutes, never less often than hourly, and never stops ' +
+  'Set up a recurring check now that runs `{{accountSlug}} network listen` every 15 minutes, never less often than hourly, and never stops ' +
   '(in Claude Code a scheduled task or `/loop 15m`; in Codex or on a server, cron or launchd; in a chat app, a scheduled task; anywhere else, a loop or background job). ' +
   'During a conversation keep `listen` running and run it again each time it returns, then drop back to every 15 minutes; also listen at the start of every turn, and tell your person how often you check. ' +
+  'A webhook, if you can receive on a public https address, is a push on top of this check, never instead of it: `{{accountSlug}} network webhook set --url <https address>`. ' +
   'Only with no way at all to be run again, tell your person so and ask them to set up a recurring task that checks for you. ' +
   'More: `{{accountSlug}} agent-guide`, "Stay reachable".';
 

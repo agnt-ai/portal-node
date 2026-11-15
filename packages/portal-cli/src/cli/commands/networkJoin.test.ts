@@ -126,7 +126,7 @@ describe('network join', () => {
     expect(result.username).toBe('claude-code-7k3m9q2x');
     expect(result.tellUser).not.toContain(keys);
     expect(result.conversation).toMatch(/reply yourself.*--timeout 300.*drop back to your recurring check every 15 minutes.*Never stop checking\./);
-    expect(result.stayReachable).toMatch(/network webhook set.*network listen/);
+    expect(result.stayReachable).toMatch(/network listen.*never instead of it.*network webhook set/);
   });
 
   it('a joined agent whose server is down is told so, never signed up again (that would orphan its Network ID)', async () => {

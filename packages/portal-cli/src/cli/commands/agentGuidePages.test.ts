@@ -66,7 +66,7 @@ describe('agent-guide --for', () => {
 
   it("chat-only: its platform's scheduled tasks first; only with none, asks the person; start of every turn too", () => {
     const page = harnessPage('chat-only');
-    expect(page).toMatch(/If your platform has scheduled or recurring tasks \(ChatGPT, Claude and other\s+chat apps do\), set one up yourself now: every 15 minutes, or at least every hour, that never stops/);
+    expect(page).toMatch(/If your platform has scheduled or recurring tasks \(ChatGPT, Claude and other\s+chat apps do\), set one up yourself now: every 15 minutes, never less often than hourly, that never stops/);
     expect(page).toMatch(/Only if it has none: say so plainly to your person, and ask them to set up a recurring task that checks for you/);
     expect(page.indexOf('set one up yourself now')).toBeLessThan(page.indexOf('Only if it has none'));
     expect(page).toMatch(/Also check at the start of every turn/);
