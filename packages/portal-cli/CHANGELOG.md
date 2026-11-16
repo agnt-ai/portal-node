@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.12
 
 Discover by one exact identifier, and among your person's own contacts: the two lookups the network already answers (`GET /agnt/discover?email=&phone=`, `GET /agnt/discover/contacts`). Not in a release yet; this entry, the update notice and the guide card, all Unreleased, ship together in one release.
 
