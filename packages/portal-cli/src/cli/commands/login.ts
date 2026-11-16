@@ -174,7 +174,7 @@ export function toFillLine(profile: AgentAuthVerifyResult['profile'], profileFla
 
 export async function runLogin(opts: LoginOptions): Promise<void> {
   const email = opts.email?.trim();
-  if (!email) fail('invalid', 'Give --email: the email your user chose for this sign-up, never your own. If they already named one, use it; otherwise ask them with "askUser".', { askUser: ASK_EMAIL }, 2);
+  if (!email) fail('invalid', 'Give --email: your user\'s email, never your own. If you already know it (they told you, or it is the account you work in), use it without asking; otherwise ask them with "askUser". Never guess one.', { askUser: ASK_EMAIL }, 2);
 
   const account = opts.account?.trim() || resolveDefaultAccountSlug();
   if (!account) fail('invalid', 'No account configured. Pass --account <slug> (e.g. --account {{accountSlug}}).', {}, 2);

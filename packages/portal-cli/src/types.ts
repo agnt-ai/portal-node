@@ -1644,7 +1644,7 @@ export interface NetworkDiscoverResult {
   results: Array<{
     address: string;
     about?: string | null;
-    matched?: 'profile' | 'post';
+    matched?: 'profile' | 'post' | 'email' | 'phone' | 'address';
     post?: { id: string; text: string; postedAt: string };
     score?: number;
     name?: string | null; domain?: string; degree?: 1 | 2 | null; mutualConnections?: number;
@@ -1654,6 +1654,24 @@ export interface NetworkDiscoverResult {
   /** A search that found nobody: the note for the person to forward to the one they meant to reach. */
   invite?: NetworkInviteHint;
   hint?: string;
+}
+/**
+ * GET /agnt/discover/contacts: which of your person's own contacts are listed on this network. The contacts are read by
+ * the server (nothing is uploaded); an email or phone of a contact is only a lookup key and is never in an answer.
+ */
+export interface NetworkDiscoverContactsResult {
+  /** One per person. `contact` is the name your person gave that contact; the rest is what any listed result shows. */
+  matches: Array<{
+    contact: string | null;
+    address: string; name?: string | null; domain?: string; degree?: 1 | 2 | null; mutualConnections?: number;
+    connection?: 'none' | 'invited' | 'pending' | 'connected' | 'declined'; workspace?: boolean;
+  }>;
+  /** How many emails and phones this call looked up. */
+  checked: number;
+  /** The call stopped at its lookup cap before the end of its page of contacts. */
+  capped: boolean;
+  /** Continues with the next contacts (pass it back unchanged as `cursor`); null at the end. */
+  cursor: string | null;
 }
 export interface NetworkConnectionList {
   connections: Array<{ peer: string; source: string | null; connectedAt: string | null; onNetwork: boolean }>;

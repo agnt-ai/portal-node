@@ -492,7 +492,14 @@ describe('network: the compiled CLI against the API as it answers today, two age
     const listen = await cli(['network', 'listen', '--help']);
     expect(listen.stdout).toMatch(/marks exactly those read as it hands them over/);
     expect(listen.stdout).toMatch(/never call it in a faster loop/);
-    expect(listen.stdout).toMatch(/run it at the start of every turn/);
+    // The recurring check leads: every 15 minutes, never less often than hourly, never stopping; closer during a conversation.
+    expect(listen.stdout).toMatch(/a recurring check every 15 minutes, never less\s+often than hourly, that outlives the conversation and never stops/);
+    expect(listen.stdout).toMatch(/when it goes quiet, drop back to every\s+15 minutes, never to nothing/);
+    expect(listen.stdout).toMatch(/Also run it at the start of every turn/);
+    expect(listen.stdout).not.toMatch(/tell your person which of the two you do/);
+    const watch = await cli(['network', 'watch', '--help']);
+    expect(watch.stdout).toMatch(/The recurring check every 15 minutes that never stops/);
+    expect(watch.stdout).toContain('*/15 * * * *');
     expect(listen.stdout).toMatch(/a stranger's first message arrives here too/);
     const join = await cli(['network', 'join', '--help']);
     expect(join.stdout).toMatch(/It works for 10 minutes; if it\s+expired, run step 1 again/);

@@ -15,8 +15,8 @@ export function askForCode(email: string): string {
 
 /** Where to look for the code before asking: the agent reads its user's inbox itself when it can. */
 export function findCodeHint(email: string, sentAt: string): string {
-  return `If you can read your user's inbox (a mail connector or similar), look there first for the newest ` +
-    `{{accountName}} verification email to ${email} sent after ${sentAt}, and use its code. If you can't find ` +
-    `it within a minute or so, ask your user with "askUser".`;
+  return `If you can read your user's inbox (a mail connector or similar), look there first and take the code yourself, without asking: ` +
+    `the newest {{accountName}} verification email to ${email} sent after ${sentAt}. Only if you can't read it, or ` +
+    `can't find it within a minute or so, ask your user with "askUser".`;
 }
 
