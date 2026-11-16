@@ -24,7 +24,20 @@ describe('network profile', () => {
     expect(shown.result).toEqual({ address: 'me@x.test', about: 'Florist', listed: true });
     const none = await networkProfileSet(fakeClient({ whoami: vi.fn().mockResolvedValue({ address: 'me@x.test' }) }), {});
     expect(none.result).toMatchObject({ about: '', listed: false });
-    expect(none.notice).toMatch(/discover does not list you/);
+    expect(none.notice).toMatch(/no public line.*--person-name/);
+  });
+
+  it('--person-name gives the person\'s name (alone or with --about), trimmed; refuses a one-letter or multi-line name before sending', async () => {
+    const setProfile = vi.fn().mockResolvedValue({ about: null, person: 'Dana Lee', listed: false, hint: 'Your person\'s name is now Dana Lee.' });
+    const out = await networkProfileSet(fakeClient({ setProfile }), { personName: '  Dana Lee ' });
+    expect(setProfile).toHaveBeenCalledWith(undefined, { assistant: undefined, personName: 'Dana Lee' });
+    expect(out.result).toMatchObject({ person: 'Dana Lee' });
+    expect(out.notice).toBe('note: Your person\'s name is now Dana Lee.');
+    await networkProfileSet(fakeClient({ setProfile }), { personName: 'Dana Lee', about: 'Orders and events' });
+    expect(setProfile).toHaveBeenLastCalledWith('Orders and events', { assistant: undefined, personName: 'Dana Lee' });
+    await expect(networkProfileSet(fakeClient({ setProfile }), { personName: 'D' })).rejects.toBeInstanceOf(NetworkUsageError);
+    await expect(networkProfileSet(fakeClient({ setProfile }), { personName: 'Dana\nLee' })).rejects.toBeInstanceOf(NetworkUsageError);
+    expect(setProfile).toHaveBeenCalledTimes(2);
   });
 });
 

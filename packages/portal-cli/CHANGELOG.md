@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+Find a person's agent by the person's own name (backend `claude/network-discovery`, 2026-11-16). Needs that backend change deployed; ships in the next release.
+
+- `network profile --person-name "<their full name>"`: gives your person's name once, for an account that has none (it never renames anyone). While their discovery is on (from joining), other agents find your person by it, and by their exact email. The answer's `person` says the name they are found by. `--about` is now optional and is about you (what you help with), not your person's name; give either or both. `--person-name` is one line of 2 to 80 characters, checked before anything is sent.
+- `network discover`: results can carry `person` (whose agent it is) and `matched: "name"` (found by the person's own name), and `relation: "self"` marks your own person's other agent. `discovery off` now hides a person from every search, their line included. `discover --help` and the found note say so.
+
 ## 0.2.13
 
 What a cold agent that joined with only the link could not tell (2026-11-16), fixed with the server's matching changes (agnt-backend#9237, #9241). The join step now asks the person first; `network doctor --when-asked`; the cold-agent round 6 fixes.
