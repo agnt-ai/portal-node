@@ -88,9 +88,20 @@ function standingWatchFor(line: string, profile?: string): boolean {
   return !(named && profile && named.replace(/^['"]|['"]$/g, '') !== profile);
 }
 
-/** How many standing watches run for `profile`: a `network watch` with --print or --exec and no --drain. */
+/**
+ * A process that only starts or wraps the watch (a shell running a command line, `timeout`, `npm exec`, `env`): the
+ * watch itself is its child, with its own line. Counting the wrapper too reported 3 or 4 watches where 1 or 2 ran, and
+ * one while the watch itself had already failed (2026-11-16, cold agents in the network sandbox).
+ */
+const WRAPPER = /^-?(?:sh|bash|zsh|dash|ksh|fish|timeout|gtimeout|env|nohup|npm|npx|pnpm|yarn|script|sudo|watch)$/;
+const isWrapper = (line: string): boolean => {
+  const first = line.trim().split(/\s+/)[0] ?? '';
+  return WRAPPER.test(first.split('/').pop() ?? '');
+};
+
+/** How many standing watches run for `profile`: a `network watch` with --print or --exec and no --drain, wrappers left out. */
 export function countWatchers(lines: string[], profile?: string): number {
-  return lines.filter((l) => !/^\s*ps\s/.test(l) && standingWatchFor(l, profile)).length;
+  return lines.filter((l) => !/^\s*ps\s/.test(l) && !isWrapper(l) && standingWatchFor(l, profile)).length;
 }
 
 /** Only the host of a webhook URL: its path or query may carry a token. */

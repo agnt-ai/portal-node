@@ -239,6 +239,19 @@ describe('finding a standing watch', () => {
     expect(countWatchers(lines)).toBe(4);
   });
 
+  it('counts one watch once: the shell, timeout or npm process that started it is not a second watch', () => {
+    const lines = [
+      "/bin/zsh -c export HOME=/h && openassistant network watch --print",
+      'timeout 600 openassistant network watch --print',
+      'npm exec openassistant network watch --print',
+      'sh -c openassistant network watch --print',
+      'node /usr/local/bin/openassistant network watch --print',
+    ];
+    expect(countWatchers(lines)).toBe(1);
+    // Only wrappers left (the watch itself already failed): nothing is watching.
+    expect(countWatchers(lines.slice(0, 4))).toBe(0);
+  });
+
   it('reads flags before --exec as ours and the exec body as the command\'s own (claude --print is not a --print watch)', () => {
     // A command's own --print or --drain must not decide what the watch is.
     expect(countWatchers(['node i.js network watch --exec claude --print'])).toBe(1);

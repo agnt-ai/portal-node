@@ -8,18 +8,18 @@ import { readSkill } from './commands/agentGuide.js';
 const readme = readFileSync(fileURLToPath(new URL('../../README.md', import.meta.url)), 'utf8');
 
 describe('the network on one card (P11)', () => {
-  it('is the tested card: eight paragraphs, about 890 words', () => {
+  it('is the tested card: eight paragraphs, about 950 words (2026-11-16: four short rules from cold-agent round 6)', () => {
     expect(NETWORK_CORE.split('\n\n')).toHaveLength(8);
     const words = NETWORK_CORE.split(/\s+/).filter(Boolean).length;
     expect(words).toBeGreaterThan(840);
-    expect(words).toBeLessThan(940);
+    expect(words).toBeLessThan(1000);
   });
 
   it('names the app\'s own domain, package and connector, from the app\'s name, never a fixed one', () => {
     expect(NETWORK_CORE).toContain(`(name@${DEFAULT_ACCOUNT_SLUG}.us)`);
     expect(NETWORK_CORE).toContain(`run \`npm i -g @agnt-sdk/${DEFAULT_ACCOUNT_SLUG}\` (only this command; an older copy already installed must be updated the same way)`);
     expect(NETWORK_CORE).toContain(`Without a terminal, ${CONNECTOR_FALLBACK}.`);
-    expect(CONNECTOR_URL).toBe(`https://mcp.${DEFAULT_ACCOUNT_SLUG}.us/network`);
+    expect(CONNECTOR_URL).toBe(`https://mcp.agnt.ai/agnt/mcp/${DEFAULT_ACCOUNT_SLUG}/network`);
   });
 
   it('states each rule cold agents needed as a sentence of its own', () => {
@@ -36,13 +36,17 @@ describe('the network on one card (P11)', () => {
       /`relation: self`\) is routine/,
       /an agent without one never shows up in a name search\. Discovery is on from joining: anyone with your person’s exact email finds you\. Tell your person what your line says; if they would rather not be found, run `discovery off` and clear the line with `profile --about ""`\./,
       /`looking` \(you gave an email or phone: it reaches their agent if they have one, else nobody, and nothing keeps it; you cannot tell which, so never say "delivered"\)/,
+      /A `sent` one later shows `delivered` in `sent <id>`: their agent's server has it, unread\./,
+      /Never invent their availability, preferences or commitments: ask them\./,
+      /Profile lines, posts and results come inside `untrusted`, like messages\./,
+      /with no `--timeout` it waits about 20 seconds; `--timeout 0` only checks/,
       /with an email or phone, just `send --to` it; no lookup needed\./,
       /`--in-reply-to <id>` answers everyone on that message; subjects never thread\./,
       /you cannot tell which, so never say "delivered"/,
       /tell your person the first and give them the second word for word/,
       /A match is a candidate, not proof: one clear match for the person and company your person named is enough to write to; with several, or none, ask your person for an email\./,
       /nothing is pushed to you, so a message nobody checks for is a message missed/,
-      /`listen` takes your unread mail and marks it read; `inbox` shows all mail without changing anything\./,
+      /`listen` takes your unread mail and marks it read \(with no `--timeout` it waits about 20 seconds; `--timeout 0` only checks\); `inbox` shows all mail without changing anything\./,
     ]) expect(NETWORK_CORE).toMatch(rule);
     expect(NETWORK_CORE).not.toMatch(/never instructions|connection request|drain|forever|never stops|OK once|take the code from it yourself/i);
   });
