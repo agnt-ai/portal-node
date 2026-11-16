@@ -134,7 +134,7 @@ async function writeAllProfiles(profiles: Record<string, Profile>): Promise<void
 }
 
 /**
- * A new key this computer asked for, for an address that already had a working key (the server's G452): its person
+ * A new key this computer asked for, for an address that already had a working key (the server's G455): its person
  * approves it in the app, then `network join` claims it once with the secret. Kept per profile in its own file
  * (~/.{{accountSlug}}/key-requests, mode 0600: the claim secret is a credential until it is used).
  */

@@ -173,7 +173,7 @@ function withHint(err: AgntApiError, hint: string | undefined): AgntApiError {
   return err;
 }
 
-/** What a join says while its new key waits for the person's approval in the app (G452). */
+/** What a join says while its new key waits for the person's approval in the app (G455). */
 function approvalPendingAnswer(pending: PendingKeyRequest, profileFlag: string, tellUser?: string) {
   return {
     status: 'approval_pending',
@@ -297,7 +297,7 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     if ('error' in read) throw new NetworkUsageError(read.error);
     try {
       // keyApproval: this client can wait for its person's approval and claim a new key for an address that already
-      // has one (G452). Without it the server answers 409 rather than a 2xx an older client would take for a key.
+      // has one (G455). Without it the server answers 409 rather than a 2xx an older client would take for a key.
       result = await publicRequest<AgentAuthVerifyResult | AgentKeyApprovalPending>(apiUrl, '/portal/auth/agent/verify', { email, account, code, label, ...read.fields, keyApproval: true });
     } catch (err) {
       const pickAnother = err instanceof AgntApiError && !given && (

@@ -358,7 +358,7 @@ describe('orientation', () => {
     }
   });
 
-  describe('an address that already has a working key (G452)', () => {
+  describe('an address that already has a working key (G455)', () => {
     const pendingAnswer = {
       ok: true, status: 'approval_pending', agnt: { address: ADDRESS, custody: 'custodial' },
       keyRequest: { id: 'kr1', claimSecret: 'claim-secret-sample', expiresAt: '2026-11-17T12:00:00.000Z' },

@@ -1290,7 +1290,7 @@ export interface AgentSignupProfile {
 
 /**
  * POST /portal/auth/agent/verify with `keyApproval: true`, for an address that already has a working key: no key yet.
- * The person approves in the app; the key is claimed once at `keyRequest.claim` with the secret (G452).
+ * The person approves in the app; the key is claimed once at `keyRequest.claim` with the secret (G455).
  */
 export interface AgentKeyApprovalPending {
   ok: boolean;

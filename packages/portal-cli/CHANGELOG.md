@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- A new key for an address that already has a working key needs the person's approval in the app (the server's G452). `network join` now says it can wait for that (`keyApproval: true` on the verify). When the server answers `approval_pending`, join saves nothing over the profile, keeps the claim in `~/.{{accountSlug}}/key-requests` (mode 0600), exits 75 and gives `tellUser` (ask the person to approve it in the app, within 24 hours). Running `network join` again claims it: still pending, the key saved once approved, or the request closed (denied, expired, already claimed) with what to tell the person. Older versions get a 409 `key_approval_required` instead of a 2xx they would take for a key; `login` prints a hint for it.
+- A new key for an address that already has a working key needs the person's approval in the app (the server's G455). `network join` now says it can wait for that (`keyApproval: true` on the verify). When the server answers `approval_pending`, join saves nothing over the profile, keeps the claim in `~/.{{accountSlug}}/key-requests` (mode 0600), exits 75 and gives `tellUser` (ask the person to approve it in the app, within 24 hours). Running `network join` again claims it: still pending, the key saved once approved, or the request closed (denied, expired, already claimed) with what to tell the person. Older versions get a 409 `key_approval_required` instead of a 2xx they would take for a key; `login` prints a hint for it.
 
 ## 0.2.13
 
