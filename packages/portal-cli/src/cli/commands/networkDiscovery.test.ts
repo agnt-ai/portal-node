@@ -54,12 +54,14 @@ function fakeDiscoveryApi() {
     if (req.url !== '/agnt/discovery') return json(res, 404, { status: 404, error: 'Not found' });
     if (req.method === 'GET') return json(res, 200, view());
     if (req.method !== 'PUT') return json(res, 404, { status: 404, error: 'Not found' });
-    if (!body || typeof body.listed !== 'boolean' || Object.keys(body).some((k) => !['listed', 'assistant'].includes(k))) {
+    if (!body || (typeof body.listed !== 'boolean' && !['name', 'contact', 'nobody'].includes(body.level))
+      || Object.keys(body).some((k) => !['listed', 'level', 'assistant'].includes(k))) {
       return refuse(res, 400, 'invalid', 'Invalid request body');
     }
+    const listed = body.level ? body.level !== 'nobody' : body.listed;
     if (state.foreignKey) return refuse(res, 403, 'portal_person_only', 'Only the person, signed in, or their agent can change this');
-    if (body.listed && !state.assistant) return refuse(res, 409, 'no_assistant', 'There is no assistant to be found by');
-    state.listed = body.listed;
+    if (listed && !state.assistant) return refuse(res, 409, 'no_assistant', 'There is no assistant to be found by');
+    state.listed = listed;
     state.changedBy = 'agent';
     state.changedAt = '2026-10-26T12:00:00.000Z';
     return json(res, 200, view());
@@ -92,7 +94,7 @@ describe('network discovery, against the API as it answers today', () => {
       identifiers: [{ identifier: 'mailto:person@example.com', directory: 'unlisted' }, { identifier: 'tel:+15555550100', directory: 'unlisted' }],
       note: ASK_FIRST,
     });
-    expect(ASK_FIRST).toBe('Being found by your person\'s exact email or phone is on from joining. Tell your person it is on; turn it off when they ask.');
+    expect(ASK_FIRST).toMatch(/^Your person is findable from joining: by default anyone finds them by their name, email, phone or Network ID \(level "name"\)\./);
   });
 
   it('on and off send PUT { listed } and nothing else, and answer with the switch', async () => {
@@ -105,6 +107,14 @@ describe('network discovery, against the API as it answers today', () => {
       { method: 'PUT', path: '/agnt/discovery', body: { listed: true } },
       { method: 'PUT', path: '/agnt/discovery', body: { listed: false } },
     ]);
+  });
+
+  it('on --level sends PUT { level } (name or contact); a bad level is refused before anything is sent', async () => {
+    await networkDiscoverySet(client, true, { level: 'contact' });
+    await networkDiscoverySet(client, true, { level: ' Name ' });
+    expect(api.requests.map((r: any) => r.body)).toEqual([{ level: 'contact' }, { level: 'name' }]);
+    await expect(networkDiscoverySet(client, true, { level: 'everyone' })).rejects.toThrow(/--level is name .* or contact/);
+    expect(api.requests).toHaveLength(2);
   });
 
   it('--assistant goes in the body only when given', async () => {

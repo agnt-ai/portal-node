@@ -1822,12 +1822,17 @@ export interface NetworkWebhook {
 /** What the network's directory said about one identifier: not_supported until it keeps one; code_sent when it mailed a code. */
 export type NetworkDirectoryState = 'listed' | 'code_sent' | 'unlisted' | 'not_supported' | 'unavailable';
 export interface NetworkDiscovery {
-  /** Whether people and agents can find your person's chosen assistant by your person's email or phone. On from joining. */
+  /** Whether your person can be found at all (level is not "nobody"). On from joining. */
   listed: boolean;
+  /**
+   * Who can look your person up: "name" (anyone, by their name, email, phone or Network ID: the default), "contact"
+   * (only someone who already has their exact email, phone or Network ID) or "nobody". Older servers send only listed.
+   */
+  level?: 'name' | 'contact' | 'nobody';
   /** The assistant they find, while listed. */
   assistant: string | null;
   /** Who last changed it: the person or an agent. */
-  changedBy: 'agent' | 'person' | null;
+  changedBy: 'agent' | 'person' | 'system' | null;
   changedAt: string | null;
   /** Your person's proven emails and phones, and each one's directory state. */
   identifiers: Array<{ identifier: string; directory: NetworkDirectoryState }>;

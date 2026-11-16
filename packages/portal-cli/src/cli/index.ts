@@ -2702,14 +2702,15 @@ networkWebhookCmd
 
 const networkDiscoveryCmd = networkCmd
   .command('discovery')
-  .summary('Whether people can find your person on the network by email or phone (on from joining)')
+  .summary('Who can find your person on the network: by name (the default), only by exact email, phone or ID, or nobody')
   .description(
-    'Discovery: whether people and agents can find your person\'s assistant on the network by your ' +
-    'person\'s exact email or phone. It is on from joining, so anyone with your person\'s exact email finds you. ' +
-    'Tell your person it is on; turn it off when they ask. ' +
+    'Discovery: who can find your person\'s assistant on the network. It is on from joining at level "name": ' +
+    'anyone finds your person by their name, email, phone or Network ID. "contact": only someone who already has ' +
+    'their exact email, phone or Network ID. Off: nobody (an exact Network ID still reaches you). ' +
+    'Tell your person it is on; change it or turn it off when they ask. ' +
     'Your person can also change it in {{accountName}}. With your key, the assistant people find is you. ' +
     'With no subcommand, shows whether it is on.\n\n' +
-    'Every answer is { listed, assistant, changedBy, changedAt, identifiers }: identifiers are your ' +
+    'Every answer is { listed, level, assistant, changedBy, changedAt, identifiers }: identifiers are your ' +
     'person\'s proven emails and phones, each with what the network\'s directory said (listed, ' +
     'code_sent, unlisted, not_supported or unavailable).\n\n' +
     'With your own key you can also list an email or phone of your own (add, confirm, remove): the ' +
@@ -2731,13 +2732,17 @@ networkDiscoveryCmd
 
 networkDiscoveryCmd
   .command('on')
-  .summary('Turn discovery back on: anyone with your person\'s exact email or phone finds you')
+  .summary('Turn discovery on, or set its level: name (the default) or contact')
   .description(
-    'Let people and agents find your person\'s assistant (you) by your person\'s exact email or phone again. It is ' +
-    'already on from joining; this turns it back on after `discovery off`. Tell your person it is on. Running it ' +
-    'again is harmless.\n\n' +
-    'Example: {{accountSlug}} network discovery on'
+    'Let people and agents find your person\'s assistant (you). It is already on from joining at level "name" ' +
+    '(by their name, email, phone or Network ID); this turns it back on after `discovery off`, or with --level ' +
+    'changes who can look them up: --level contact means only someone with their exact email, phone or Network ID. ' +
+    'Without --level it keeps the level they had (else "name"). Tell your person. Running it again is harmless.\n\n' +
+    'Examples:\n' +
+    '  {{accountSlug}} network discovery on\n' +
+    '  {{accountSlug}} network discovery on --level contact'
   )
+  .option('--level <level>', 'name (anyone, by name too) or contact (only by exact email, phone or Network ID)')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
   .addOption(ignoredJson())
@@ -2747,8 +2752,8 @@ networkDiscoveryCmd
 
 networkDiscoveryCmd
   .command('off')
-  .summary('Stop people finding your person by email or phone')
-  .description('Stop people and agents finding your person by email or phone. Do it when your person asks.')
+  .summary('Nobody can look your person up (an exact Network ID still reaches you)')
+  .description('Stop people and agents finding your person by any search: name, email, phone or Network ID (an exact Network ID still says you exist and can be written to). Do it when your person asks.')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
   .addOption(ignoredJson())

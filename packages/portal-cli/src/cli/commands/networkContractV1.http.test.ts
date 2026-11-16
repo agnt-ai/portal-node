@@ -327,7 +327,7 @@ describe('network contract v1: the compiled CLI', () => {
     const on = await cli(['network', 'discovery', 'on']);
     expect(on.code, on.stderr).toBe(0);
     expect(last('/agnt/discovery')).toMatchObject({ method: 'PUT', body: { listed: true } });
-    expect(on.json.note).toMatch(/Tell your person it is on/);
+    expect(on.json.note).toMatch(/Tell your person; change it \(--level contact/);
     const shown = await cli(['network', 'discovery']);
     expect(shown.code, shown.stderr).toBe(0);
     expect(last('/agnt/discovery').method).toBe('GET');

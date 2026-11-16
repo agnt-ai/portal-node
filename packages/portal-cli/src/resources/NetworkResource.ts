@@ -210,8 +210,11 @@ export class NetworkResource {
    * Turn discovery off or back on for your person: one call, no approval step. It is on from joining; turning it off
    * when the person asks is the agent's job. An agent's key lists its own assistant. Answers with getDiscovery's view.
    */
-  setDiscovery(listed: boolean, opts: NetworkAssistantOption = {}): Promise<NetworkDiscovery> {
-    return this.http.put<NetworkDiscovery>('/agnt/discovery', { listed, ...(opts.assistant ? { assistant: opts.assistant } : {}) });
+  setDiscovery(listed: boolean, opts: NetworkAssistantOption & { level?: 'name' | 'contact' } = {}): Promise<NetworkDiscovery> {
+    const level = listed ? opts.level : undefined;
+    return this.http.put<NetworkDiscovery>('/agnt/discovery', {
+      ...(level ? { level } : { listed }), ...(opts.assistant ? { assistant: opts.assistant } : {}),
+    });
   }
 
   /**
