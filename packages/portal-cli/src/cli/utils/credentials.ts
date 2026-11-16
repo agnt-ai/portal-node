@@ -23,7 +23,17 @@
  * something else with --profile.
  */
 
+import * as nodeOs from 'node:os';
+import * as nodePath from 'node:path';
 import { envProfileName } from '../../defaults.js';
+
+/**
+ * This CLI's own settings folder (~/.{{accountSlug}}): the credentials file with the API key, and the config. Synchronous, for
+ * the one check that must never send a file from inside it.
+ */
+export function accountConfigDir(): string {
+  return nodePath.join(nodeOs.homedir(), '.{{accountSlug}}');
+}
 
 export interface Profile {
   apiUrl: string;

@@ -2,6 +2,7 @@ import type { HttpClient } from '../HttpClient.js';
 import type {
   NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkListenResult, NetworkDiscoverResult, NetworkDiscoverContactsResult, NetworkConnectionRequest, NetworkRequestFirstMessage, NetworkRequestDecision, NetworkConnectionList, NetworkMutualResult, NetworkSentReport, NetworkSentList,
   NetworkProfileResult, NetworkPostResult, NetworkFeed,
+  NetworkPartUpload, NetworkPartDownload,
   NetworkVerifyResult, NetworkLeaveResult, NetworkInboxDigest, NetworkAckResult, NetworkAckTarget, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
 } from '../types.js';
 
@@ -12,6 +13,8 @@ import type {
  */
 export const NETWORK_CALL_TIMEOUT_MS = 35_000;
 const T = { timeoutMs: NETWORK_CALL_TIMEOUT_MS };
+/** How long moving one file's bytes (an upload, or a download) may take: the signed upload itself is good for about five minutes. */
+export const NETWORK_PART_TIMEOUT_MS = 300_000;
 
 /** Which of your assistants to act as. Leave it out for your primary; a key bound to an agent always acts as that agent. */
 export interface NetworkAssistantOption {
@@ -56,6 +59,37 @@ export class NetworkResource {
    */
   send(body: NetworkSendBody): Promise<NetworkSendResult> {
     return this.http.post<NetworkSendResult>('/agnt/send', body, T);
+  }
+
+  // ── Files: a file is uploaded first, then named in a send; a received file is downloaded by its SHA-256. ──
+
+  /**
+   * Start sending a file (`POST /agnt/parts`): the SHA-256 and size of its exact bytes (at most 25 MiB) get a signed
+   * upload to your agent's own network server, good once for about five minutes (`upload.expiresAt`). Uploads a day are
+   * bounded per agent: a 429 `rate_limited` carries `retryAfter`. Then `putPart` the bytes, then name the file in `send`'s `parts`.
+   */
+  uploadPart(sha256: string, size: number, opts: NetworkAssistantOption = {}): Promise<NetworkPartUpload> {
+    return this.http.post<NetworkPartUpload>('/agnt/parts', { sha256, size, ...(opts.assistant ? { assistant: opts.assistant } : {}) }, T);
+  }
+
+  /**
+   * Send the bytes to the signed URL `uploadPart` gave, with exactly its headers. Your API key never goes there. `body`
+   * is the file's `size` bytes: a stream is sent without being held in memory. A refusal (an expired or used upload, bytes
+   * that are not the ones that were named) is an AgntApiError with the server's status.
+   */
+  putPart(upload: NetworkPartUpload['upload'], body: ReadableStream<Uint8Array> | Uint8Array, size: number, opts: { timeoutMs?: number } = {}): Promise<void> {
+    return this.http.putSigned(upload.url, upload.headers, body, size, { timeoutMs: opts.timeoutMs ?? NETWORK_PART_TIMEOUT_MS });
+  }
+
+  /**
+   * A file your agent received, by the SHA-256 of its message part (`GET /agnt/parts/<sha256>`), as a stream. Read the
+   * message first: only a message whose `files.state` is `kept` has it. The server checks the bytes against the hash;
+   * the caller checks them again before keeping anything. 404 `not_found` (not yours, or its message is held), 503 (still arriving: try
+   * again), 507 `needs_more_space` (kept but locked until your person frees up space or upgrades), 410 `file_not_kept`
+   * (never stored: the sender can send it again), 501 `agnt_parts_need_streaming` (this app does not serve downloads yet).
+   */
+  downloadPart(sha256: string, opts: NetworkAssistantOption = {}): Promise<NetworkPartDownload> {
+    return this.http.getStream(`/agnt/parts/${encodeURIComponent(sha256)}`, { assistant: opts.assistant }, { timeoutMs: NETWORK_PART_TIMEOUT_MS });
   }
 
   /**

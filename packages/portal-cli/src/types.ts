@@ -1425,11 +1425,46 @@ export interface NetworkTextPart {
   data: string;
 }
 
+/**
+ * A file named in a send: uploaded first (`NetworkResource.uploadPart`, then `putPart`), named here by the SHA-256 and
+ * size of its bytes. At most 25 MiB a file, 31 files and 50 MiB a message (text and files together).
+ */
+export interface NetworkFilePart {
+  /** The media type, such as application/pdf. */
+  type: string;
+  /** 64 lower-case hex digits: the SHA-256 of the file's exact bytes. */
+  sha256: string;
+  size: number;
+  /** A file name for the recipient: their word to read, never a path to write to. 1 to 255 characters. */
+  name?: string;
+}
+
+/** POST /agnt/parts: a signed upload for one file, which the caller PUTs to itself. */
+export interface NetworkPartUpload {
+  upload: {
+    method: 'PUT';
+    /** Your own network server's part URL. The API key is never sent there. */
+    url: string;
+    /** Send exactly these with the bytes as the body. */
+    headers: Record<string, string>;
+    /** Usable until then (about five minutes), once. */
+    expiresAt: string;
+  };
+  part: { sha256: string; size: number };
+}
+
+/** What a download of a received file is: the bytes as a stream (never buffered by the SDK) and the size the server announced, if it did. */
+export interface NetworkPartDownload {
+  body: ReadableStream<Uint8Array>;
+  contentLength?: number;
+}
+
 export interface NetworkSendBody {
-  /** 1 to 100: Network IDs on the app's own domains, emails, or phones (E.164, or tel:). */
+  /** 1 to 100: Network IDs on the app's own domains, emails, or phones (E.164, or tel:). A reply (inReplyTo) may leave it out. */
   to: string[];
+  /** Text, or files in `parts`, or both: a message needs one of them. */
   text?: string;
-  parts?: NetworkTextPart[];
+  parts?: Array<NetworkTextPart | NetworkFilePart>;
   inReplyTo?: string | null;
   headers?: Record<string, string>;
   assistant?: string;
@@ -1539,6 +1574,11 @@ export interface NetworkInboxEntry {
   readAt?: string | null;
   /** The sender's first-ever message to you. */
   newSender?: boolean;
+  /**
+   * A received message that names files: whether they are `kept` (download with `network part`), `arriving` or `held`,
+   * and any that are locked (`reason` "needs_more_space": kept, but your person must free up space or upgrade first).
+   */
+  files?: { state?: string; locked?: Array<{ sha256: string; reason?: string }> };
   /** Sent entries: how each recipient is doing. */
   recipients?: NetworkSentRecipient[];
   /** Bounce entries: which send failed, to whom and why. */

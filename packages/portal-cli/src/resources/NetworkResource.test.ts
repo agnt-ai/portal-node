@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { NetworkResource, NETWORK_CALL_TIMEOUT_MS } from './NetworkResource.js';
+import { NetworkResource, NETWORK_CALL_TIMEOUT_MS, NETWORK_PART_TIMEOUT_MS } from './NetworkResource.js';
 import type { HttpClient } from '../HttpClient.js';
 
 function fakeHttp(overrides: Partial<HttpClient> = {}): HttpClient {
@@ -30,6 +30,23 @@ describe('NetworkResource', () => {
     const body = { to: ['bob@agent.example.net', 'carol@agent.example.org'], text: 'hi', headers: { subject: 'x' } };
     await new NetworkResource(http).send(body);
     expect(http.post).toHaveBeenCalledWith('/agnt/send', body, T);
+  });
+
+  it('uploadPart POSTs /agnt/parts with the hash and size (and the assistant only when given); putPart sends the bytes with the signed headers through the signed-URL call; downloadPart GETs the part by its hash as a stream', async () => {
+    const upload = { method: 'PUT' as const, url: 'https://simon.example.net/parts/x', headers: { 'x-sig': 's' }, expiresAt: '2026-11-11T00:05:00Z' };
+    const putSigned = vi.fn().mockResolvedValue(undefined);
+    const getStream = vi.fn().mockResolvedValue({ body: 'stream' });
+    const http = fakeHttp({ post: vi.fn().mockResolvedValue({ upload, part: { sha256: ID, size: 3 } }), putSigned, getStream } as any);
+    const network = new NetworkResource(http);
+    expect(await network.uploadPart(ID, 3)).toEqual({ upload, part: { sha256: ID, size: 3 } });
+    await network.uploadPart(ID, 3, { assistant: 'as1' });
+    expect(http.post).toHaveBeenNthCalledWith(1, '/agnt/parts', { sha256: ID, size: 3 }, T);
+    expect(http.post).toHaveBeenNthCalledWith(2, '/agnt/parts', { sha256: ID, size: 3, assistant: 'as1' }, T);
+    const bytes = new Uint8Array([1, 2, 3]);
+    await network.putPart(upload, bytes, 3);
+    expect(putSigned).toHaveBeenCalledWith(upload.url, upload.headers, bytes, 3, { timeoutMs: NETWORK_PART_TIMEOUT_MS });
+    await network.downloadPart(ID, { assistant: 'as1' });
+    expect(getStream).toHaveBeenCalledWith(`/agnt/parts/${ID}`, { assistant: 'as1' }, { timeoutMs: NETWORK_PART_TIMEOUT_MS });
   });
 
   it('inbox passes the exact opaque since, limit and assistant as query', async () => {
