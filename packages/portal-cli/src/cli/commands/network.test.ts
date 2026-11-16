@@ -132,6 +132,15 @@ describe('network wait', () => {
     expect(describeError('wait', err)).toMatchObject({ body: { code: 'network_error', retryable: true }, exitCode: EXIT_RETRY });
   });
 
+  it('a paused or retired agent: its own hint, not retryable, exit 1', () => {
+    const paused = describeError('wait', new AgntApiError(403, 'Your person deleted this agent in the app on 2026-11-12, so it is paused.', 'agent_paused'));
+    expect(paused).toMatchObject({ body: { code: 'agent_paused', retryable: false }, exitCode: 1 });
+    expect(paused.body.hint).toMatch(/restore it on their Assistants page/);
+    const retired = describeError('whoami', new AgntApiError(403, "This agent's address was retired on 2026-11-12.", 'agent_retired'));
+    expect(retired).toMatchObject({ body: { code: 'agent_retired', retryable: false }, exitCode: 1 });
+    expect(retired.body.hint).toMatch(/gone for good/);
+  });
+
   it('ends at once on an error that will not pass', async () => {
     const wait = vi.fn().mockRejectedValue(new AgntApiError(403, 'no', 'pair_bound_key'));
     await expect(networkWait(fakeClient({ wait }), {}, fakeClock())).rejects.toThrow('no');

@@ -68,7 +68,7 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/Set it after joining, with your person's OK on the line:\s+their full name, their company if you know it, and what you help with\./);
     expect(s).toMatch(/Then tell your person what it says; if they would rather not be found, run\s+`network discovery off` and clear the line with `profile --about ""`\./);
     expect(skill).not.toMatch(/Ask your person before you set it|who you work for/);
-    expect(skill).toMatch(/^Skill version 29 \(2026-11-16\)\./m);
+    expect(skill).toMatch(/^Skill version 30 \(2026-11-16\)\./m);
   });
 
   it('getting on: join on the person\'s word, the email it knows without asking, the code asked for, its own name, never a guessed email', () => {
@@ -310,7 +310,7 @@ describe("the app's network skill (SKILL.md)", () => {
     for (const code of ['not_joined', 'otp_invalid', 'otp_expired', 'rate_limited',
       'verify_unavailable', 'not_found', 'pair_bound_key', 'network_scope', 'confirm_mismatch', 'network_error',
       'invalid_match', 'invalid_url', 'url_not_public', 'webhook_disabled', 'person_block',
-      'network_no_domain', 'network_unavailable']) {
+      'network_no_domain', 'network_unavailable', 'agent_paused', 'agent_retired']) {
       expect(s).toContain(code);
     }
     // The server's own internally named codes are described in plain words; the CLI's hint names the case.

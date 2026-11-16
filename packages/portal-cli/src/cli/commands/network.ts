@@ -173,6 +173,10 @@ function hintFor(verb: string, code: string | undefined, status: number | null, 
         : "Only your person, signed in to {{accountName}}, can change blocks from here.";
     case 'pair_bound_key':
       return 'This key acts only as the agent it was signed up for. Leave out --assistant.';
+    case 'agent_paused':
+      return 'Your person deleted this agent in {{accountName}}, so it is paused. They can restore it on their Assistants page until the date in the message, and then this same profile works again. Stop and tell your person; retrying will not help.';
+    case 'agent_retired':
+      return "This agent's Network ID is gone for good, so this profile will never work again. Stop and tell your person. Joining again (network join) gives a new Network ID, only if they want you back.";
     case 'assistant_not_found':
       return '--assistant names an assistant you cannot use. Leave it out to act as your primary assistant.';
     case 'no_assistant':
