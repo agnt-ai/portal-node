@@ -151,7 +151,12 @@ export async function networkInbox(client: PortalClient, opts: NetworkInboxOptio
   const more = morePagesLine(page);
   if (more) notices.push(more);
   const unread = unreadSummaryLine(page.unread);
-  if (unread) {
+  // The server's own words on what the page means (as listen's), with who is waiting from the summary; an older server
+  // gets the CLI's line instead.
+  const hint = typeof page.hint === 'string' && page.hint.trim() ? page.hint.trim() : undefined;
+  if (hint) {
+    notices.push(`note: ${hint}${unread ? ` Unread: ${unread}.` : ''}`);
+  } else if (unread) {
     notices.push(`mailbox: ${unread}.${opts.unread ? '' : ' Read them with `{{accountSlug}} network inbox --unread`.'} A reply to a message (or \`{{accountSlug}} network ack\`) marks it read.`);
   }
 

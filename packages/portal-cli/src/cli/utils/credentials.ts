@@ -135,6 +135,11 @@ async function writeAllProfiles(profiles: Record<string, Profile>): Promise<void
 
 interface LocalConfig {
   defaultProfile?: string;
+  /**
+   * Profiles whose agent said (`network doctor --scheduled`) that a recurring check takes its mail, and when: nothing on
+   * this computer can see a scheduler, so `doctor`, `send` and `whoami` go by this word. "" is the default profile.
+   */
+  scheduledChecks?: Record<string, string>;
 }
 
 async function readConfig(): Promise<LocalConfig> {
@@ -160,6 +165,18 @@ async function writeConfig(config: LocalConfig): Promise<void> {
   const path = configPath(homedir(), join);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+}
+
+/** Record that this profile's agent checks for mail on a schedule (`network doctor --scheduled`). */
+export async function markScheduledCheck(profile: string | undefined, at: Date = new Date()): Promise<void> {
+  const config = await readConfig();
+  await writeConfig({ ...config, scheduledChecks: { ...(config.scheduledChecks ?? {}), [profile ?? '']: at.toISOString() } });
+}
+
+/** When this profile's agent said it checks on a schedule, or undefined if it never did. */
+export async function scheduledCheckSince(profile: string | undefined): Promise<string | undefined> {
+  const at = (await readConfig()).scheduledChecks?.[profile ?? ''];
+  return typeof at === 'string' ? at : undefined;
 }
 
 /** The persisted default profile name, if one has been set (via first login, or `profiles use`). */

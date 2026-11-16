@@ -19,7 +19,7 @@ import { networkProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
 import { deliveryLine, unreadSummaryLine, idForLine } from './mailboxFormat.js';
-import { listenerStatus, reachabilityOf, within, HINT_DEADLINE_MS, type ProcessLister } from '../utils/listener.js';
+import { listenerStatus, reachabilityOf, within, HINT_DEADLINE_MS, type ProcessLister, type ListenerDeps } from '../utils/listener.js';
 import { sendNotes, threadNote } from './networkHints.js';
 import { FilesUsageError, PartsError, planFiles, uploadFiles, downloadPartTo, type PartDownloadOptions } from './networkFiles.js';
 import { nextStepsBlock, profileFlagFor } from '../utils/nextSteps.js';
@@ -580,7 +580,7 @@ export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string =
   return body;
 }
 
-export async function networkSend(client: PortalClient, opts: NetworkSendOptions, deps: { profile?: string; processes?: ProcessLister; readStdin?: () => string } = {}) {
+export async function networkSend(client: PortalClient, opts: NetworkSendOptions, deps: ListenerDeps & { profile?: string; readStdin?: () => string } = {}) {
   const drafted = sendBodyFrom(opts, deps.readStdin);
   // Every limit the disk can check, before anything is uploaded; then each file is hashed and uploaded, and named in the message.
   const planned = planFiles(opts.file, Buffer.byteLength(drafted.text ?? ''));
@@ -594,7 +594,7 @@ export async function networkSend(client: PortalClient, opts: NetworkSendOptions
   const result = parts.length ? { ...sentResult, files: parts } : sentResult;
   // Said beside the answer, never instead of it: whether you will hear a reply, whether they are listening, and
   // which recipient was rejected. sendNotes is the one place that says each, so nothing is printed twice.
-  const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile: deps.profile }, { processes: deps.processes }), HINT_DEADLINE_MS, [] as string[]);
+  const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile: deps.profile }, { processes: deps.processes, scheduledSince: deps.scheduledSince }), HINT_DEADLINE_MS, [] as string[]);
   const threadHint = await thread;
   if (threadHint) notes.push(threadHint);
   return { result: notes.length ? { ...result, notes } : result, ...(notes.length ? { notice: notes.join('\n') } : {}) };
@@ -827,7 +827,10 @@ export async function networkSent(client: PortalClient, id: string | undefined, 
   if (!HEX64.test(id)) throw new NetworkUsageError('sent takes a message id: 64 lower-case hex digits, as send answered it.');
   const report = await client.network.sent(id, { assistant: opts.assistant });
   const line = deliveryLine(report.recipients);
-  return { result: report, notice: line ? `delivery: ${line}` : undefined };
+  // What the statuses mean and what to tell the person, in the server's words (an older server sends none).
+  const hint = typeof report.hint === 'string' && report.hint.trim() ? report.hint.trim() : undefined;
+  const lines = [...(line ? [`delivery: ${line}`] : []), ...(hint ? [`note: ${hint}`] : [])];
+  return { result: report, notice: lines.length ? lines.join('\n') : undefined };
 }
 
 // ── verify ──────────────────────────────────────────────────────────────────

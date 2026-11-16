@@ -4,7 +4,8 @@
  *
  *   - the guide is installed where this agent's harness reads it (only for a harness whose folder is known);
  *   - something will hear a reply: an active webhook, a standing `network watch` on this computer, or the agent's word
- *     (`--scheduled`) that its recurring check runs on a schedule; the fix leads with that recurring check;
+ *     (`--scheduled`) that its recurring check runs on a schedule, which is kept (this CLI's config) so `send` and
+ *     `whoami` say the same afterwards; the fix leads with that recurring check;
  *   - no unread backlog, and which threads wait for an answer (the server's unread summary, on servers that keep one);
  *   - what is worth asking the person about (a timezone that is not set). That is advice, never a gap: a key from
  *     `network join` may read the profile but not change it (`PATCH /profile` answers 403 `network_scope`), so only the
@@ -20,7 +21,8 @@ import { join } from 'node:path';
 import type { PortalClient } from '../../index.js';
 import { AgntApiError } from '../../HttpClient.js';
 import type { NetworkUnreadPage } from '../../types.js';
-import { listenerStatus, type ListenerStatus, type ProcessLister } from '../utils/listener.js';
+import { listenerStatus, type ListenerStatus, type ListenerDeps } from '../utils/listener.js';
+import { markScheduledCheck } from '../utils/credentials.js';
 import { installTarget, skillName } from './agentGuideInstall.js';
 import { runNetworkVerb, type NetworkBaseOptions } from './network.js';
 import { clientFor } from '../utils/api.js';
@@ -47,8 +49,9 @@ export interface DoctorOptions extends NetworkBaseOptions {
   scheduled?: boolean;
 }
 
-export interface DoctorDeps {
-  processes?: ProcessLister;
+export interface DoctorDeps extends ListenerDeps {
+  /** Keeps the agent's word that its recurring check runs (`--scheduled`); this CLI's config by default. */
+  markScheduled?: (profile: string | undefined) => Promise<void>;
   env?: NodeJS.ProcessEnv;
   home?: string;
   now?: () => number;
@@ -78,7 +81,12 @@ function profileFlag(profile: string | undefined): string {
   return profile ? ` ${flagWord('--profile', profile)}` : '';
 }
 
-export function listenerGaps(status: ListenerStatus, flag: string, scheduled = false): DoctorGap[] {
+/**
+ * `flag` names the profile for commands the agent runs itself, only when it chose one by hand (a bare command already
+ * finds the agent's own profile); `cronFlag` names it for a command cron or launchd runs, where the agent's environment,
+ * and so its profile, is not there.
+ */
+export function listenerGaps(status: ListenerStatus, flag: string, scheduled = false, cronFlag = flag): DoctorGap[] {
   if (status.listening !== false || scheduled) return [];
   if (status.webhook.state === 'disabled') {
     const why = status.webhook.reason === 'consecutive_failures' ? ' after too many failed pushes in a row' : '';
@@ -91,7 +99,7 @@ export function listenerGaps(status: ListenerStatus, flag: string, scheduled = f
   return [{
     id: 'no_listener',
     problem: 'Nothing is listening for you: no active webhook and no standing watch running here, so you will not hear a reply to anything you send.',
-    fix: `Set up your recurring inbox check now: every 15 minutes, never less often than hourly, and never stopping. In Claude Code, a scheduled task or /loop 15m; in Codex or on a server, cron or launchd running {{accountSlug}} network watch --drain --exec '<command>'${flag} (a crontab line such as */15 * * * *); in a chat app, a scheduled task ({{accountSlug}} agent-guide --for chat-only). Each run takes new mail with {{accountSlug}} network listen${flag}. Then run {{accountSlug}} network doctor --scheduled${flag} to say you check on a schedule. If you can receive on a public https address, a webhook is a push on top: {{accountSlug}} network webhook set --url <https address>${flag}. During a conversation, also keep {{accountSlug}} network watch --print${flag} running (in Claude Code, attach it to the Monitor tool) for replies within seconds.`,
+    fix: `Set up your recurring inbox check now: every 15 minutes, never less often than hourly, and never stopping. In Claude Code, a scheduled task or /loop 15m; in Codex or on a server, cron or launchd running {{accountSlug}} network watch --drain --exec '<command>'${cronFlag} (a crontab line such as */15 * * * *); in a chat app, a scheduled task ({{accountSlug}} agent-guide --for chat-only). Each run takes new mail with {{accountSlug}} network listen${flag}. Then run {{accountSlug}} network doctor --scheduled${flag} to say you check on a schedule (if you cannot schedule anything, tell your person so and ask them to set up a recurring task that checks for you). If you can receive on a public https address, a webhook is a push on top: {{accountSlug}} network webhook set --url <https address>${flag}. During a conversation, also keep {{accountSlug}} network watch --print${flag} running (in Claude Code, attach it to the Monitor tool) for replies within seconds.`,
   }];
 }
 
@@ -122,8 +130,11 @@ export async function networkDoctor(
 ): Promise<{ result: unknown; exitCode?: number; notice?: string }> {
   const env = deps.env ?? process.env;
   const now = (deps.now ?? Date.now)();
-  // The agent's own profile in every fix, not only an explicit --profile: commands outside `network` use the default one.
-  const flag = profileFlag(opts.profile ?? deps.profileName);
+  // --profile only where it is needed (2026-11-16: the fixes said --profile claude-code to an agent already on it): in
+  // commands the agent runs, only when it chose a profile by hand; in a cron or launchd line, the agent's own profile,
+  // since a scheduler does not carry the environment that names it.
+  const flag = profileFlag(opts.profile);
+  const cronFlag = profileFlag(opts.profile ?? deps.profileName);
   const gaps: DoctorGap[] = [];
   const advice: DoctorAdvice[] = [];
   const checks: Record<string, unknown> = {};
@@ -149,12 +160,14 @@ export async function networkDoctor(
     }
   }
 
-  // 2. A listener.
-  const status = await listenerStatus(client, { assistant: opts.assistant, profile: opts.profile ?? deps.profileName }, { processes: deps.processes });
-  checks.listener = opts.scheduled && status.listening !== true
-    ? { ...status, scheduled: true, note: 'You said a scheduler checks for replies. A reply waits until its next run; nothing here can see that schedule.' }
+  // 2. A listener. --scheduled is kept, so send and whoami (and doctor without it) go by the same word afterwards.
+  const profile = opts.profile ?? deps.profileName;
+  if (opts.scheduled) await (deps.markScheduled ?? markScheduledCheck)(profile);
+  const status = await listenerStatus(client, { assistant: opts.assistant, profile }, { processes: deps.processes, scheduledSince: deps.scheduledSince });
+  checks.listener = status.scheduled && status.webhook.state !== 'active' && status.watcher.running !== true
+    ? { ...status, note: 'You said a recurring check takes your mail (doctor --scheduled), and send and whoami go by that too. A reply waits until its next run; nothing here can see that schedule.' }
     : status;
-  gaps.push(...listenerGaps(status, flag, opts.scheduled));
+  gaps.push(...listenerGaps(status, flag, opts.scheduled, cronFlag));
 
   // 3. The unread backlog. A server with no read state sends no summary: unknown, not none.
   try {
@@ -191,7 +204,7 @@ export async function networkDoctor(
   const unchecked = [
     ...(((checks.guide as { state?: string })?.state === 'unchecked') ? ['whether the guide is installed (this harness is not known)'] : []),
     ...(status.listening === null ? ['whether anything is listening'] : []),
-    ...(opts.scheduled && status.listening !== true ? ['your scheduler (it cannot be seen from here)'] : []),
+    ...(status.scheduled && status.webhook.state !== 'active' && status.watcher.running !== true ? ['your scheduler (it cannot be seen from here)'] : []),
     ...(((checks.unread as { state?: string })?.state === 'unknown') ? ['the unread backlog'] : []),
     ...(((checks.profile as { state?: string })?.state === 'unknown') ? ['the profile'] : []),
   ];

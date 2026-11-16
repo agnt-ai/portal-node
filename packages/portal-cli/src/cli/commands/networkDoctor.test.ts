@@ -1,10 +1,18 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { networkDoctor, listenerGaps, backlogGap } from './networkDoctor.js';
 import { AgntApiError } from '../../HttpClient.js';
 import { countWatchers, within } from '../utils/listener.js';
+
+// The agent's word that a recurring check runs (`doctor --scheduled`) lives in this CLI's config: kept in memory here.
+const schedule = vi.hoisted(() => new Map<string, string>());
+vi.mock('../utils/credentials.js', () => ({
+  markScheduledCheck: vi.fn(async (profile?: string) => { schedule.set(profile ?? '', '2026-10-27T12:00:00.000Z'); }),
+  scheduledCheckSince: vi.fn(async (profile?: string) => schedule.get(profile ?? '')),
+}));
+beforeEach(() => schedule.clear());
 
 const NOW = Date.parse('2026-10-27T12:00:00Z');
 const webhook = (status: 'active' | 'disabled', extra: object = {}) => ({ webhook: { url: 'https://hook.example.test/in', status, consecutiveFailures: 0, lastDelivery: null, createdAt: '', updatedAt: '', ...extra } });
@@ -139,13 +147,20 @@ describe('network doctor', () => {
     expect((out.result as any).checks.unread.senders).toEqual({ 'a@agent.example.test': 1, network: 0 });
   });
 
-  it('--scheduled says the agent checks from a scheduler: no gap, and the ok line says what it could not see', async () => {
-    const out = await networkDoctor(fake(), { scheduled: true }, { processes: none, env: env(), now: () => NOW });
+  it('--scheduled says the agent checks from a scheduler: no gap, the ok line says what it could not see, and it is kept', async () => {
+    const before = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW, profileName: 'claude-code' });
+    expect((before.result as any).gaps[0].fix).toContain('doctor --scheduled');
+    const out = await networkDoctor(fake(), { scheduled: true }, { processes: none, env: env(), now: () => NOW, profileName: 'claude-code' });
     expect(out.exitCode).toBe(0);
-    expect((out.result as any).checks.listener.scheduled).toBe(true);
+    expect((out.result as any).checks.listener).toMatchObject({ listening: true, scheduled: { since: '2026-10-27T12:00:00.000Z' } });
     expect(out.notice).toMatch(/^ok: no gaps found\. Could not check: .*your scheduler/);
-    const gapOut = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW });
-    expect((gapOut.result as any).gaps[0].fix).toContain('doctor --scheduled');
+    // Kept: the doctor without --scheduled agrees afterwards (and so do send and whoami, which ask the same place).
+    const after = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW, profileName: 'claude-code' });
+    expect(after.exitCode).toBe(0);
+    expect((after.result as any).gaps).toEqual([]);
+    // Per profile: another agent's word is not this one's.
+    const other = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW, profileName: 'codex' });
+    expect((other.result as any).gaps.map((g: any) => g.id)).toEqual(['no_listener']);
   });
 
   it('the ok line names every check it could not make', async () => {
@@ -155,10 +170,19 @@ describe('network doctor', () => {
     expect(out.notice).toBe('ok: no gaps found. Could not check: whether the guide is installed (this harness is not known); whether anything is listening; the unread backlog; the profile.');
   });
 
-  it('puts the agent\'s own profile in every fix, not only an explicit --profile', async () => {
-    const out = await networkDoctor(fake({ me: vi.fn().mockResolvedValue({ timezone: null }) }), {}, { processes: none, env: env(), now: () => NOW, profileName: 'claude-code' });
-    expect((out.result as any).gaps.length).toBeGreaterThan(0);
-    for (const g of (out.result as any).gaps) expect(g.fix, g.id).toContain('--profile claude-code');
+  it('names --profile only where it is needed: always for a profile chosen by hand, else only in the cron or launchd line', async () => {
+    // The agent's own profile, found by a bare command: not repeated in what it runs itself (2026-11-16).
+    const own = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW, profileName: 'claude-code' });
+    const fix = (own.result as any).gaps.find((g: any) => g.id === 'no_listener').fix as string;
+    expect(fix.match(/--profile claude-code/g)).toHaveLength(1);
+    expect(fix).toContain("network watch --drain --exec '<command>' --profile claude-code");
+    expect(fix).toContain('network listen.');
+    expect(fix).toContain('network doctor --scheduled to say');
+    // A profile chosen by hand: every command names it.
+    const chosen = await networkDoctor(fake(), { profile: 'second' }, { processes: none, env: env(), now: () => NOW, profileName: 'second' });
+    const all = (chosen.result as any).gaps.find((g: any) => g.id === 'no_listener').fix as string;
+    expect(all).toContain('network listen --profile second');
+    expect(all).toContain('network doctor --scheduled --profile second');
   });
 
   it('quotes a profile name in the printed commands, so it is one shell word and never read as a flag', async () => {

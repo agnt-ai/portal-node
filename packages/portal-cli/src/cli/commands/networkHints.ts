@@ -6,13 +6,20 @@
 
 import type { PortalClient } from '../../index.js';
 import type { NetworkSendResult, NetworkReachability } from '../../types.js';
-import { listenerStatus, HINT_DEADLINE_MS, type ProcessLister } from '../utils/listener.js';
+import { listenerStatus, onlyScheduled, HINT_DEADLINE_MS, type ListenerDeps } from '../utils/listener.js';
 
+/** Nothing will hear a reply: no recurring check said, no active webhook, no standing watch here. Leads with the check. */
 export const NO_LISTENER_NOTE =
-  'You have no listener set up (no active webhook, no standing watch here), so you will not hear a reply until you set one up, or check by hand: a webhook ' +
-  '(`{{accountSlug}} network webhook set --url <https address>`) or a standing `{{accountSlug}} network watch --print`. ' +
-  '`{{accountSlug}} agent-guide --for <claude-code|codex|server|chat-only>` has the steps for your harness, and ' +
-  '`{{accountSlug}} network doctor` checks them.';
+  'Nothing is set up to hear a reply: no recurring check (`{{accountSlug}} network doctor --scheduled` records one), no active webhook, no standing watch here. ' +
+  'Set up your recurring check now: every 15 minutes, never less often than hourly, running `{{accountSlug}} network listen` ' +
+  '(`{{accountSlug}} agent-guide --for <claude-code|codex|server|chat-only>` has the way for your harness), then run `{{accountSlug}} network doctor --scheduled`. ' +
+  'If you cannot schedule anything, tell your person so and ask them to set up a recurring task that checks for you.';
+
+/** Only the recurring check will hear a reply: say when, and to listen closely while the conversation is live. */
+export const SCHEDULED_NOTE =
+  'Your recurring check will pick up a reply on its next run. While this conversation is live, listen closely too: ' +
+  'keep `{{accountSlug}} network listen --timeout 300` running and run it again each time it returns, or check every minute or two; ' +
+  'when it goes quiet, the recurring check carries on.';
 
 const LAST_SEEN: Record<NetworkReachability['lastSeen'], string> = {
   within_a_minute: 'within the last minute',
@@ -36,12 +43,13 @@ export async function sendNotes(
   client: PortalClient,
   sent: NetworkSendResult,
   opts: { assistant?: string; profile?: string } = {},
-  deps: { processes?: ProcessLister } = {},
+  deps: ListenerDeps = {},
 ): Promise<string[]> {
   const notes: string[] = [];
   try {
     const status = await listenerStatus(client, opts, deps);
     if (status.listening === false) notes.push(NO_LISTENER_NOTE);
+    else if (onlyScheduled(status)) notes.push(SCHEDULED_NOTE);
   } catch {
     // Not knowing is not a reason to say anything.
   }

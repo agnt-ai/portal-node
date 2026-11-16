@@ -4,9 +4,10 @@
  *
  *   1. `network join --email <the user's email>` emails the code and exits 0, saying what to ask the user.
  *   2. `network join --email <the user's email> --code <the code>` finishes: it saves the key to the agent's own
- *      profile and prints the agent's {{accountName}} Network ID (minted on the app's own domain), the line the agent
- *      says to its user, and the person's next step, `connectContacts` (links to bring their contacts in).
- *   Run again once joined, it only reports the Network ID.
+ *      profile and prints the agent's {{accountName}} Network ID (minted on the app's own domain), then `next` (the
+ *      four required steps, in order), `tellUser` (what to tell the person once they are done), `connectContacts`
+ *      (links for the person to bring their contacts in) and `orientation` (the card).
+ *   Run again once joined, it reports the same short answer for the Network ID it has.
  *
  * The username (the start of the Network ID) is the email's first part plus "-agent" unless the agent gives `--name`;
  * when the default is taken, join tries free names like it. A name given with --name is used as given, or refused
@@ -22,12 +23,10 @@ import { PortalClient } from '../../index.js';
 import { saveProfile, resolveProfile } from '../utils/credentials.js';
 import { DEFAULT_API_URL, envProfileName, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { signupFieldsFrom, verifyErrorHint, flagWord, type LoginOptions } from './login.js';
-import { NetworkUsageError, connectContactsStep, STAY_REACHABLE } from './network.js';
+import { NetworkUsageError, connectContactsStep } from './network.js';
 import { ASK_EMAIL, askForCode, findCodeHint } from '../utils/asks.js';
 import { guessProduct, agentProfileName } from '../utils/agentIdentity.js';
-import { CONVERSATION } from './agentGuide.js';
-import { firstCardFrom } from '../utils/firstCard.js';
-import { nextStepsBlock } from '../utils/nextSteps.js';
+import { firstCardFrom, tellUserFrom } from '../utils/firstCard.js';
 import { orientationFrom } from '../networkCore.js';
 
 export { guessProduct };
@@ -104,15 +103,28 @@ const givenName = (opts: JoinOptions): string | undefined => opts.name?.trim() |
 /** The username half of a Network ID: what the agent says to its person, without the domain. */
 export const usernameOf = (address: string): string => address.split('@')[0];
 
-/** What the agent tells its person once it has joined. Every sign-up gives them a free account. */
-export function joinedLine(email: string, address: string, purpose: AgentSignupPurpose = 'network'): string {
-  const done = purpose === 'network'
-    ? `I signed you up for a free {{accountName}} account with ${email} and joined the {{accountName}} Network, so other people's agents can reach me for you.`
-    : `I signed you up for a free {{accountName}} account with ${email}. I'm all set.`;
-  return `${done} My {{accountName}} Network username is ${usernameOf(address)}. Which agent do you want me to talk to?`;
+/**
+ * The joined answer, short (2026-11-16: a cold agent skimmed four screens of join output for four actions): what to do
+ * now, in order, first (`next`: the first card, the server's copy or the built-in one); then what to tell the person
+ * (`tellUser`); the person's contact links when there are any; and the card (`orientation`), kept so an agent that reads
+ * only this answer still learns how the network works. Nothing in it says the same thing twice.
+ */
+export function joinedAnswer(fields: { status: string; address: string; nextSteps?: unknown; tellUser?: unknown; email?: string; orientation?: unknown; connectContactsUrl?: AgentAuthVerifyResult['connectContactsUrl'] }) {
+  const connect = connectContactsStep(fields.connectContactsUrl);
+  return {
+    status: fields.status,
+    address: fields.address,
+    username: usernameOf(fields.address),
+    next: firstCardFrom(fields.nextSteps).text,
+    tellUser: tellUserFrom(fields.tellUser, { email: fields.email, address: fields.address }),
+    ...(connect ? { connectContacts: connect } : {}),
+    orientation: orientationFrom(fields.orientation).text,
+  };
 }
 
-const sayLine = (address: string) => `I'm all set. My {{accountName}} Network username is ${usernameOf(address)}. Which agent do you want me to talk to?`;
+/** The one plain line on stderr: where the answer is, so the JSON's text is not printed twice. */
+export const joinedNotice = (address: string, profileNote = '') =>
+  `joined as ${address}. Do the numbered steps in "next", in order, then tell your person what "tellUser" describes. "orientation" says how the network works.${profileNote}`;
 
 /** Step 1's word on the name: the default it will take, and how to pick another. */
 export const nameNote = (name: string) =>
@@ -142,19 +154,6 @@ export function finishJoinCommand(opts: JoinOptions, email: string, apiUrl: stri
   return parts.join(' ');
 }
 
-function nextCommands(profileFlag: string, profileName: string): string[] {
-  return [
-    `{{accountSlug}} network send${profileFlag} --to <their Network ID> --subject "..." --text "..."`,
-    `{{accountSlug}} network listen${profileFlag} --timeout 300`,
-    // The guide where the agent's harness reads it in every session (it writes only the skill file).
-    `{{accountSlug}} agent-guide --install`,
-    // Everyone your person already knows: LinkedIn's Connections.csv, from their LinkedIn data export.
-    // Always the profile join saved: commands outside network use the default profile otherwise.
-    `{{accountSlug}} contacts import-linkedin ${flagWord('--profile', profileName)} <your person's LinkedIn Connections.csv>`,
-    `{{accountSlug}} agent-guide`,
-  ];
-}
-
 /** What to do when the name given with --name is taken or refused: the code still works. */
 function usernameHint(err: AgntApiError): string | undefined {
   if (err.errorCode === 'agnt_username_taken' && !/new code/i.test(err.message)) {
@@ -176,7 +175,8 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
   // The agent's own profile (claude-code, codex, ...), never the shared default: two agents on one computer
   // never share keys, and a profile made earlier by hand is never picked up. --profile wins.
   const profileName = opts.profile?.trim() || envProfileName() || agentProfileName();
-  const profileFlag = opts.profile ? ` ${flagWord('--profile', opts.profile)}` : '';
+  // A profile chosen by hand is not the one a bare command finds: every command needs it then.
+  const profileNote = opts.profile ? ` Add ${flagWord('--profile', opts.profile)} to every command you run.` : '';
 
   // Already joined on this profile: just say where the agent is.
   if (!opts.code) {
@@ -184,16 +184,9 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     if (existing) {
       try {
         const me = await new PortalClient({ apiUrl: existing.apiUrl, apiKey: existing.apiKey }).network.whoami();
-        const connect = connectContactsStep(me.connectContactsUrl);
-        const nextSteps = nextStepsBlock(me.address, profileFlag);
-        const orientation = orientationFrom(undefined).text;
         return {
-          result: {
-            status: 'already_joined', address: me.address, username: usernameOf(me.address), orientation, tellUser: sayLine(me.address), firstCard: firstCardFrom(undefined).text, conversation: CONVERSATION, stayReachable: STAY_REACHABLE,
-            whatToDoNow: nextSteps,
-            next: nextCommands(profileFlag, profileName), ...(connect ? { connectContacts: connect } : {}),
-          },
-          notice: `${orientation}\n\n${firstCardFrom(undefined).text}\n\n${nextSteps}`,
+          result: joinedAnswer({ status: 'already_joined', address: me.address, connectContactsUrl: me.connectContactsUrl }),
+          notice: joinedNotice(me.address, profileNote),
         };
       } catch (err) {
         // Only a key the server refuses (revoked) means joining again. Anything else (a 503, no network) is
@@ -283,26 +276,11 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     };
   }
 
-  // The person's own next step: bring their contacts in (links they open themselves).
-  const connect = connectContactsStep(result.connectContactsUrl);
-  const short = {
-    status: 'joined',
-    address: result.agnt.address,
-    username: usernameOf(result.agnt.address),
-    // The card (how the network works): the server's own when it sends one, else the built-in copy.
-    orientation: orientationFrom(result.orientation).text,
-    tellUser: joinedLine(email, result.agnt.address, result.purpose === 'account' ? 'account' : 'network'),
-    // The server's card (what to tell and ask, then the four required steps) or, from an older server, the built-in four.
-    firstCard: firstCardFrom(result.nextSteps).text,
-    ...(connect ? { connectContacts: connect } : {}),
-    conversation: CONVERSATION,
-    stayReachable: STAY_REACHABLE,
-    whatToDoNow: nextStepsBlock(result.agnt.address, profileFlag),
-    next: nextCommands(profileFlag, profileName),
-  };
-  // The orientation, the card and the "what to do now" block are also plain text on stderr, where they are seen even if
-  // the JSON on stdout is not read; the block comes last, so the listen loop is the final thing the agent reads.
-  const notice = `${short.orientation}\n\n${short.firstCard}\n\n${short.whatToDoNow}`;
+  const short = joinedAnswer({
+    status: 'joined', address: result.agnt.address, nextSteps: result.nextSteps, tellUser: result.tellUser, email,
+    orientation: result.orientation, connectContactsUrl: result.connectContactsUrl,
+  });
+  const notice = joinedNotice(result.agnt.address, profileNote);
   if (!opts.json) return { result: short, notice };
   const { apiKey: _apiKey, ...shown } = result;
   return { result: { ...short, purpose: result.purpose, savedProfile: profileName, signup: shown }, notice };

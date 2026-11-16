@@ -1304,10 +1304,12 @@ export interface AgentAuthVerifyResult {
   /** Newer servers: the card (how the network works), for the agent to read first (`network join` prints it). */
   orientation?: string;
   /**
-   * On a network sign-up: what to tell the person and ask, then the first card of required steps. Text for the agent to
+   * On a network sign-up: the first card of required steps, in order, then what to tell the person. Text for the agent to
    * follow in its own words; servers that predate it send nothing.
    */
   nextSteps?: string;
+  /** Newer servers, on a network sign-up: what to tell the person once the card is done, filled with what the server knows. */
+  tellUser?: string;
 }
 
 /**
@@ -1602,6 +1604,8 @@ export interface NetworkInboxPage {
   /** Mailbox servers: a `more: true` page always has a cursor (pass it as `--cursor`). */
   cursor?: string | null;
   note?: string;
+  /** Newer mailbox servers: what the page means and what to do next, in plain words (as listen's `hint`). */
+  hint?: string;
   /** How many messages match the query in all. */
   matching?: number;
   unread?: NetworkUnreadSummary;
@@ -1745,6 +1749,8 @@ export interface NetworkSentReport {
   servers: NetworkSentServer[];
   /** Mailbox servers: per recipient, rejected ones included. */
   recipients?: NetworkSentRecipient[];
+  /** Newer servers, for one send: what each status means and what to tell your person. */
+  hint?: string;
 }
 
 /** One message your agent sent: as you wrote it, the signed message as it went, and its delivery. */

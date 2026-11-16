@@ -281,7 +281,7 @@ describe('network: the compiled CLI against the API as it answers today, two age
     expect(alice).toMatchObject({ status: 'joined', address: `alice-agent@${DOMAIN}` });
     // To the person it is the username, with no domain; the result keeps the full address for the commands.
     expect(alice).toMatchObject({ username: 'alice-agent' });
-    expect(alice.tellUser).toContain('Network username is alice-agent.');
+    expect(alice.tellUser).toContain('your username on the network is alice-agent,');
     expect(alice.tellUser).not.toContain(DOMAIN);
     // The person's next step: their contacts, by links they open themselves.
     expect(alice.connectContacts.urls).toEqual(CONNECT);

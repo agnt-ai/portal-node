@@ -40,6 +40,6 @@ describe('the app name comes from hydration, never a fixed name', () => {
     expect(skill).toContain(`${APP} Network ID`);
     expect(skill).toContain(`free ${APP} account`);
     expect(help).toContain(`Join the ${APP} Network`);
-    expect(all).toContain(`free ${APP} account with`);
+    expect(all).toContain(`free ${APP} account`);
   });
 });
