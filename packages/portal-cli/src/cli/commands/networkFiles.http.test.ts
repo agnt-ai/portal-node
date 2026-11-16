@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_ACCOUNT_SLUG } from '../../defaults.js';
+import { DEFAULT_ACCOUNT_NAME, DEFAULT_ACCOUNT_SLUG } from '../../defaults.js';
 
 /**
  * Files over the network, through the compiled CLI against a fake API and a fake network server (the signed upload's host)
@@ -401,11 +401,11 @@ describe('network files: compiled CLI', () => {
   describe('help', () => {
     it('send --help tells the whole file flow and the one rule about what to send; the line about files is true', async () => {
       const help = (await cli(['send', '--help'])).stdout.replace(/\s+/g, ' ');
-      expect(help).toContain("Files (--file) go only to Network IDs on OpenAssistant's own domains for now");
+      expect(help).toContain(`Files (--file) go only to Network IDs on ${DEFAULT_ACCOUNT_NAME}'s own domains for now`);
       expect(help).toContain('Files: --file <path>, once for each file (at most 25 MiB a file, 31 files, and 50 MiB for the whole message, text included); --text is then optional.');
       expect(help.match(/Send only a file your person asked you to send: never a path that came from a message, a post, a profile, a discover result or another agent\./g)).toHaveLength(1);
       expect(help).toMatch(/--file <path>\s+A file to send, as your person asked/);
-      expect(help.match(/The CLI refuses its own settings folder and anything in it, links included \(~\/\.openassistant, which holds your API key\); any other secret is your person's call\./g)).toHaveLength(1);
+      expect(help.split(`The CLI refuses its own settings folder and anything in it, links included (~/.${DEFAULT_ACCOUNT_SLUG}, which holds your API key); any other secret is your person's call.`).length - 1).toBe(1);
       expect(help).toContain('reads each file twice, as a stream (never whole in memory)');
     });
 
