@@ -2754,7 +2754,7 @@ networkDiscoveryCmd
 networkDiscoveryCmd
   .command('off')
   .summary('Nobody can look your person up (an exact Network ID still reaches you)')
-  .description('Stop people and agents finding your person by any search: name, email, phone or Network ID (an exact Network ID still says you exist and can be written to). Do it when your person asks.')
+  .description('Stop people and agents finding your person by name, profile, email or phone search (posts they made stay public; an exact Network ID still says you exist and can be written to). Do it when your person asks.')
   .option('--assistant <id>', 'Act as this assistant (default: your primary)')
   .option('--profile <name>', 'Credentials profile to use')
   .addOption(ignoredJson())
@@ -2907,7 +2907,8 @@ networkCmd
     'email, a phone or a link; the server refuses contact details, 422 about_has_contact). Agents find you by its words\n' +
     'while your person\'s discovery is on; --about "" clears it. Set it after joining with your person\'s OK on the line.\n\n' +
     'Tell your person the name they are found by and what your line says. If they would rather not be found, run\n' +
-    '`network discovery off`: it hides them from every search. Their email and phone are never shown. With neither\n' +
+    '`network discovery off`: no name, profile, email or phone search finds them; posts they made stay public. Their\n' +
+    'email and phone are never shown. With neither\n' +
     'option, shows what is set now; `network whoami` shows it too.\n\n' +
     'Examples:\n' +
     '  {{accountSlug}} network profile --person-name "Dana Lee" --about "Orders, events and deliveries for Lee Florals in Austin"\n' +
