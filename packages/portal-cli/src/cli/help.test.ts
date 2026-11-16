@@ -29,7 +29,7 @@ function allHelp(): Array<{ name: string; help: string }> {
     };
     await import(${JSON.stringify(pathToFileURL(cli).href)});
   `;
-  const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+  const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env: { ...process.env, NETWORK_NO_UPDATE_CHECK: '1' } });
   expect(run.status, run.stderr).toBe(0);
   return JSON.parse(run.stdout);
 }
