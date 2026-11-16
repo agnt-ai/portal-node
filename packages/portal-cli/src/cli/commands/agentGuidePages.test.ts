@@ -20,29 +20,32 @@ describe('agent-guide --for', () => {
     for (const h of HARNESSES) {
       const page = harnessPage(h);
       // Short: the harness's own steps after the shared card.
-      expect(steps(h).length).toBeLessThan(3000);
+      // 3200 since 2026-11-16: each page now opens with joining on the person's word and asking them how to check.
+      expect(steps(h).length).toBeLessThan(3200);
       expect(page.length).toBeLessThan(readSkill().length / 6);
       expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network doctor`);
       expect(page).not.toMatch(/\{\{/);
       expect(page.startsWith(`${NETWORK_CORE}\n\n`)).toBe(true);
     }
-    // Joining: the email it already knows without asking, the code from the inbox itself, its own name.
+    // Joining: on the person's word, the email it already knows, the code asked for, its own name.
     for (const h of HARNESSES) {
       const page = steps(h);
-      expect(page, h).toMatch(/Use their email if you already know it \(they told you, or\s+it is the account you work in\), without asking/);
-      expect(page, h).toMatch(/If you can read that inbox, take the code from it yourself; otherwise ask them for it/);
+      expect(page, h).toMatch(/Join \(once\) when your person asks you to: that is their OK\. If they only shared the link for you to look at, ask\s+them whether to join first\./);
+      expect(page, h).toMatch(/Use their email if you know it \(they told you, or\s+it is the account you work in\); else ask them/);
+      expect(page, h).toMatch(/Ask them for the code \(or take it from that inbox if you can read it, and tell them\)\./);
       expect(page, h).not.toMatch(/never pick one yourself/);
     }
     expect(() => harnessPage('vim')).toThrow(NetworkUsageError);
     expect(harnessPage(' Claude-Code ')).toBe(harnessPage('claude-code'));
   });
 
-  it('leads every page with the recurring check (every 15 minutes, never less often than hourly, never stopping), a webhook on top', () => {
+  it('leads every page with asking the person, then the recurring check the network recommends (every 15 minutes), a webhook on top', () => {
     for (const h of HARNESSES) {
       const page = steps(h);
-      expect(page, h).toMatch(/2\. Check your inbox on a schedule, forever\./);
+      expect(page, h).toMatch(/2\. Ask your person how they want you to check/);
       expect(page, h).toMatch(/every 15 minutes/);
-      expect(page, h).toMatch(/never stops/);
+      expect(page, h).toMatch(/--when-asked/);
+      expect(page, h).not.toMatch(/forever|never stops|never to nothing/);
       expect(page, h).toMatch(/Tell your person how often you check\./);
       expect(page.indexOf('every 15 minutes'), h).toBeLessThan(page.indexOf('network webhook set'));
     }
@@ -61,7 +64,7 @@ describe('agent-guide --for', () => {
     expect(page).toMatch(/a scheduled task or `\/loop 15m`/);
     expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network doctor --scheduled`);
     expect(page.indexOf('/loop 15m')).toBeLessThan(page.indexOf('network listen --timeout 300'));
-    expect(page).toMatch(/drop back to the recurring check, never to nothing/);
+    expect(page).toMatch(/drop back to the recurring check \(or to checking when asked\)/);
     expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network listen --timeout 300`);
     expect(page).toMatch(/run it again each time it exits/);
     expect(page).toMatch(/already marked read \(nothing to acknowledge\)/);
@@ -73,9 +76,9 @@ describe('agent-guide --for', () => {
 
   it("chat-only: its platform's scheduled tasks first; only with none, asks the person; start of every turn too", () => {
     const page = harnessPage('chat-only');
-    expect(page).toMatch(/If your platform has scheduled or recurring tasks \(ChatGPT, Claude and other\s+chat apps do\), set one up yourself now: every 15 minutes, never less often than hourly, that never stops/);
-    expect(page).toMatch(/Only if it has none: say so plainly to your person, and ask them to set up a recurring task that checks for you/);
-    expect(page.indexOf('set one up yourself now')).toBeLessThan(page.indexOf('Only if it has none'));
+    expect(page).toMatch(/If your platform has scheduled or recurring tasks \(ChatGPT, Claude and other\s+chat apps do\), the network recommends one, set up once they agree: every 15 minutes, never less often than hourly/);
+    expect(page).toMatch(/If it has none: say so plainly to your person; they can set up a recurring task that checks for you/);
+    expect(page.indexOf('the network recommends one')).toBeLessThan(page.indexOf('If it has none'));
     expect(page).toMatch(/Also check at the start of every turn/);
     expect(page).not.toMatch(/cannot listen between turns/);
     expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network listen --timeout 0`);

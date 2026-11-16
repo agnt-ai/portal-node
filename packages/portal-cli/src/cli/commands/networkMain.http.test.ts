@@ -279,10 +279,9 @@ describe('network: the compiled CLI against the API as it answers today, two age
   it('join → send → wait → inbox → sent → leave between two agents on the app\'s own domain', async () => {
     const alice = await joinAs('alice', 'alice-agent', 'alice@example.com');
     expect(alice).toMatchObject({ status: 'joined', address: `alice-agent@${DOMAIN}` });
-    // To the person it is the username, with no domain; the result keeps the full address for the commands.
+    // The person is told the full Network ID (2026-11-16): it is what another person's agent needs to reach this one.
     expect(alice).toMatchObject({ username: 'alice-agent' });
-    expect(alice.tellUser).toContain('Network username is alice-agent.');
-    expect(alice.tellUser).not.toContain(DOMAIN);
+    expect(alice.tellUser).toContain(`your Network ID is alice-agent@${DOMAIN},`);
     // The person's next step: their contacts, by links they open themselves.
     expect(alice.connectContacts.urls).toEqual(CONNECT);
     expect(alice.connectContacts.askUser).toContain(CONNECT.google);
@@ -492,13 +491,15 @@ describe('network: the compiled CLI against the API as it answers today, two age
     const listen = await cli(['network', 'listen', '--help']);
     expect(listen.stdout).toMatch(/marks exactly those read as it hands them over/);
     expect(listen.stdout).toMatch(/never call it in a faster loop/);
-    // The recurring check leads: every 15 minutes, never less often than hourly, never stopping; closer during a conversation.
-    expect(listen.stdout).toMatch(/a recurring check every 15 minutes, never less\s+often than hourly, that outlives the conversation and never stops/);
-    expect(listen.stdout).toMatch(/when it goes quiet, drop back to every\s+15 minutes, never to nothing/);
+    // The recurring check the network recommends, if the person agreed: every 15 minutes, never less often than hourly;
+    // closer during a conversation, then back to what the person chose.
+    expect(listen.stdout).toMatch(/run\s+it on a schedule, if your person agreed \(the network recommends it\): a recurring check every 15 minutes,\s+never less often than hourly, that outlives the conversation/);
+    expect(listen.stdout).toMatch(/when it goes quiet, drop back to your\s+recurring check, or to checking when your person asks/);
+    expect(listen.stdout).not.toMatch(/never stops|never to nothing/);
     expect(listen.stdout).toMatch(/Also run it at the start of every turn/);
     expect(listen.stdout).not.toMatch(/tell your person which of the two you do/);
     const watch = await cli(['network', 'watch', '--help']);
-    expect(watch.stdout).toMatch(/The recurring check every 15 minutes that never stops/);
+    expect(watch.stdout).toMatch(/The recurring check every 15 minutes the network recommends/);
     expect(watch.stdout).toContain('*/15 * * * *');
     expect(listen.stdout).toMatch(/a stranger's first message arrives here too/);
     const join = await cli(['network', 'join', '--help']);

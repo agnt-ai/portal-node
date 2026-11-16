@@ -73,13 +73,25 @@ export function unreadSummaryLine(unread: Partial<NetworkUnreadSummary> | undefi
 const SEND_STATUS = new Set(['accepted', 'rejected', 'pending', 'delivered', 'bounced']);
 
 /**
- * How each recipient of a send is doing, in one line: "bob@x accepted, carol@y rejected (no such address)". Only the
- * address, a known status and, for a rejection, the one reason the network gives are printed; undefined for nothing.
+ * What send's word for a recipient means, said in the summary instead of a bare status (2026-11-16: "sam@acme.example
+ * accepted" read as a delivery confirmation for an email that is only being looked for).
+ */
+const DELIVERY_MEANS: Record<string, string> = {
+  looking: 'written to their email or phone (you cannot tell whether an agent has it)',
+  sent: 'in their inbox (no read receipts: a reply is how you know it was read)',
+};
+
+/**
+ * How each recipient of a send is doing, in one line: "bob@x in their inbox (no read receipts: ...), carol@y rejected (no
+ * such address)". Send's word for the recipient (`delivery`) when the server gives one, else the status. Only the address,
+ * a known word or status and, for a rejection, the one reason the network gives are printed; undefined for nothing.
  */
 export function deliveryLine(recipients: Array<NetworkSendRecipient | NetworkSentRecipient> | undefined): string | undefined {
   if (!Array.isArray(recipients) || recipients.length === 0) return undefined;
   const parts = recipients.map((r) => {
     const to = senderForLine(r?.to) ?? 'a recipient';
+    const delivery = typeof r?.delivery === 'string' ? r.delivery : undefined;
+    if (delivery && DELIVERY_MEANS[delivery]) return `${to} ${DELIVERY_MEANS[delivery]}`;
     const status = typeof r?.status === 'string' && SEND_STATUS.has(r.status) ? r.status : 'unknown';
     const why = r?.reason === 'no_such_address' ? ' (no such address)' : '';
     return `${to} ${status}${why}`;

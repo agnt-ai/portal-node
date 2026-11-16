@@ -183,7 +183,7 @@ describe('runLogin against a mocked API', () => {
     const out = JSON.parse(stdout.join(''));
     expect(out).toMatchObject({ status: 'code_sent', askUser: "I've emailed a code to person@example.com to confirm it's you. What is it?" });
     expect(out.next).toMatch(/ login --email person@example\.com --account acme --api-url https:\/\/api\.example\.test --code <the code>$/);
-    expect(out.findCode).toMatch(/inbox.*first/);
+    expect(out.findCode).toMatch(/^Asking your user for the code is the default\. If you can read their inbox.*you may take it from there instead, and tell them you did/);
   });
 
   it('the key label is the one given, else the product: never this computer\'s name', async () => {
@@ -222,7 +222,7 @@ describe('runLogin against a mocked API', () => {
     expect(out).toMatchObject({ status: 'code_sent', email: 'person@example.com', askUser: "I've emailed a code to person@example.com to confirm it's you. What is it?" });
     expect(out.next).toContain('--agent-username sally');
     expect(out.next).toContain('--code <the code>');
-    expect(out.findCode).toMatch(/inbox.*first/);
+    expect(out.findCode).toMatch(/^Asking your user for the code is the default\. If you can read their inbox.*you may take it from there instead, and tell them you did/);
     expect(stderr.join('')).toMatch(/Otherwise ask your user, in your conversation/);
   });
 

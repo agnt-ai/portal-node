@@ -1,19 +1,31 @@
 /**
- * Whether this agent will hear a reply: a webhook that is active, or a standing watcher running on this computer.
- * `network doctor`, `whoami` and `send` all ask this one place. The server keeps no record of a poll that it reports
- * back to the poller, so a standing watch is found by looking for its process; where that cannot be done (no `ps`,
- * Windows) the answer is "unknown", never "not running".
+ * Whether this agent will hear a reply: a webhook that is active, a standing watcher running on this computer, or a
+ * recurring check the agent said it set up (`network doctor --scheduled`, kept in this CLI's config). `network doctor`,
+ * `whoami` and `send` all ask this one place, so they never disagree (2026-11-16: doctor --scheduled said ok while send
+ * said no listener). The server keeps no record of a poll that it reports back to the poller, so a standing watch is
+ * found by looking for its process; where that cannot be done (no `ps`, Windows) the answer is "unknown", never "not
+ * running". A scheduler cannot be seen from here at all: the agent's word is all there is. The person may instead have
+ * chosen checks only when they ask (`network doctor --when-asked`, 2026-11-16): nothing listens then, and that is their
+ * complete choice, not a gap; the hints say so instead of asking for a listener.
  */
 
 import { execFile } from 'node:child_process';
 import type { PortalClient } from '../../index.js';
 import { AgntApiError } from '../../HttpClient.js';
+import { scheduledCheckSince, whenAskedCheckSince } from './credentials.js';
 
 export interface ListenerStatus {
   webhook: { state: 'active' | 'disabled' | 'none' | 'unknown'; host?: string; reason?: string; consecutiveFailures?: number };
   /** A standing `network watch` (--print or --exec, not --drain) on this computer for this profile; null when it cannot be told. */
   watcher: { running: boolean | null; count: number };
-  /** Something will hear a reply: true, or false when both ways were checked and neither is there; null when neither could be checked. */
+  /** When the agent said (`network doctor --scheduled`) that a recurring check takes its mail; null when it never did. */
+  scheduled: { since: string } | null;
+  /** When the person chose checks only when they ask (`network doctor --when-asked`); null when they never did. */
+  whenAsked: { since: string } | null;
+  /**
+   * Something will hear a reply: true, or false when every way was checked and none is there; null when it could not be
+   * told. A recurring check counts: a reply waits for its next run.
+   */
   listening: boolean | null;
 }
 
@@ -34,6 +46,15 @@ export const HINT_DEADLINE_MS = 2500;
 
 /** The command lines of every process, or null when this computer cannot list them. */
 export type ProcessLister = () => Promise<string[] | null>;
+
+/** What listenerStatus reads from this computer, replaceable in tests. */
+export interface ListenerDeps {
+  processes?: ProcessLister;
+  /** When the agent said its recurring check runs (`network doctor --scheduled`); the CLI's config by default. */
+  scheduledSince?: (profile: string | undefined) => Promise<string | undefined>;
+  /** When the person chose checks only when they ask (`network doctor --when-asked`); the CLI's config by default. */
+  whenAskedSince?: (profile: string | undefined) => Promise<string | undefined>;
+}
 
 /** This user's own processes only (another user's watch is not ours), or null where `ps` or a user id is not there. */
 export const listProcesses: ProcessLister = () => new Promise((resolve) => {
@@ -84,7 +105,7 @@ function hostOf(url: unknown): string | undefined {
 export async function listenerStatus(
   client: PortalClient,
   opts: { assistant?: string; profile?: string } = {},
-  deps: { processes?: ProcessLister } = {},
+  deps: ListenerDeps = {},
 ): Promise<ListenerStatus> {
   let webhook: ListenerStatus['webhook'];
   try {
@@ -99,15 +120,32 @@ export async function listenerStatus(
   const lines = await (deps.processes ?? listProcesses)().catch(() => null);
   const count = lines ? countWatchers(lines, opts.profile) : 0;
   const watcher = { running: lines ? count > 0 : null, count };
-  const heard = webhook.state === 'active' || watcher.running === true;
+  const since = await (deps.scheduledSince ?? scheduledCheckSince)(opts.profile).catch(() => undefined);
+  const scheduled = since ? { since } : null;
+  // A caller that supplies its own scheduledSince (a test) reads no real config for the other half unless it says so.
+  const askedSince = deps.whenAskedSince ?? (deps.scheduledSince ? async () => undefined : whenAskedCheckSince);
+  const asked = scheduled ? undefined : await askedSince(opts.profile).catch(() => undefined);
+  const whenAsked = asked ? { since: asked } : null;
+  const heard = webhook.state === 'active' || watcher.running === true || scheduled !== null;
   const checkedBoth = webhook.state !== 'unknown' && watcher.running !== null;
-  return { webhook, watcher, listening: heard ? true : checkedBoth ? false : null };
+  return { webhook, watcher, scheduled, whenAsked, listening: heard ? true : checkedBoth ? false : null };
 }
+
+/** True when only the recurring check will hear a reply: no webhook is active and no standing watch runs here. */
+export const onlyScheduled = (status: ListenerStatus): boolean =>
+  status.scheduled !== null && status.webhook.state !== 'active' && status.watcher.running !== true;
+
+/** True when the person chose checks only when they ask and nothing else hears a reply: a complete setup, not a gap. */
+export const onlyWhenAsked = (status: ListenerStatus): boolean => status.whenAsked !== null && status.listening !== true;
 
 /** The same thing, short, for whoami. */
 export function reachabilityOf(status: ListenerStatus): Record<string, unknown> | undefined {
   if (status.listening === null && status.webhook.state === 'unknown') return undefined;
-  const note = status.listening === true
+  const note = onlyWhenAsked(status)
+    ? 'Your person chose that you check for messages only when they ask (`{{accountSlug}} network doctor --when-asked`): you see replies then, so tell them when one may be waiting.'
+    : onlyScheduled(status)
+    ? 'Your recurring check will pick up a reply on its next run (you said so with `{{accountSlug}} network doctor --scheduled`).'
+    : status.listening === true
     ? 'Something will hear a reply to what you send.'
     : status.listening === false
       ? 'Nothing is listening for you right now (no active webhook, no standing watch here): you will not hear replies until you set one up, or check by hand. `{{accountSlug}} network doctor` says how.'
@@ -116,6 +154,8 @@ export function reachabilityOf(status: ListenerStatus): Record<string, unknown> 
     listening: status.listening,
     webhook: status.webhook.state,
     watcher: status.watcher.running === null ? 'unknown' : status.watcher.running ? 'running' : 'not_running',
+    ...(status.scheduled ? { scheduled: status.scheduled.since } : {}),
+    ...(status.whenAsked ? { whenAsked: status.whenAsked.since } : {}),
     note,
   };
 }

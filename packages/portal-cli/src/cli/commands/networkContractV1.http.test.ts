@@ -160,7 +160,9 @@ describe('network contract v1: the compiled CLI', () => {
     expect(tried[0]).toBe('dana-agent');
     expect(tried[1]).toMatch(/^dana-agent-[a-z2-9]{8}$/);
     expect(step2.json.orientation).toBe('The card, from the server.');
-    expect(step2.stderr.startsWith('The card, from the server.')).toBe(true);
+    // The card is in the answer, never printed a second time on stderr: the notice points at the answer instead.
+    expect(step2.stderr).toMatch(/^joined as dana-agent-[a-z2-9]{8}@\S+\. Do the numbered steps in "next", in order/);
+    expect(step2.stderr).not.toContain('The card, from the server.');
     // Every request names this CLI's version, so the server can refuse a copy older than it serves.
     for (const r of fake.requests) expect(r.headers['x-agnt-cli-version']).toMatch(/^\d+\.\d+\.\d+/);
   });

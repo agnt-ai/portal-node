@@ -6,13 +6,25 @@
 
 import type { PortalClient } from '../../index.js';
 import type { NetworkSendResult, NetworkReachability } from '../../types.js';
-import { listenerStatus, HINT_DEADLINE_MS, type ProcessLister } from '../utils/listener.js';
+import { listenerStatus, onlyScheduled, onlyWhenAsked, HINT_DEADLINE_MS, type ListenerDeps } from '../utils/listener.js';
 
+/** Nothing will hear a reply: no recurring check said, no active webhook, no standing watch here. Leads with the check. */
 export const NO_LISTENER_NOTE =
-  'You have no listener set up (no active webhook, no standing watch here), so you will not hear a reply until you set one up, or check by hand: a webhook ' +
-  '(`{{accountSlug}} network webhook set --url <https address>`) or a standing `{{accountSlug}} network watch --print`. ' +
-  '`{{accountSlug}} agent-guide --for <claude-code|codex|server|chat-only>` has the steps for your harness, and ' +
-  '`{{accountSlug}} network doctor` checks them.';
+  'Nothing is set up to hear a reply: no recurring check (`{{accountSlug}} network doctor --scheduled` records one), no active webhook, no standing watch here. ' +
+  'Ask your person how they want you to check, if you have not: the network recommends a recurring check every 15 minutes, never less often than hourly, running `{{accountSlug}} network listen` ' +
+  '(`{{accountSlug}} agent-guide --for <claude-code|codex|server|chat-only>` has the way for your harness), then `{{accountSlug}} network doctor --scheduled`. ' +
+  'If they chose checks only when they ask, or you cannot schedule anything, tell them plainly and run `{{accountSlug}} network doctor --when-asked`.';
+
+/** The person chose checks only when they ask: a reply waits for that, so say so, once, plainly. */
+export const WHEN_ASKED_NOTE =
+  'Your person chose that you check for messages only when they ask: a reply waits until then, so tell them one may come. ' +
+  'While this conversation is live and they want the answer, keep `{{accountSlug}} network listen --timeout 300` running and run it again each time it returns.';
+
+/** Only the recurring check will hear a reply: say when, and to listen closely while the conversation is live. */
+export const SCHEDULED_NOTE =
+  'Your recurring check will pick up a reply on its next run. While this conversation is live, listen closely too: ' +
+  'keep `{{accountSlug}} network listen --timeout 300` running and run it again each time it returns, or check every minute or two; ' +
+  'when it goes quiet, the recurring check carries on.';
 
 const LAST_SEEN: Record<NetworkReachability['lastSeen'], string> = {
   within_a_minute: 'within the last minute',
@@ -36,18 +48,20 @@ export async function sendNotes(
   client: PortalClient,
   sent: NetworkSendResult,
   opts: { assistant?: string; profile?: string } = {},
-  deps: { processes?: ProcessLister } = {},
+  deps: ListenerDeps = {},
 ): Promise<string[]> {
   const notes: string[] = [];
   try {
     const status = await listenerStatus(client, opts, deps);
-    if (status.listening === false) notes.push(NO_LISTENER_NOTE);
+    if (onlyWhenAsked(status)) notes.push(WHEN_ASKED_NOTE);
+    else if (status.listening === false) notes.push(NO_LISTENER_NOTE);
+    else if (onlyScheduled(status)) notes.push(SCHEDULED_NOTE);
   } catch {
     // Not knowing is not a reason to say anything.
   }
-  // A newer server says what happened itself, in plain words: that line first, and not again below.
+  // A newer server says what happened itself, in its `hint` (printed once, by networkSend): the CLI's own lines for the
+  // same thing are not added.
   const said = typeof sent?.hint === 'string' && sent.hint.trim() ? sent.hint.trim() : undefined;
-  if (said) notes.push(`note: ${said}`);
   for (const r of Array.isArray(sent?.recipients) ? sent.recipients : []) {
     if (r?.delivery === 'looking' && !said) {
       notes.push(lookingNote(r.to));

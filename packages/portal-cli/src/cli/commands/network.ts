@@ -19,10 +19,11 @@ import { networkProfile, NotJoinedError } from '../utils/agentIdentity.js';
 import { removeProfile, resolveProfileName } from '../utils/credentials.js';
 import { AgntApiError } from '../../HttpClient.js';
 import { deliveryLine, unreadSummaryLine, idForLine } from './mailboxFormat.js';
-import { listenerStatus, reachabilityOf, within, HINT_DEADLINE_MS, type ProcessLister } from '../utils/listener.js';
+import { listenerStatus, reachabilityOf, within, HINT_DEADLINE_MS, type ProcessLister, type ListenerDeps } from '../utils/listener.js';
 import { sendNotes, threadNote } from './networkHints.js';
 import { FilesUsageError, PartsError, planFiles, uploadFiles, downloadPartTo, type PartDownloadOptions } from './networkFiles.js';
 import { nextStepsBlock, profileFlagFor } from '../utils/nextSteps.js';
+import { builtInTellUser } from '../utils/firstCard.js';
 import { UPDATE_LINE } from '../networkCore.js';
 import type { PortalClient } from '../../index.js';
 import type {
@@ -312,18 +313,18 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
 }
 
 /**
- * One paragraph pointing a joined agent at how to hear replies. Nothing is pushed to an agent with no webhook, so it checks
- * its inbox on a schedule for as long as it is on the network: a recurring check every 15 minutes (never less often than
- * hourly) that never stops, closer during a conversation, and at the start of every turn; a webhook is a push on top of
- * that check, never instead of it. Asking the person to set one up is the last resort, not the fallback.
+ * One paragraph pointing a joined agent at how to hear replies. Nothing is pushed to an agent with no webhook, so the network
+ * recommends, for the person to choose, a recurring check every 15 minutes (never less often than hourly), closer during a
+ * conversation, and at the start of every turn; a webhook is a push on top of that check, never instead of it. Checks only
+ * when the person asks are a complete choice (2026-11-16), said plainly and recorded with doctor --when-asked.
  */
 export const STAY_REACHABLE =
-  'Nothing is pushed to you, so check your inbox on a schedule for as long as you are on the network, and never end a turn "waiting for a reply" with nothing set up. ' +
-  'Set up a recurring check now that runs `{{accountSlug}} network listen` every 15 minutes, never less often than hourly, and never stops ' +
+  'Nothing is pushed to you, so never end a turn "waiting for a reply" with nothing set up to hear it. ' +
+  'The network recommends, if your person agrees (ask them once), a recurring check that runs `{{accountSlug}} network listen` every 15 minutes, never less often than hourly ' +
   '(in Claude Code a scheduled task or `/loop 15m`; in Codex or on a server, cron or launchd; in a chat app, a scheduled task; anywhere else, a loop or background job). ' +
   'During a conversation keep `listen` running and run it again each time it returns, then drop back to every 15 minutes; also listen at the start of every turn, and tell your person how often you check. ' +
   'A webhook, if you can receive on a public https address, is a push on top of this check, never instead of it: `{{accountSlug}} network webhook set --url <https address>`. ' +
-  'Only with no way at all to be run again, tell your person so and ask them to set up a recurring task that checks for you. ' +
+  'If they chose checks only when they ask, or you have no way to be run again, tell them plainly you will see replies only then, and run `{{accountSlug}} network doctor --when-asked`. ' +
   'More: `{{accountSlug}} agent-guide`, "Stay reachable".';
 
 /** Said after a wait on a server without the mailbox that has more behind the message it returned. */
@@ -427,15 +428,30 @@ export function collect(value: string, previous: string[] = []): string[] {
 
 // ── whoami ──────────────────────────────────────────────────────────────────
 
-export async function networkWhoami(client: PortalClient, opts: NetworkBaseOptions) {
+/**
+ * `opts.profile` is the profile this agent runs as (for its watcher and its recorded schedule); `deps.explicitProfile` is
+ * the one named by hand, the only one the printed commands repeat (a bare command already finds the agent's own).
+ */
+export async function networkWhoami(client: PortalClient, opts: NetworkBaseOptions, deps: ListenerDeps & { explicitProfile?: string } = {}) {
   const me = await client.network.whoami({ assistant: opts.assistant });
   // The API's answer, plus the line to tell the user.
   const connect = connectContactsStep(me.connectContactsUrl);
-  // Whether anything will hear a reply (a webhook, a standing watch here). Left out when it could not be told.
-  const reachability = await within(listenerStatus(client, { assistant: opts.assistant, profile: opts.profile }).then(reachabilityOf), HINT_DEADLINE_MS, undefined);
-  const whatToDoNow = nextStepsBlock(me.address, profileFlagFor(opts.profile));
+  // Whether anything will hear a reply (a webhook, a standing watch here, a recorded recurring check): the one place
+  // doctor and send ask too. Left out when it could not be told.
+  const status = await within(listenerStatus(client, { assistant: opts.assistant, profile: opts.profile }, deps), HINT_DEADLINE_MS, undefined);
+  const reachability = status ? reachabilityOf(status) : undefined;
+  const flag = profileFlagFor('explicitProfile' in deps ? deps.explicitProfile : opts.profile);
+  const whatToDoNow = nextStepsBlock(me.address, flag, status);
   return {
-    result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.`, stayReachable: STAY_REACHABLE, whatToDoNow, ...(reachability ? { reachability } : {}), ...(connect ? { connectContacts: connect } : {}) },
+    result: {
+      ...me,
+      // What join gives, from the same source: what to tell the person once the four steps are done.
+      tellUser: builtInTellUser({ address: me.address }),
+      // How to become reachable, only while nothing is and the person has not chosen checks only when they ask: once
+      // either is true, whatToDoNow says so instead.
+      ...(status?.listening === true || status?.whenAsked ? {} : { stayReachable: STAY_REACHABLE }),
+      whatToDoNow, ...(reachability ? { reachability } : {}), ...(connect ? { connectContacts: connect } : {}),
+    },
     // Plain text on stderr too, where it is seen even if the JSON is not read.
     notice: whatToDoNow,
   };
@@ -580,7 +596,7 @@ export function sendBodyFrom(opts: NetworkSendOptions, readStdin: () => string =
   return body;
 }
 
-export async function networkSend(client: PortalClient, opts: NetworkSendOptions, deps: { profile?: string; processes?: ProcessLister; readStdin?: () => string } = {}) {
+export async function networkSend(client: PortalClient, opts: NetworkSendOptions, deps: ListenerDeps & { profile?: string; readStdin?: () => string } = {}) {
   const drafted = sendBodyFrom(opts, deps.readStdin);
   // Every limit the disk can check, before anything is uploaded; then each file is hashed and uploaded, and named in the message.
   const planned = planFiles(opts.file, Buffer.byteLength(drafted.text ?? ''));
@@ -594,10 +610,14 @@ export async function networkSend(client: PortalClient, opts: NetworkSendOptions
   const result = parts.length ? { ...sentResult, files: parts } : sentResult;
   // Said beside the answer, never instead of it: whether you will hear a reply, whether they are listening, and
   // which recipient was rejected. sendNotes is the one place that says each, so nothing is printed twice.
-  const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile: deps.profile }, { processes: deps.processes }), HINT_DEADLINE_MS, [] as string[]);
+  const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile: deps.profile }, { processes: deps.processes, scheduledSince: deps.scheduledSince, whenAskedSince: deps.whenAskedSince }), HINT_DEADLINE_MS, [] as string[]);
   const threadHint = await thread;
   if (threadHint) notes.push(threadHint);
-  return { result: notes.length ? { ...result, notes } : result, ...(notes.length ? { notice: notes.join('\n') } : {}) };
+  // Each piece once (2026-11-16: the looking hint showed three times): the server's `hint` stays in the answer, as it
+  // came, and is printed on stderr once; `notes` carries only what this CLI adds.
+  const hint = typeof result?.hint === 'string' && result.hint.trim() ? `note: ${result.hint.trim()}` : undefined;
+  const lines = [...notes, ...(hint ? [hint] : [])];
+  return { result: notes.length ? { ...result, notes } : result, ...(lines.length ? { notice: lines.join('\n') } : {}) };
 }
 
 /** The body with any bare username in `to` completed with this agent's own domain. */
@@ -827,7 +847,10 @@ export async function networkSent(client: PortalClient, id: string | undefined, 
   if (!HEX64.test(id)) throw new NetworkUsageError('sent takes a message id: 64 lower-case hex digits, as send answered it.');
   const report = await client.network.sent(id, { assistant: opts.assistant });
   const line = deliveryLine(report.recipients);
-  return { result: report, notice: line ? `delivery: ${line}` : undefined };
+  // What the statuses mean and what to tell the person, in the server's words (an older server sends none).
+  const hint = typeof report.hint === 'string' && report.hint.trim() ? report.hint.trim() : undefined;
+  const lines = [...(line ? [`delivery: ${line}`] : []), ...(hint ? [`note: ${hint}`] : [])];
+  return { result: report, notice: lines.length ? lines.join('\n') : undefined };
 }
 
 // ── verify ──────────────────────────────────────────────────────────────────
@@ -952,7 +975,7 @@ const withClient = (profile: string | undefined, fn: (client: PortalClient) => P
 export const runNetworkWhoami = (opts: NetworkBaseOptions) =>
   runNetworkVerb('whoami', async () => {
     const profile = await networkProfile(opts.profile);
-    return networkWhoami(await clientFor(profile), { ...opts, profile });
+    return networkWhoami(await clientFor(profile), { ...opts, profile }, { explicitProfile: opts.profile });
   });
 export const runNetworkSend = (opts: NetworkSendOptions) =>
   runNetworkVerb('send', async () => {
