@@ -41,6 +41,7 @@ const REPLY = [
 const FINISH = [
   'Check it all: `{{accountSlug}} network doctor` lists every gap with the command that fixes it, and exits 1 while any is open.',
   'The whole guide: `{{accountSlug}} agent-guide` (see "Stay reachable").',
+  'An `update` in an answer, or "update available" on stderr: as your person chose, update and rerun `agent-guide --install`, or tell them.',
 ].join('\n');
 
 const PAGES: Record<Harness, string> = {
