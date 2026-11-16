@@ -133,6 +133,62 @@ async function writeAllProfiles(profiles: Record<string, Profile>): Promise<void
   await chmod(path, 0o600);
 }
 
+/**
+ * A new key this computer asked for, for an address that already had a working key (the server's G452): its person
+ * approves it in the app, then `network join` claims it once with the secret. Kept per profile in its own file
+ * (~/.{{accountSlug}}/key-requests, mode 0600: the claim secret is a credential until it is used).
+ */
+export interface PendingKeyRequest {
+  apiUrl: string;
+  account?: string;
+  id: string;
+  claimSecret: string;
+  address: string;
+  expiresAt: string;
+}
+
+async function keyRequestsPath(): Promise<string> {
+  const { homedir } = await import('os');
+  const { join } = await import('path');
+  return join(accountDir(homedir(), join), 'key-requests');
+}
+
+async function readKeyRequests(): Promise<Record<string, PendingKeyRequest>> {
+  const { readFile } = await import('fs/promises');
+  try {
+    const parsed = JSON.parse(await readFile(await keyRequestsPath(), 'utf-8'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeKeyRequests(all: Record<string, PendingKeyRequest>): Promise<void> {
+  const { dirname } = await import('path');
+  const { mkdir, writeFile, chmod, rm } = await import('fs/promises');
+  const path = await keyRequestsPath();
+  if (Object.keys(all).length === 0) {
+    await rm(path, { force: true });
+    return;
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(all, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
+  await chmod(path, 0o600);
+}
+
+/** The key request this profile is waiting on, if any. */
+export async function pendingKeyRequest(profile: string): Promise<PendingKeyRequest | undefined> {
+  return (await readKeyRequests())[profile];
+}
+
+/** Remember (or, with undefined, forget) the key request this profile is waiting on. */
+export async function setPendingKeyRequest(profile: string, request: PendingKeyRequest | undefined): Promise<void> {
+  const all = await readKeyRequests();
+  if (request) all[profile] = request;
+  else delete all[profile];
+  await writeKeyRequests(all);
+}
+
 interface LocalConfig {
   defaultProfile?: string;
   /**

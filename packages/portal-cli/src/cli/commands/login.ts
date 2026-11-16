@@ -80,6 +80,8 @@ export function verifyErrorHint(err: AgntApiError, code: string): string | undef
     case 'otp_expired':
     case 'otp_max_attempts':
       return 'That code can no longer be used. Run the same command without --code to email a new one, then ask your user for it in your conversation.';
+    case 'key_approval_required':
+      return 'That address already has a working key, and that key keeps working. A new key needs your person\'s approval in the app: run `{{accountSlug}} network join` with a new code; it asks for the key and claims it once they approve.';
   }
   if (err.status === 429) return `Too many attempts. Wait${err.retryAfter !== undefined ? ` ${err.retryAfter} seconds` : ' a while'}, then try again.`;
   if (err.errorCode && CODE_KEPT.has(err.errorCode)) return `Your code is still good: ${again}.`;
