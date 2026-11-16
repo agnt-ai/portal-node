@@ -228,7 +228,7 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
         askUser: askForCode(email),
         ...(opts.randomUsername ? {} : { username: givenName(opts) ?? defaultUsername(email), nameNote: nameNote(givenName(opts) ?? defaultUsername(email)) }),
         next: finishJoinCommand(opts, email, apiUrl),
-        note: 'If you can read your user\'s inbox, take the code from it yourself, without asking; otherwise ask them in your conversation. They never need a terminal.',
+        note: 'Ask your user for the code in your conversation; if you can read their inbox, you may take it from there instead, and tell them you did. They never need a terminal.',
       },
     };
   }

@@ -40,14 +40,15 @@ describe('the pointer to staying reachable', () => {
     expect(STAY_REACHABLE.indexOf('network listen')).toBeGreaterThan(0);
     expect(STAY_REACHABLE.indexOf('network listen')).toBeLessThan(STAY_REACHABLE.indexOf('network webhook set'));
     expect(STAY_REACHABLE).toMatch(/A webhook, if you can receive on a public https address, is a push on top of this check, never instead of it/);
-    // The recurring check leads: every 15 minutes, never less often than hourly, never stopping, set up by the agent itself.
-    expect(STAY_REACHABLE).toMatch(/Set up a recurring check now that runs `\S+ network listen` every 15 minutes, never less often than hourly, and never stops/);
+    // The recurring check the network recommends, set up once the person agrees: every 15 minutes, never less often than hourly.
+    expect(STAY_REACHABLE).toMatch(/The network recommends, if your person agrees \(ask them once\), a recurring check that runs `\S+ network listen` every 15 minutes, never less often than hourly/);
+    expect(STAY_REACHABLE).not.toMatch(/never stops|forever/);
     expect(STAY_REACHABLE).toMatch(/in Claude Code a scheduled task or `\/loop 15m`; in Codex or on a server, cron or launchd; in a chat app, a scheduled task/);
     expect(STAY_REACHABLE).toMatch(/During a conversation keep `listen` running .* then drop back to every 15 minutes; also listen at the start of every turn/);
-    // Asking the person is the last resort, after the agent's own recurring check.
-    expect(STAY_REACHABLE.indexOf('recurring check now')).toBeLessThan(STAY_REACHABLE.indexOf('Only with no way at all to be run again'));
+    // Checks only when the person asks are their complete choice, recorded with doctor --when-asked.
+    expect(STAY_REACHABLE).toMatch(/If they chose checks only when they ask, or you have no way to be run again, tell them plainly you will see replies only then, and run `\S+ network doctor --when-asked`/);
     expect(STAY_REACHABLE).not.toMatch(/if you cannot keep a process running, run it at the start of every turn/);
-    expect(STAY_REACHABLE).toMatch(/never end a turn "waiting for a reply" with nothing set up/);
+    expect(STAY_REACHABLE).toMatch(/never end a turn "waiting for a reply" with nothing set up to hear it/);
     expect(STAY_REACHABLE).toMatch(/agent-guide.*"Stay reachable"/);
   });
 });
@@ -593,14 +594,20 @@ describe('send thread hint and whoami next steps', () => {
     const scheduled = await networkWhoami(client(), { profile: 'claude-code' }, { explicitProfile: undefined, processes: async () => [], scheduledSince: async (p) => (p === 'claude-code' ? '2026-11-16T10:00:00.000Z' : undefined) }) as any;
     const block = scheduled.result.whatToDoNow as string;
     expect(block).toContain(`1. ${SCHEDULED_NOTE}`);
-    expect(block).not.toMatch(/before you end this turn|Set up your recurring check/);
+    expect(block).not.toMatch(/before you end this turn|Ask your person how they want you to check/);
     expect(block).not.toContain('--profile');
     expect(scheduled.result.stayReachable).toBeUndefined();
     expect(scheduled.result.reachability).toMatchObject({ listening: true, scheduled: '2026-11-16T10:00:00.000Z' });
     expect(scheduled.result.tellUser).toBe(builtInTellUser({ address: 'me@agent.example.net' }));
-    // Nothing set up: step 1 asks for the recurring check, and doctor --scheduled to record it.
+    // Nothing set up: step 1 asks the person, recommends the recurring check, and doctor records either choice.
     const bare = await networkWhoami(client(), { profile: 'claude-code' }, { explicitProfile: undefined, processes: async () => [], scheduledSince: async () => undefined }) as any;
-    expect(bare.result.whatToDoNow).toMatch(/1\. Set up your recurring check, then listen\..*then `\S+ network doctor --scheduled` to record it/);
+    expect(bare.result.whatToDoNow).toMatch(/1\. Ask your person how they want you to check, if you have not, then listen\..*then `\S+ network doctor --scheduled` to record it; if they chose checks only when they ask, `\S+ network doctor --when-asked`/);
+    // The person chose checks only when they ask: step 1 says so, and asks for no schedule.
+    const asked = await networkWhoami(client(), { profile: 'claude-code' }, { explicitProfile: undefined, processes: async () => [], scheduledSince: async () => undefined, whenAskedSince: async () => '2026-11-16T10:00:00.000Z' }) as any;
+    expect(asked.result.whatToDoNow).toMatch(/1\. Your person chose that you check for messages only when they ask/);
+    expect(asked.result.whatToDoNow).not.toMatch(/the network recommends having yourself run again/);
+    expect(asked.result.reachability).toMatchObject({ listening: false, whenAsked: '2026-11-16T10:00:00.000Z' });
+    expect(asked.result.stayReachable).toBeUndefined();
     expect(bare.result.stayReachable).toBe(STAY_REACHABLE);
     // A profile named by hand is repeated in every command.
     const named = await networkWhoami(client(), { profile: 'second' }, { explicitProfile: 'second', processes: async () => [], scheduledSince: async () => undefined }) as any;

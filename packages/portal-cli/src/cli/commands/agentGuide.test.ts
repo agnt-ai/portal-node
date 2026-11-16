@@ -62,21 +62,23 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/Why it matters to your person/);
   });
 
-  it("the public line: the person's full name, set without asking, told afterwards, cleared if they would rather not be found", () => {
+  it("the public line: the person's full name, set with their OK, told afterwards, cleared if they would rather not be found", () => {
     const s = section('4. Having a conversation');
     expect(s).toMatch(/profile --about "<your person's full name, their company,\s+what you help with>"/);
-    expect(s).toMatch(/Set it yourself right after joining, without asking: your\s+person's full name, their company if you know it, and what you help with\./);
+    expect(s).toMatch(/Set it after joining, with your person's OK on the line:\s+their full name, their company if you know it, and what you help with\./);
     expect(s).toMatch(/Then tell your person what it says; if they would rather not be found, run\s+`network discovery off` and clear the line with `profile --about ""`\./);
     expect(skill).not.toMatch(/Ask your person before you set it|who you work for/);
-    expect(skill).toMatch(/^Skill version 28 \(2026-11-16\)\./m);
+    expect(skill).toMatch(/^Skill version 29 \(2026-11-16\)\./m);
   });
 
-  it('getting on: the email it knows without asking, the code from the inbox itself, its own name, never a guessed email', () => {
+  it('getting on: join on the person\'s word, the email it knows without asking, the code asked for, its own name, never a guessed email', () => {
     const s = section('3. Getting on: the first minute');
-    expect(s).toMatch(/Their asking you to join is their\s+consent\./);
+    expect(s).toMatch(/Join when your person asks you to: their asking you to join is their OK\./);
+    expect(s).toMatch(/If they only shared the link for\s+you to look at, tell them what it is and ask whether to join first\./);
     expect(s).toMatch(/If you already know your person's email \(they told you, or it is the account you work in\),\s+use it without asking\. Only if you do not, ask/);
     expect(s).toMatch(/Never guess one: not a git config email, and not one another of their agents uses/);
-    expect(s).toMatch(/If you can read that inbox \(a mail connector or\s+similar\), take the code yourself, without asking/);
+    expect(s).toMatch(/Ask them for it with the `askUser` line\. If you can\s+read that inbox \(a mail connector or similar\), you may take it from there instead, and tell them you did/);
+    expect(s).not.toMatch(/take the code yourself, without asking/);
     expect(s).toMatch(/Pick it yourself and tell your person afterwards: there is nothing to confirm with them\./);
     expect(skill).not.toMatch(/code they give their assistant is their\s+consent|Never pick their account email|which email to use/);
     expect(s).toMatch(/askUser/);
@@ -193,15 +195,17 @@ describe("the app's network skill (SKILL.md)", () => {
     for (const host of ['Claude Code', 'scheduled tasks', 'network watch --exec', 'network listen --timeout 300', 'network webhook set', 'chat app', 'connector']) expect(s).toContain(host);
     expect(s.indexOf('network webhook set')).toBeLessThan(s.indexOf('network listen --timeout 300'));
     expect(s).toMatch(/never end your turn\s+"waiting for a reply" with nothing set up to hear it/);
-    // The rhythm: a recurring check forever, closer during a conversation, every turn, and the person told.
-    expect(s).toMatch(/\*\*Check your inbox on a schedule, forever\.\*\*/);
-    expect(s).toMatch(/a recurring check every 15 minutes, never less often than once an hour, that outlives the\s+conversation you joined in and never stops/);
-    expect(s).toMatch(/drop back to every 15 minutes, never to nothing/);
+    // The rhythm the network recommends, for the person to choose: a recurring check, closer during a conversation,
+    // every turn, and the person told.
+    expect(s).toMatch(/\*\*What the network recommends, for your person to choose: check your inbox on a schedule\.\*\*/);
+    expect(s).toMatch(/a recurring check every 15 minutes, never less often than once an hour, that\s+outlives the conversation you joined in\./);
+    expect(s).toMatch(/drop back to your recurring check/);
+    expect(s).not.toMatch(/forever|never stops|never to nothing/);
     expect(s).toMatch(/`listen` at the start of every turn/);
     expect(s).toContain('/loop 15m');
     expect(s).toContain('*/15 * * * *');
     expect(s).toContain('network watch --drain --exec');
-    expect(s).toMatch(/If you truly cannot be run again, tell your person[\s\S]*ask them to set up a recurring task/);
+    expect(s).toMatch(/If you truly cannot be run again, or they chose checks\s+only when they ask, tell your person plainly[\s\S]*doctor --when-asked`: that is a complete setup/);
     // The recurring check comes before the during-a-conversation listen on Claude Code.
     const cc = s.slice(s.indexOf('- **Claude Code:**'));
     expect(cc.indexOf('/loop 15m')).toBeLessThan(cc.indexOf('network listen --timeout 300'));

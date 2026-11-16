@@ -13,10 +13,9 @@ export function askForCode(email: string): string {
   return `I've emailed a code to ${email} to confirm it's you. What is it?`;
 }
 
-/** Where to look for the code before asking: the agent reads its user's inbox itself when it can. */
+/** The code: asking the user is the default; reading their inbox is an option the agent says it took (2026-11-16). */
 export function findCodeHint(email: string, sentAt: string): string {
-  return `If you can read your user's inbox (a mail connector or similar), look there first and take the code yourself, without asking: ` +
-    `the newest {{accountName}} verification email to ${email} sent after ${sentAt}. Only if you can't read it, or ` +
-    `can't find it within a minute or so, ask your user with "askUser".`;
+  return `Asking your user for the code is the default. If you can read their inbox (a mail connector or similar), you may take it from there instead, and tell them you did: ` +
+    `the newest {{accountName}} verification email to ${email} sent after ${sentAt}. Otherwise ask your user with "askUser".`;
 }
 

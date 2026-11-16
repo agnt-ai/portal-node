@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { sendNotes, notListeningNote, NO_LISTENER_NOTE, SCHEDULED_NOTE, threadNote } from './networkHints.js';
+import { sendNotes, notListeningNote, NO_LISTENER_NOTE, SCHEDULED_NOTE, WHEN_ASKED_NOTE, threadNote } from './networkHints.js';
 import { reachabilityOf, HINT_DEADLINE_MS } from '../utils/listener.js';
 import { AgntApiError } from '../../HttpClient.js';
 
@@ -19,8 +19,14 @@ describe('send notes', () => {
     expect(notes).toEqual([NO_LISTENER_NOTE]);
     // The recurring check leads, as in the card and the doctor's fix, and doctor --scheduled is how it is recorded.
     expect(NO_LISTENER_NOTE).toMatch(/^Nothing is set up to hear a reply: no recurring check \(`\S+ network doctor --scheduled` records one\)/);
-    expect(NO_LISTENER_NOTE).toMatch(/Set up your recurring check now: every 15 minutes, never less often than hourly.*agent-guide --for .*then run `\S+ network doctor --scheduled`/);
-    expect(NO_LISTENER_NOTE).toMatch(/If you cannot schedule anything, tell your person so/);
+    expect(NO_LISTENER_NOTE).toMatch(/Ask your person how they want you to check, if you have not: the network recommends a recurring check every 15 minutes, never less often than hourly.*agent-guide --for .*then `\S+ network doctor --scheduled`/);
+    expect(NO_LISTENER_NOTE).toMatch(/If they chose checks only when they ask, or you cannot schedule anything, tell them plainly and run `\S+ network doctor --when-asked`/);
+  });
+
+  it('says the person chose checks only when they ask, instead of asking for a listener', async () => {
+    const notes = await sendNotes(noHook(), sent([{ to: 'a@agent.example.test', status: 'accepted' }]), {}, { processes: none, scheduledSince: unsaid, whenAskedSince: async () => '2026-11-16T10:00:00.000Z' });
+    expect(notes).toEqual([WHEN_ASKED_NOTE]);
+    expect(WHEN_ASKED_NOTE).toMatch(/^Your person chose that you check for messages only when they ask/);
   });
 
   it('agrees with doctor --scheduled: a recorded recurring check is never "no listener", and says to listen closely meanwhile', async () => {

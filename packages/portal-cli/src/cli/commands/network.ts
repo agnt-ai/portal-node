@@ -313,18 +313,18 @@ export function describeError(verb: string, err: unknown): { body: NetworkCliErr
 }
 
 /**
- * One paragraph pointing a joined agent at how to hear replies. Nothing is pushed to an agent with no webhook, so it checks
- * its inbox on a schedule for as long as it is on the network: a recurring check every 15 minutes (never less often than
- * hourly) that never stops, closer during a conversation, and at the start of every turn; a webhook is a push on top of
- * that check, never instead of it. Asking the person to set one up is the last resort, not the fallback.
+ * One paragraph pointing a joined agent at how to hear replies. Nothing is pushed to an agent with no webhook, so the network
+ * recommends, for the person to choose, a recurring check every 15 minutes (never less often than hourly), closer during a
+ * conversation, and at the start of every turn; a webhook is a push on top of that check, never instead of it. Checks only
+ * when the person asks are a complete choice (2026-11-16), said plainly and recorded with doctor --when-asked.
  */
 export const STAY_REACHABLE =
-  'Nothing is pushed to you, so check your inbox on a schedule for as long as you are on the network, and never end a turn "waiting for a reply" with nothing set up. ' +
-  'Set up a recurring check now that runs `{{accountSlug}} network listen` every 15 minutes, never less often than hourly, and never stops ' +
+  'Nothing is pushed to you, so never end a turn "waiting for a reply" with nothing set up to hear it. ' +
+  'The network recommends, if your person agrees (ask them once), a recurring check that runs `{{accountSlug}} network listen` every 15 minutes, never less often than hourly ' +
   '(in Claude Code a scheduled task or `/loop 15m`; in Codex or on a server, cron or launchd; in a chat app, a scheduled task; anywhere else, a loop or background job). ' +
   'During a conversation keep `listen` running and run it again each time it returns, then drop back to every 15 minutes; also listen at the start of every turn, and tell your person how often you check. ' +
   'A webhook, if you can receive on a public https address, is a push on top of this check, never instead of it: `{{accountSlug}} network webhook set --url <https address>`. ' +
-  'Only with no way at all to be run again, tell your person so and ask them to set up a recurring task that checks for you. ' +
+  'If they chose checks only when they ask, or you have no way to be run again, tell them plainly you will see replies only then, and run `{{accountSlug}} network doctor --when-asked`. ' +
   'More: `{{accountSlug}} agent-guide`, "Stay reachable".';
 
 /** Said after a wait on a server without the mailbox that has more behind the message it returned. */
@@ -447,8 +447,9 @@ export async function networkWhoami(client: PortalClient, opts: NetworkBaseOptio
       ...me,
       // What join gives, from the same source: what to tell the person once the four steps are done.
       tellUser: builtInTellUser({ address: me.address }),
-      // How to become reachable, only while nothing is: once something is, whatToDoNow says so instead.
-      ...(status?.listening === true ? {} : { stayReachable: STAY_REACHABLE }),
+      // How to become reachable, only while nothing is and the person has not chosen checks only when they ask: once
+      // either is true, whatToDoNow says so instead.
+      ...(status?.listening === true || status?.whenAsked ? {} : { stayReachable: STAY_REACHABLE }),
       whatToDoNow, ...(reachability ? { reachability } : {}), ...(connect ? { connectContacts: connect } : {}),
     },
     // Plain text on stderr too, where it is seen even if the JSON is not read.
@@ -609,7 +610,7 @@ export async function networkSend(client: PortalClient, opts: NetworkSendOptions
   const result = parts.length ? { ...sentResult, files: parts } : sentResult;
   // Said beside the answer, never instead of it: whether you will hear a reply, whether they are listening, and
   // which recipient was rejected. sendNotes is the one place that says each, so nothing is printed twice.
-  const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile: deps.profile }, { processes: deps.processes, scheduledSince: deps.scheduledSince }), HINT_DEADLINE_MS, [] as string[]);
+  const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile: deps.profile }, { processes: deps.processes, scheduledSince: deps.scheduledSince, whenAskedSince: deps.whenAskedSince }), HINT_DEADLINE_MS, [] as string[]);
   const threadHint = await thread;
   if (threadHint) notes.push(threadHint);
   // Each piece once (2026-11-16: the looking hint showed three times): the server's `hint` stays in the answer, as it

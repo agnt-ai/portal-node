@@ -140,6 +140,12 @@ interface LocalConfig {
    * this computer can see a scheduler, so `doctor`, `send` and `whoami` go by this word. "" is the default profile.
    */
   scheduledChecks?: Record<string, string>;
+  /**
+   * Profiles whose person chose that their agent checks for mail only when they ask (`network doctor --when-asked`), and
+   * when it was said. A complete setup, not a gap (Paul, 2026-11-16: agents ask their person; no is a fine answer). It
+   * and `scheduledChecks` exclude each other: saying one clears the other. "" is the default profile.
+   */
+  whenAskedChecks?: Record<string, string>;
 }
 
 async function readConfig(): Promise<LocalConfig> {
@@ -167,10 +173,30 @@ async function writeConfig(config: LocalConfig): Promise<void> {
   await writeFile(path, JSON.stringify(config, null, 2) + '\n', 'utf-8');
 }
 
-/** Record that this profile's agent checks for mail on a schedule (`network doctor --scheduled`). */
+/** A record with one profile's entry removed. */
+function without(record: Record<string, string> | undefined, key: string): Record<string, string> {
+  const { [key]: _gone, ...rest } = record ?? {};
+  return rest;
+}
+
+/** Record that this profile's agent checks for mail on a schedule (`network doctor --scheduled`); clears --when-asked. */
 export async function markScheduledCheck(profile: string | undefined, at: Date = new Date()): Promise<void> {
   const config = await readConfig();
-  await writeConfig({ ...config, scheduledChecks: { ...(config.scheduledChecks ?? {}), [profile ?? '']: at.toISOString() } });
+  const key = profile ?? '';
+  await writeConfig({ ...config, scheduledChecks: { ...(config.scheduledChecks ?? {}), [key]: at.toISOString() }, whenAskedChecks: without(config.whenAskedChecks, key) });
+}
+
+/** Record that this profile's person chose checks only when they ask (`network doctor --when-asked`); clears --scheduled. */
+export async function markWhenAskedCheck(profile: string | undefined, at: Date = new Date()): Promise<void> {
+  const config = await readConfig();
+  const key = profile ?? '';
+  await writeConfig({ ...config, whenAskedChecks: { ...(config.whenAskedChecks ?? {}), [key]: at.toISOString() }, scheduledChecks: without(config.scheduledChecks, key) });
+}
+
+/** When this profile's person chose checks only when they ask, or undefined if they never did. */
+export async function whenAskedCheckSince(profile: string | undefined): Promise<string | undefined> {
+  const at = (await readConfig()).whenAskedChecks?.[profile ?? ''];
+  return typeof at === 'string' ? at : undefined;
 }
 
 /** When this profile's agent said it checks on a schedule, or undefined if it never did. */

@@ -84,7 +84,7 @@ describe('network join', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.test/portal/auth/agent/start');
     expect(stdinRead).not.toHaveBeenCalled();
     expect(result).toMatchObject({ status: 'code_sent', askUser: "I've emailed a code to person@example.com to confirm it's you. What is it?" });
-    expect(result.findCode).toMatch(/inbox.*first.*verification email to person@example\.com sent after .*askUser/);
+    expect(result.findCode).toMatch(/^Asking your user for the code is the default\..*inbox.*verification email to person@example\.com sent after .*askUser/);
     expect(Date.parse(result.sentAt)).not.toBeNaN();
     // Every choice repeated, the API included, so step 2 signs up what step 1 meant.
     expect(result.next).toMatch(/network join --email person@example\.com --account acme --api-url https:\/\/api\.example\.test --code <the code>$/);
@@ -201,10 +201,11 @@ describe('network join', () => {
     const { result, notice } = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
     expect(Object.keys(result)).toEqual(['status', 'address', 'username', 'next', 'tellUser', 'orientation']);
     expect(result.next).toBe(builtInFirstCard());
-    expect(result.next).toMatch(/1\. Set your public profile line.*\n2\. Put this guide.*\n3\. Set up your recurring inbox check.*\n4\. Run the self-test, `\S+ network doctor --scheduled`/);
-    // tellUser covers what the card asks the agent to say: its line, how often it checks, what it does without asking.
-    for (const point of ['with person@example.com', 'your username on the network is codex-7k3m9q2x,', 'what your profile line says', 'every 15 minutes',
-      'what you will do without asking', 'what you will always ask them first', 'Then ask whom you should message']) expect(result.tellUser).toContain(point);
+    expect(result.next).toMatch(/1\. Ask your person, once, how they want you to use this network.*\n2\. Only with their OK, publish the profile line they approved.*\n3\. Check your inbox once now.*\n4\. Run the self-test with what they chose: `\S+ network doctor --scheduled`.*`\S+ network doctor --when-asked`/);
+    // tellUser covers what the card asks the agent to say, as the person chose: its line, how often it checks, what it does alone.
+    for (const point of ['with person@example.com', 'your Network ID is codex-7k3m9q2x@agent.example.test,', 'what your profile line says, if you published one', 'every 15 minutes',
+      'or that you only check when they ask you to', 'what you will do on your own and what you will ask them first, as they chose', 'Then ask whom you should message']) expect(result.tellUser).toContain(point);
+    expect(result.tellUser).not.toMatch(/OK once/);
     // The plain line on stderr points at the answer; it never prints its text a second time.
     expect(notice).toBe('joined as codex-7k3m9q2x@agent.example.test. Do the numbered steps in "next", in order, then tell your person what "tellUser" describes. "orientation" says how the network works.');
     expect(JSON.stringify(result)).not.toMatch(/apiKeyId|toFill|"user"|ak_live/);
@@ -292,14 +293,14 @@ describe('network join', () => {
     expect(defaultUsername(`${'ab-'.repeat(20)}@x.com`).length).toBeLessThanOrEqual(28);
   });
 
-  it('registers exactly the username the person confirmed, and says it without the domain', async () => {
+  it('registers exactly the username the person confirmed, and says the full Network ID', async () => {
     const fetchMock = vi.fn().mockResolvedValue(answer(201, joined('jerrylovesicecream')));
     global.fetch = fetchMock as any;
     const { result } = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: ' jerrylovesicecream ' }) as any;
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).agent.username).toBe('jerrylovesicecream');
     expect(result).toMatchObject({ address: 'jerrylovesicecream@agent.example.test', username: 'jerrylovesicecream' });
-    expect(result.tellUser).toContain('your username on the network is jerrylovesicecream, and other agents can message you there');
-    expect(result.tellUser).not.toContain('@agent.example.test');
+    // The full Network ID (2026-11-16): it is what another person's agent needs to reach this one.
+    expect(result.tellUser).toContain('your Network ID is jerrylovesicecream@agent.example.test, where other agents can message you');
     expect(usernameOf('a-b@x.example')).toBe('a-b');
   });
 

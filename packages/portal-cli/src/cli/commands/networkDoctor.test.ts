@@ -8,11 +8,15 @@ import { countWatchers, within } from '../utils/listener.js';
 
 // The agent's word that a recurring check runs (`doctor --scheduled`) lives in this CLI's config: kept in memory here.
 const schedule = vi.hoisted(() => new Map<string, string>());
+// The person's choice of checks only when they ask (`doctor --when-asked`): the same config, the other half.
+const asked = vi.hoisted(() => new Map<string, string>());
 vi.mock('../utils/credentials.js', () => ({
-  markScheduledCheck: vi.fn(async (profile?: string) => { schedule.set(profile ?? '', '2026-10-27T12:00:00.000Z'); }),
+  markScheduledCheck: vi.fn(async (profile?: string) => { schedule.set(profile ?? '', '2026-10-27T12:00:00.000Z'); asked.delete(profile ?? ''); }),
   scheduledCheckSince: vi.fn(async (profile?: string) => schedule.get(profile ?? '')),
+  markWhenAskedCheck: vi.fn(async (profile?: string) => { asked.set(profile ?? '', '2026-10-27T12:00:00.000Z'); schedule.delete(profile ?? ''); }),
+  whenAskedCheckSince: vi.fn(async (profile?: string) => asked.get(profile ?? '')),
 }));
-beforeEach(() => schedule.clear());
+beforeEach(() => { schedule.clear(); asked.clear(); });
 
 const NOW = Date.parse('2026-10-27T12:00:00Z');
 const webhook = (status: 'active' | 'disabled', extra: object = {}) => ({ webhook: { url: 'https://hook.example.test/in', status, consecutiveFailures: 0, lastDelivery: null, createdAt: '', updatedAt: '', ...extra } });
@@ -54,8 +58,9 @@ describe('network doctor', () => {
     expect(gap.problem).toMatch(/Nothing is listening for you/);
     expect(gap.fix).toContain('network webhook set --url <https address> --profile claude-code');
     expect(gap.fix).toContain('network watch --print --profile claude-code');
-    // The recurring check leads, then saying so with --scheduled, then a webhook, then a watch during conversations.
-    expect(gap.fix).toMatch(/^Set up your recurring inbox check now: every 15 minutes, never less often than hourly, and never stopping\./);
+    // Asking the person leads, then the recurring check the network recommends, saying so with --scheduled (or
+    // --when-asked), then a webhook, then a watch during conversations.
+    expect(gap.fix).toMatch(/^Ask your person how they want you to check, if you have not: the network recommends a recurring inbox check every 15 minutes, never less often than hourly\./);
     expect(gap.fix).toContain('/loop 15m');
     expect(gap.fix).toContain("network watch --drain --exec '<command>' --profile claude-code");
     expect(gap.fix).toContain('*/15 * * * *');
@@ -161,6 +166,26 @@ describe('network doctor', () => {
     // Per profile: another agent's word is not this one's.
     const other = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW, profileName: 'codex' });
     expect((other.result as any).gaps.map((g: any) => g.id)).toEqual(['no_listener']);
+  });
+
+  it('--when-asked records the person chose checks only when they ask: no listener gap, says so, kept, and --scheduled clears it', async () => {
+    const out = await networkDoctor(fake(), { whenAsked: true }, { processes: none, env: env(), now: () => NOW, profileName: 'claude-code' });
+    expect(out.exitCode).toBe(0);
+    expect((out.result as any).gaps).toEqual([]);
+    expect((out.result as any).checks.listener).toMatchObject({ listening: false, whenAsked: { since: '2026-10-27T12:00:00.000Z' } });
+    expect((out.result as any).checks.listener.note).toMatch(/only when they ask/);
+    // Kept: doctor without the flag agrees afterwards.
+    const after = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW, profileName: 'claude-code' });
+    expect((after.result as any).gaps).toEqual([]);
+    // Saying --scheduled replaces it.
+    const sched = await networkDoctor(fake(), { scheduled: true }, { processes: none, env: env(), now: () => NOW, profileName: 'claude-code' });
+    expect((sched.result as any).checks.listener).toMatchObject({ listening: true, whenAsked: null });
+    // The no-listener fix offers both choices, as the person's.
+    const other = await networkDoctor(fake(), {}, { processes: none, env: env(), now: () => NOW, profileName: 'codex' });
+    const fix = (other.result as any).gaps[0].fix as string;
+    expect(fix).toMatch(/^Ask your person how they want you to check/);
+    expect(fix).toContain('doctor --when-asked');
+    expect(fix).not.toMatch(/never stopping|forever/);
   });
 
   it('the ok line names every check it could not make', async () => {

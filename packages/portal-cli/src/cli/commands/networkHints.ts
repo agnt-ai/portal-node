@@ -6,14 +6,19 @@
 
 import type { PortalClient } from '../../index.js';
 import type { NetworkSendResult, NetworkReachability } from '../../types.js';
-import { listenerStatus, onlyScheduled, HINT_DEADLINE_MS, type ListenerDeps } from '../utils/listener.js';
+import { listenerStatus, onlyScheduled, onlyWhenAsked, HINT_DEADLINE_MS, type ListenerDeps } from '../utils/listener.js';
 
 /** Nothing will hear a reply: no recurring check said, no active webhook, no standing watch here. Leads with the check. */
 export const NO_LISTENER_NOTE =
   'Nothing is set up to hear a reply: no recurring check (`{{accountSlug}} network doctor --scheduled` records one), no active webhook, no standing watch here. ' +
-  'Set up your recurring check now: every 15 minutes, never less often than hourly, running `{{accountSlug}} network listen` ' +
-  '(`{{accountSlug}} agent-guide --for <claude-code|codex|server|chat-only>` has the way for your harness), then run `{{accountSlug}} network doctor --scheduled`. ' +
-  'If you cannot schedule anything, tell your person so and ask them to set up a recurring task that checks for you.';
+  'Ask your person how they want you to check, if you have not: the network recommends a recurring check every 15 minutes, never less often than hourly, running `{{accountSlug}} network listen` ' +
+  '(`{{accountSlug}} agent-guide --for <claude-code|codex|server|chat-only>` has the way for your harness), then `{{accountSlug}} network doctor --scheduled`. ' +
+  'If they chose checks only when they ask, or you cannot schedule anything, tell them plainly and run `{{accountSlug}} network doctor --when-asked`.';
+
+/** The person chose checks only when they ask: a reply waits for that, so say so, once, plainly. */
+export const WHEN_ASKED_NOTE =
+  'Your person chose that you check for messages only when they ask: a reply waits until then, so tell them one may come. ' +
+  'While this conversation is live and they want the answer, keep `{{accountSlug}} network listen --timeout 300` running and run it again each time it returns.';
 
 /** Only the recurring check will hear a reply: say when, and to listen closely while the conversation is live. */
 export const SCHEDULED_NOTE =
@@ -48,7 +53,8 @@ export async function sendNotes(
   const notes: string[] = [];
   try {
     const status = await listenerStatus(client, opts, deps);
-    if (status.listening === false) notes.push(NO_LISTENER_NOTE);
+    if (onlyWhenAsked(status)) notes.push(WHEN_ASKED_NOTE);
+    else if (status.listening === false) notes.push(NO_LISTENER_NOTE);
     else if (onlyScheduled(status)) notes.push(SCHEDULED_NOTE);
   } catch {
     // Not knowing is not a reason to say anything.
