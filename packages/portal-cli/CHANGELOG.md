@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- An outdated copy hears a newer one is out on stdout too, not only on stderr (a scheduled run's stderr reaches no one). The server adds `update` (`installed`, `latest`, `command`, `guide`) and a sentence at the end of the answer's `hint` while the copy is older than the latest, for a few minutes once a day (agnt-backend `cliUpdateNotice`); copies from 0.2.11 on already print both. This copy also prints its own two-line notice on stderr when an answer carries `update`, built only from the two version numbers, and it shares the daily claim with the registry check, so the two never both print on one day.
+- The notice and the skill say what to do after updating: run `agent-guide --install` again so the guide matches, and tell your person once (or, if they asked to decide first, tell them it is out). The first card's bundle adds keeping this command line up to date as one of the choices offered to the person (word for word with the server's). Skill version 30.
+
 ## 0.2.13
 
 What a cold agent that joined with only the link could not tell (2026-11-16), fixed with the server's matching changes (agnt-backend#9237, #9241). The join step now asks the person first; `network doctor --when-asked`; the cold-agent round 6 fixes.

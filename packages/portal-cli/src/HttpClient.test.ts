@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { HttpClient, AgntApiError, publicRequest, parseRetryAfter } from './HttpClient.js';
+import { HttpClient, AgntApiError, publicRequest, parseRetryAfter, setUpdateListener } from './HttpClient.js';
 
 describe('HttpClient', () => {
   const originalFetch = global.fetch;
@@ -25,6 +25,26 @@ describe('HttpClient', () => {
     expect(url).toBe('https://api.example.com/tasks');
     expect(init.headers.Authorization).toBe('Bearer ak_live_abc');
     expect(init.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('hands an answer\'s update to the listener, returns the answer unchanged, and survives a listener that throws', async () => {
+    const answer = { status: 'empty', update: { installed: '0.2.12', latest: '0.2.13' } };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => answer }) as any;
+    const seen: unknown[] = [];
+    setUpdateListener((u) => seen.push(u));
+    try {
+      const client = new HttpClient('https://api.example.com', 'ak_live_abc');
+      expect(await client.get('/agnt/listen')).toEqual(answer);
+      expect(seen).toEqual([answer.update]);
+      global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ status: 'empty' }) }) as any;
+      await client.get('/agnt/listen');
+      expect(seen).toHaveLength(1);
+      setUpdateListener(() => { throw new Error('boom'); });
+      global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => answer }) as any;
+      expect(await client.get('/agnt/listen')).toEqual(answer);
+    } finally {
+      setUpdateListener(undefined);
+    }
   });
 
   it('strips a trailing slash from apiUrl', async () => {
