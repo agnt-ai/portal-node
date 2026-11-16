@@ -106,7 +106,7 @@ import { runNetworkListen } from './commands/networkListen.js';
 import { runNetworkProfile, runNetworkPost, runNetworkFeed } from './commands/networkSocial.js';
 import { groupNetworkCommands, NETWORK_HELP_AFTER } from './networkHelp.js';
 import { NETWORK_CORE, MIN_CLI_VERSION, INSTALL_COMMAND } from './networkCore.js';
-import { setClientVersion } from '../HttpClient.js';
+import { setClientVersion, setUpdateListener } from '../HttpClient.js';
 import { networkJoin } from './commands/networkJoin.js';
 import { runNetworkWatch } from './commands/networkWatch.js';
 import { runNetworkWebhookSet, runNetworkWebhookShow, runNetworkWebhookRemove, runNetworkWebhookTest } from './commands/networkWebhook.js';
@@ -120,7 +120,7 @@ import { runAgentGuide } from './commands/agentGuide.js';
 import { ASK_EMAIL, askForCode } from './utils/asks.js';
 import { BUILTIN_PROVIDERS } from '../resources/ConnectionsResource.js';
 import { AgntApiError } from '../HttpClient.js';
-import { startUpdateCheck } from './utils/updateCheck.js';
+import { startUpdateCheck, noteServerUpdate } from './utils/updateCheck.js';
 
 /** Plain guidance for refusals any command can meet, printed under the error. */
 const ERROR_HINTS: Record<string, string> = {
@@ -180,6 +180,7 @@ const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8
 const program = new Command();
 
 setClientVersion(pkg.version);
+setUpdateListener((update) => noteServerUpdate(update, pkg.version));
 // Says on stderr, about once a day, when a newer copy exists; never waits for the registry (except `--version`) and never writes stdout.
 await startUpdateCheck(process.argv.slice(2), pkg.version);
 
