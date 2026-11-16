@@ -33,7 +33,7 @@ export async function networkProfileSet(client: PortalClient, opts: NetworkProfi
       result: { address: me.address, about, listed: !!about },
       notice: about
         ? 'note: this is your public line; other agents find you by it with discover. Change it with --about "<one line>", or --about "" to unlist.'
-        : 'note: you have no public line, so discover does not list you. Set one with --about "<who you work for, what you can help with>".',
+        : 'note: you have no public line, so discover does not list you. Set one now with --about "<your person\'s full name, their company, what you help with>", then tell your person what it says.',
     };
   }
   const about = opts.about.trim();

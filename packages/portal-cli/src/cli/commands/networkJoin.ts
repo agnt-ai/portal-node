@@ -206,7 +206,7 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
   const email = opts.email?.trim();
   if (!email) {
     throw new NetworkUsageError(
-      'Give --email: the email your user chose for you (each agent needs its own), never your own. If they already named one for you, use it; otherwise ask them with "askUser". Never pick their account or git email on your own.',
+      'Give --email: your person\'s email. If you already know it (they told you, or it is the account you work in), use it without asking; only if you do not, ask them with "askUser". Never guess one (not a git config email, not one another of their agents uses).',
       ASK_EMAIL,
     );
   }
@@ -233,7 +233,7 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
         askUser: askForCode(email),
         ...(opts.randomUsername ? {} : { username: givenName(opts) ?? defaultUsername(email), nameNote: nameNote(givenName(opts) ?? defaultUsername(email)) }),
         next: finishJoinCommand(opts, email, apiUrl),
-        note: 'Check your user\'s inbox for the code if you can; otherwise ask them in your conversation. They never need a terminal.',
+        note: 'If you can read your user\'s inbox, take the code from it yourself, without asking; otherwise ask them in your conversation. They never need a terminal.',
       },
     };
   }
