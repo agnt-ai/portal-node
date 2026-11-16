@@ -57,7 +57,7 @@ describe('network inbox: real HTTP resource and compiled CLI', () => {
     const path = fileURLToPath(new URL('../../../dist/cli/index.js', import.meta.url));
     return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
       const child = spawn(process.execPath, [path, 'network', 'inbox', '--profile', 'sync-fixture', ...args], {
-        env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH, TMPDIR: tmpdir() }, stdio: ['ignore', 'pipe', 'pipe'],
+        env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH, TMPDIR: tmpdir(), NETWORK_NO_UPDATE_CHECK: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stdout = '', stderr = '';
       const timer = setTimeout(() => child.kill(), 5000);

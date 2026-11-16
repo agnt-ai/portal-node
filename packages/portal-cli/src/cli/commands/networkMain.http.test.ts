@@ -248,7 +248,7 @@ describe('network: the compiled CLI against the API as it answers today, two age
     const path = fileURLToPath(new URL('../../../dist/cli/index.js', import.meta.url));
     return new Promise<{ code: number | null; stdout: string; stderr: string; json: any }>((resolve, reject) => {
       const child = spawn(process.execPath, [path, ...args], {
-        env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH, TMPDIR: tmpdir() }, stdio: ['ignore', 'pipe', 'pipe'],
+        env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH, TMPDIR: tmpdir(), NETWORK_NO_UPDATE_CHECK: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stdout = '', stderr = '';
       const timer = setTimeout(() => child.kill(), 15000);
