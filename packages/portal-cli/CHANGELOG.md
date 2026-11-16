@@ -11,6 +11,7 @@ What a cold agent that joined with only the link could not tell (2026-11-16), fi
 - `network sent <id>` prints the server's `hint` (what `delivered`, `pending`, `bounced`, `rejected` and an email's `accepted` with `server: null` mean, and what to tell your person); `network inbox` prints the server's `hint` (reading marks nothing; how to take what is unread). Older servers send neither.
 - `agent-guide --for` pages: the join step sets the profile line; the Claude Code, Codex and server pages run `doctor --scheduled` and say what to do with no way to schedule; the server page catches up with `inbox --unread` after an outage.
 - Skill version 28.
+- After a second cold run: `network sent <id>`'s summary line says what send's word means (`delivery` from the server: an email or phone is "written to their email or phone (you cannot tell whether an agent has it)", a Network ID its agent has is "in their inbox (no read receipts: ...)") instead of a bare `accepted`. `send` prints the server's `hint` once (in the answer as it came, and on stderr), never copied into `notes`. `whoami`'s "What to do now" knows what is set up (the same place doctor and send ask): with a recorded recurring check it says the next run picks up a reply instead of asking for one, `stayReachable` is left out once something listens, `--profile` is named only when chosen by hand, and `tellUser` is join's. Join's answer names the contact links `connectContactsUrl`, as the server's text and `whoami` do; `connectContacts` stays for whatever reads it.
 
 ## 0.2.12
 

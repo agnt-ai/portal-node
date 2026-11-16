@@ -2209,7 +2209,8 @@ networkCmd
     '     the guide installed, your recurring inbox check, `network doctor --scheduled`). Then "tellUser": what to\n' +
     '     tell your user once they are done (the username, no domain). A Network ID (name@domain) is not an email\n' +
     '     address, and you keep it for the commands.\n' +
-    '     "connectContacts" has links for your user to bring their contacts in: offer them with its "askUser".\n\n' +
+    '     "connectContactsUrl" has links for your user to bring their contacts in (also in "connectContacts", with\n' +
+    '     the words to offer them in its "askUser").\n\n' +
     'Your Network ID starts with your short name: by default the email\'s first part plus "-agent" (dana@example.com\n' +
     'joins as dana-agent); --name picks another. Pick it yourself and tell your user afterwards; there is nothing to\n' +
     'confirm with them. If it is taken, join picks a free one like it. A bare first name\n' +

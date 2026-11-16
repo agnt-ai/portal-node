@@ -106,7 +106,7 @@ export const usernameOf = (address: string): string => address.split('@')[0];
 /**
  * The joined answer, short (2026-11-16: a cold agent skimmed four screens of join output for four actions): what to do
  * now, in order, first (`next`: the first card, the server's copy or the built-in one); then what to tell the person
- * (`tellUser`); the person's contact links when there are any; and the card (`orientation`), kept so an agent that reads
+ * (`tellUser`); the person's contact links when there are any (`connectContactsUrl`, and `connectContacts`); and the card (`orientation`), kept so an agent that reads
  * only this answer still learns how the network works. Nothing in it says the same thing twice.
  */
 export function joinedAnswer(fields: { status: string; address: string; nextSteps?: unknown; tellUser?: unknown; email?: string; orientation?: unknown; connectContactsUrl?: AgentAuthVerifyResult['connectContactsUrl'] }) {
@@ -117,7 +117,9 @@ export function joinedAnswer(fields: { status: string; address: string; nextStep
     username: usernameOf(fields.address),
     next: firstCardFrom(fields.nextSteps).text,
     tellUser: tellUserFrom(fields.tellUser, { email: fields.email, address: fields.address }),
-    ...(connect ? { connectContacts: connect } : {}),
+    // The links by the name the server's text and whoami use (`connectContactsUrl`), and the older `connectContacts`
+    // (the same links, with the words to offer them) kept for whatever reads it.
+    ...(connect ? { connectContactsUrl: connect.urls, connectContacts: connect } : {}),
     orientation: orientationFrom(fields.orientation).text,
   };
 }

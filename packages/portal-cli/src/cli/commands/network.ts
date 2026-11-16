@@ -23,6 +23,7 @@ import { listenerStatus, reachabilityOf, within, HINT_DEADLINE_MS, type ProcessL
 import { sendNotes, threadNote } from './networkHints.js';
 import { FilesUsageError, PartsError, planFiles, uploadFiles, downloadPartTo, type PartDownloadOptions } from './networkFiles.js';
 import { nextStepsBlock, profileFlagFor } from '../utils/nextSteps.js';
+import { builtInTellUser } from '../utils/firstCard.js';
 import { UPDATE_LINE } from '../networkCore.js';
 import type { PortalClient } from '../../index.js';
 import type {
@@ -427,15 +428,29 @@ export function collect(value: string, previous: string[] = []): string[] {
 
 // ── whoami ──────────────────────────────────────────────────────────────────
 
-export async function networkWhoami(client: PortalClient, opts: NetworkBaseOptions) {
+/**
+ * `opts.profile` is the profile this agent runs as (for its watcher and its recorded schedule); `deps.explicitProfile` is
+ * the one named by hand, the only one the printed commands repeat (a bare command already finds the agent's own).
+ */
+export async function networkWhoami(client: PortalClient, opts: NetworkBaseOptions, deps: ListenerDeps & { explicitProfile?: string } = {}) {
   const me = await client.network.whoami({ assistant: opts.assistant });
   // The API's answer, plus the line to tell the user.
   const connect = connectContactsStep(me.connectContactsUrl);
-  // Whether anything will hear a reply (a webhook, a standing watch here). Left out when it could not be told.
-  const reachability = await within(listenerStatus(client, { assistant: opts.assistant, profile: opts.profile }).then(reachabilityOf), HINT_DEADLINE_MS, undefined);
-  const whatToDoNow = nextStepsBlock(me.address, profileFlagFor(opts.profile));
+  // Whether anything will hear a reply (a webhook, a standing watch here, a recorded recurring check): the one place
+  // doctor and send ask too. Left out when it could not be told.
+  const status = await within(listenerStatus(client, { assistant: opts.assistant, profile: opts.profile }, deps), HINT_DEADLINE_MS, undefined);
+  const reachability = status ? reachabilityOf(status) : undefined;
+  const flag = profileFlagFor('explicitProfile' in deps ? deps.explicitProfile : opts.profile);
+  const whatToDoNow = nextStepsBlock(me.address, flag, status);
   return {
-    result: { ...me, tellUser: `My {{accountName}} Network ID is ${me.address}. Other agents can message me there.`, stayReachable: STAY_REACHABLE, whatToDoNow, ...(reachability ? { reachability } : {}), ...(connect ? { connectContacts: connect } : {}) },
+    result: {
+      ...me,
+      // What join gives, from the same source: what to tell the person once the four steps are done.
+      tellUser: builtInTellUser({ address: me.address }),
+      // How to become reachable, only while nothing is: once something is, whatToDoNow says so instead.
+      ...(status?.listening === true ? {} : { stayReachable: STAY_REACHABLE }),
+      whatToDoNow, ...(reachability ? { reachability } : {}), ...(connect ? { connectContacts: connect } : {}),
+    },
     // Plain text on stderr too, where it is seen even if the JSON is not read.
     notice: whatToDoNow,
   };
@@ -597,7 +612,11 @@ export async function networkSend(client: PortalClient, opts: NetworkSendOptions
   const notes = await within(sendNotes(client, result, { assistant: opts.assistant, profile: deps.profile }, { processes: deps.processes, scheduledSince: deps.scheduledSince }), HINT_DEADLINE_MS, [] as string[]);
   const threadHint = await thread;
   if (threadHint) notes.push(threadHint);
-  return { result: notes.length ? { ...result, notes } : result, ...(notes.length ? { notice: notes.join('\n') } : {}) };
+  // Each piece once (2026-11-16: the looking hint showed three times): the server's `hint` stays in the answer, as it
+  // came, and is printed on stderr once; `notes` carries only what this CLI adds.
+  const hint = typeof result?.hint === 'string' && result.hint.trim() ? `note: ${result.hint.trim()}` : undefined;
+  const lines = [...notes, ...(hint ? [hint] : [])];
+  return { result: notes.length ? { ...result, notes } : result, ...(lines.length ? { notice: lines.join('\n') } : {}) };
 }
 
 /** The body with any bare username in `to` completed with this agent's own domain. */
@@ -955,7 +974,7 @@ const withClient = (profile: string | undefined, fn: (client: PortalClient) => P
 export const runNetworkWhoami = (opts: NetworkBaseOptions) =>
   runNetworkVerb('whoami', async () => {
     const profile = await networkProfile(opts.profile);
-    return networkWhoami(await clientFor(profile), { ...opts, profile });
+    return networkWhoami(await clientFor(profile), { ...opts, profile }, { explicitProfile: opts.profile });
   });
 export const runNetworkSend = (opts: NetworkSendOptions) =>
   runNetworkVerb('send', async () => {

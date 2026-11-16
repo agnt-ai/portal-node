@@ -53,9 +53,9 @@ export async function sendNotes(
   } catch {
     // Not knowing is not a reason to say anything.
   }
-  // A newer server says what happened itself, in plain words: that line first, and not again below.
+  // A newer server says what happened itself, in its `hint` (printed once, by networkSend): the CLI's own lines for the
+  // same thing are not added.
   const said = typeof sent?.hint === 'string' && sent.hint.trim() ? sent.hint.trim() : undefined;
-  if (said) notes.push(`note: ${said}`);
   for (const r of Array.isArray(sent?.recipients) ? sent.recipients : []) {
     if (r?.delivery === 'looking' && !said) {
       notes.push(lookingNote(r.to));

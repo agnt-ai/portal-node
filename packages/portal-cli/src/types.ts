@@ -1740,6 +1740,12 @@ export interface NetworkSentServer {
 export interface NetworkSentRecipient {
   to: string;
   status: 'pending' | 'delivered' | 'rejected' | 'bounced' | 'accepted';
+  /**
+   * Newer servers: send's word for this recipient. `looking` (an email or phone: nobody can tell whether an agent has
+   * it), `sent` (a Network ID its agent has: in its inbox, no read receipts), `no_such_address`. Absent while pending or
+   * bounced, and from older servers.
+   */
+  delivery?: 'looking' | 'sent' | 'no_such_address';
   reason?: string | NetworkUntrusted;
   recipient?: NetworkReachability;
 }

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SCHEDULED_NOTE } from './networkHints.js';
+import { builtInTellUser } from '../utils/firstCard.js';
 import {
   networkWait, networkWhoami, networkSend, networkBlock, networkUnblock, STAY_REACHABLE, waitNotice, timeoutNotice, networkSent, sendBodyFrom, EMAIL_AND_PHONE_RECIPIENTS, briefEntry, readVerifyInput, oneMessage, describeError, runNetworkVerb,
   NetworkUsageError, EXIT_RETRY, EXIT_USAGE, EXIT_WAIT_TIMEOUT, WAIT_CALL_SECONDS, type WaitClock,
@@ -32,7 +34,7 @@ const message = { status: 'message', rule: 'r', id: ID, receivedAt: 'x', carrier
 describe('the pointer to staying reachable', () => {
   it('whoami carries it: a recurring check that never stops, a webhook on top, naming the guide section', async () => {
     const me = { address: 'me@agent.example.net', pair: null, custody: { keys: 'custodial', note: 'n' } };
-    const { result } = await networkWhoami(fakeClient({ whoami: vi.fn().mockResolvedValue(me) }), {}) as any;
+    const { result } = await networkWhoami(fakeClient({ whoami: vi.fn().mockResolvedValue(me), getWebhook: vi.fn().mockRejectedValue(new AgntApiError(404, 'none', 'not_found')) }), {}, { processes: async () => [], scheduledSince: async () => undefined }) as any;
     expect(result.stayReachable).toBe(STAY_REACHABLE);
     // The recurring check first; a webhook is a push on top of it, never instead of it.
     expect(STAY_REACHABLE.indexOf('network listen')).toBeGreaterThan(0);
@@ -582,6 +584,27 @@ describe('send thread hint and whoami next steps', () => {
     const out2 = await networkSend(reply, { to: ['bob@agent.example.net'], text: 'x', inReplyTo: ID }, { processes: async () => [] });
     expect(reply.network.sentList).not.toHaveBeenCalled();
     expect(out2.notice ?? '').not.toMatch(/recently/);
+  });
+
+  it('whoami is state-aware, names --profile only when chosen by hand, and says join\'s tellUser (2026-11-16)', async () => {
+    const whoami = vi.fn().mockResolvedValue({ address: 'me@agent.example.net' });
+    const client = () => fakeClient({ whoami, getWebhook: vi.fn().mockRejectedValue(new AgntApiError(404, 'none', 'not_found')) });
+    // A recurring check recorded with doctor --scheduled, on the agent's own profile (resolved, not named by hand).
+    const scheduled = await networkWhoami(client(), { profile: 'claude-code' }, { explicitProfile: undefined, processes: async () => [], scheduledSince: async (p) => (p === 'claude-code' ? '2026-11-16T10:00:00.000Z' : undefined) }) as any;
+    const block = scheduled.result.whatToDoNow as string;
+    expect(block).toContain(`1. ${SCHEDULED_NOTE}`);
+    expect(block).not.toMatch(/before you end this turn|Set up your recurring check/);
+    expect(block).not.toContain('--profile');
+    expect(scheduled.result.stayReachable).toBeUndefined();
+    expect(scheduled.result.reachability).toMatchObject({ listening: true, scheduled: '2026-11-16T10:00:00.000Z' });
+    expect(scheduled.result.tellUser).toBe(builtInTellUser({ address: 'me@agent.example.net' }));
+    // Nothing set up: step 1 asks for the recurring check, and doctor --scheduled to record it.
+    const bare = await networkWhoami(client(), { profile: 'claude-code' }, { explicitProfile: undefined, processes: async () => [], scheduledSince: async () => undefined }) as any;
+    expect(bare.result.whatToDoNow).toMatch(/1\. Set up your recurring check, then listen\..*then `\S+ network doctor --scheduled` to record it/);
+    expect(bare.result.stayReachable).toBe(STAY_REACHABLE);
+    // A profile named by hand is repeated in every command.
+    const named = await networkWhoami(client(), { profile: 'second' }, { explicitProfile: 'second', processes: async () => [], scheduledSince: async () => undefined }) as any;
+    expect(named.result.whatToDoNow).toContain('listen --profile second --timeout 0');
   });
 
   it('whoami ends with the what-to-do-now block, in the JSON and as the notice', async () => {
