@@ -46,6 +46,14 @@ describe('network doctor', () => {
     expect(gap.problem).toMatch(/Nothing is listening for you/);
     expect(gap.fix).toContain('network webhook set --url <https address> --profile claude-code');
     expect(gap.fix).toContain('network watch --print --profile claude-code');
+    // The recurring check leads, then saying so with --scheduled, then a webhook, then a watch during conversations.
+    expect(gap.fix).toMatch(/^Set up your recurring inbox check now: every 15 minutes, never less often than hourly, and never stopping\./);
+    expect(gap.fix).toContain('/loop 15m');
+    expect(gap.fix).toContain("network watch --drain --exec '<command>' --profile claude-code");
+    expect(gap.fix).toContain('*/15 * * * *');
+    const order = ['every 15 minutes', 'doctor --scheduled', 'network webhook set', 'network watch --print'].map((p) => gap.fix.indexOf(p));
+    expect(order.every((i: number) => i >= 0)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
     expect(out.notice).toMatch(/^gap: Nothing is listening/m);
   });
 
@@ -55,6 +63,9 @@ describe('network doctor', () => {
     const gap = (out.result as any).gaps.find((g: any) => g.id === 'webhook_disabled');
     expect(gap.problem).toMatch(/switched off after too many failed pushes/);
     expect(gap.fix).toContain('network webhook set --url <your https address>');
+    // A webhook back on is still only a push on top of the recurring check.
+    expect(gap.fix).toMatch(/A webhook is a push on top of your recurring inbox check, never instead of it/);
+    expect(gap.fix).toContain('network doctor --scheduled');
     expect(JSON.stringify(out.result)).not.toContain('/in');
     expect((out.result as any).checks.listener.webhook.host).toBe('hook.example.test');
   });

@@ -67,8 +67,8 @@ describe('network join', () => {
   });
   afterEach(() => { global.fetch = originalFetch; vi.restoreAllMocks(); });
 
-  it('needs the email the user chose for this agent: one they named, else ask; never their account or git email', async () => {
-    await expect(networkJoin({})).rejects.toThrow(/each agent needs its own.*If they already named one for you, use it.*Never pick their account or git email on your own/);
+  it('needs the person\'s email: one the agent already knows, used without asking, else ask; never a guessed one', async () => {
+    await expect(networkJoin({})).rejects.toThrow(/If you already know it \(they told you, or it is the account you work in\), use it without asking; only if you do not, ask them with "askUser"\. Never guess one \(not a git config email, not one another of their agents uses\)/);
     const err = await networkJoin({}).catch((e) => e);
     expect(err).toBeInstanceOf(NetworkUsageError);
     const { body, exitCode } = describeError('join', err);
@@ -125,8 +125,8 @@ describe('network join', () => {
     expect(result.tellUser).toBe(`I'm all set. My ${APP} Network username is claude-code-7k3m9q2x. Which agent do you want me to talk to?`);
     expect(result.username).toBe('claude-code-7k3m9q2x');
     expect(result.tellUser).not.toContain(keys);
-    expect(result.conversation).toMatch(/reply yourself.*--timeout 300.*3 timeouts in a row/);
-    expect(result.stayReachable).toMatch(/network webhook set.*network listen/);
+    expect(result.conversation).toMatch(/reply yourself.*--timeout 300.*drop back to your recurring check every 15 minutes.*Never stop checking\./);
+    expect(result.stayReachable).toMatch(/network listen.*never instead of it.*network webhook set/);
   });
 
   it('a joined agent whose server is down is told so, never signed up again (that would orphan its Network ID)', async () => {
@@ -237,7 +237,7 @@ describe('network join', () => {
     global.fetch = vi.fn().mockResolvedValue(answer(201, joined('codex-7k3m9q2x'))) as any;
     const builtIn = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
     expect(builtIn.result.firstCard).toBe(builtInFirstCard());
-    expect(builtIn.result.firstCard).toMatch(/1\. Put this guide.*\n2\. Set up a listener.*\n3\. Open threads.*\n4\. Run the self-test/);
+    expect(builtIn.result.firstCard).toMatch(/1\. Put this guide.*\n2\. Set up your recurring inbox check now.*\n3\. Open threads.*\n4\. Run the self-test/);
     expect(Object.keys(builtIn.result).indexOf('firstCard')).toBeLessThan(Object.keys(builtIn.result).indexOf('conversation'));
   });
 
@@ -352,12 +352,19 @@ describe('network join', () => {
 });
 
 describe('what to do now', () => {
-  it('ends the join output with the listen loop, the exit codes, reply/send and the untrusted rule', async () => {
+  it('ends the join output with the recurring check, the listen loop, the exit codes, reply/send and the untrusted rule', async () => {
     global.fetch = vi.fn().mockResolvedValue(answer(201, joined('codex-7k3m9q2x'))) as any;
     const out = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
     const block = out.result.whatToDoNow as string;
     expect(out.notice.endsWith(block)).toBe(true);
     expect(block).toContain('codex-7k3m9q2x@agent.example.test');
+    // The recurring check comes first: every 15 minutes, never less often than hourly, for as long as it is on the network.
+    expect(block).toMatch(/1\. Set up your recurring check, then listen\. Nothing is pushed to you, so before you end this turn have yourself run again every 15 minutes, never less often than hourly/);
+    expect(block).toMatch(/`\/loop 15m`, cron or launchd/);
+    expect(block).toMatch(/drop back to every 15 minutes, never to nothing/);
+    expect(block.indexOf('every 15 minutes')).toBeLessThan(block.indexOf('network listen --timeout 300'));
+    expect(block).toMatch(/Only with no way at all to be run again, say so to your person and ask them to set up a recurring task/);
+    expect(block).not.toMatch(/If you cannot keep a process running/);
     expect(block).toMatch(/network listen --timeout 300` and run it again each time it returns/);
     expect(block).toMatch(/marks it read: nothing to acknowledge/);
     expect(block).toMatch(/Exit 0:.*Exit 3:.*Exit 75:/);
