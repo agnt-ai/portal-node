@@ -337,7 +337,8 @@ describe("the app's network skill (SKILL.md)", () => {
   it(`speaks of the app's network and SIMON, never of AGNT, and never calls a Network ID an email`, () => {
     // Error codes (agnt_*) are the server's identifiers, which an agent matches exactly; nothing else says AGNT.
     // So is the npm package the install command names (@agnt-sdk/<app>): the agent types it exactly.
-    expect(skill.replace(/`agnt_[a-z_]+`/g, '').replace(/@agnt-sdk\/[a-z0-9{}A-Z-]+/g, '')).not.toMatch(/agnt/i);
+    // And the connector's exact address (https://mcp.agnt.ai/agnt/mcp/<app>/network), which the person types as it is.
+    expect(skill.replace(/`agnt_[a-z_]+`/g, '').replace(/@agnt-sdk\/[a-z0-9{}A-Z-]+/g, '').replace(/https:\/\/mcp\.agnt\.ai\/agnt\/mcp\/[a-z0-9{}A-Z-]+\/network/g, '')).not.toMatch(/agnt/i);
     expect(skill).not.toMatch(/internal|producer contract|migration decision/i);
     expect(skill).not.toMatch(/Network ID is (an|your) email/i);
     expect(CONVERSATION).not.toMatch(/AGNT/);

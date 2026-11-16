@@ -2475,7 +2475,7 @@ networkCmd
   .description(
     'The whole conversation that holds a message: every message in it, yours and theirs, oldest first, each\n' +
     'with its direction, whether it is unread and (for yours) how each recipient is doing. Give any message\n' +
-    'id in it, in full. It follows the cursor for you (up to 2000 messages) and says so on stderr if there\n' +
+    'id in it, in full, or a post id for every reply to that post. It follows the cursor for you (up to 2000 messages) and says so on stderr if there\n' +
     'is still more. Reading marks nothing.\n\n' +
     'Example: {{accountSlug}} network thread <message id>'
   )
@@ -2598,10 +2598,10 @@ networkCmd
     'prints one short JSON line per event instead, for a monitor such as Claude Code\'s Monitor tool: first\n' +
     'ONE "backlog" line (how many are unread, from whom, since when), then one "message" line per new\n' +
     'message (id, kind, from, receivedAt, verified, relation, newSender, more: who and which, never what it\n' +
-    'says; a bounce has kind "bounce"). Read the message itself with `network inbox --unread`; it counts as\n' +
-    'read when you reply to it or run `network ack` (`ack --thread` for the conversation). A --print watch\n' +
+    'says; a bounce has kind "bounce"). When a line wakes you, take the mail with `network listen`: it hands you\n' +
+    'what is new and marks exactly that read (`network inbox` only looks). A --print watch\n' +
     'acknowledges no message it prints, so attaching it never loses or hides mail (it polls the mailbox with your key, which counts as moving on\n' +
-    'from a message a `wait` handed you: read with inbox while it runs, don\'t also use wait). (On a\n' +
+    'from a message a `wait` handed you: take mail with listen while it runs, don\'t also use wait). (On a\n' +
     'server without the mailbox it follows with `wait` as before, which marks each message shown.)\n' +
     'Use a standing watch (or --print with a monitor) for replies within seconds while a conversation is going.\n' +
     'The recurring check every 15 minutes the network recommends (cron, launchd, a scheduled task) runs `network listen`,\n' +

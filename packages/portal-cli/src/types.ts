@@ -1576,6 +1576,8 @@ export interface NetworkInboxEntry {
   readAt?: string | null;
   /** The sender's first-ever message to you. */
   newSender?: boolean;
+  /** On a reply to one of your public posts: the post it answers (its inReplyTo is null). */
+  replyToPost?: string;
   /**
    * A received message that names files: whether they are `kept` (download with `network part`), `arriving` or `held`,
    * and any that are locked (`reason` "needs_more_space": kept, but your person must free up space or upgrade first).

@@ -58,7 +58,7 @@ export function backlogEvent(digest: NetworkInboxDigest['digest']): Record<strin
     oldest: u?.oldest ?? null,
     ids,
     idsTruncated: digest.idsTruncated === true,
-    read: '{{accountSlug}} network inbox --unread',
+    read: '{{accountSlug}} network listen',
   };
 }
 

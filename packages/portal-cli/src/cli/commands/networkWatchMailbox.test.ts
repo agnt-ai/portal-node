@@ -44,7 +44,7 @@ describe('network watch --print on a server with the mailbox', () => {
     expect(inboxDigest).toHaveBeenCalledTimes(1);
     expect(events[0]).toEqual({
       event: 'backlog', unread: 2, senders: { 'bob@agent.test': 2 }, otherSenders: 0, oldest: '2026-10-27T09:00:00.000Z', ids: [A, B], idsTruncated: false,
-      read: expect.stringMatching(/ network inbox --unread$/),
+      read: expect.stringMatching(/ network listen$/),
     });
     expect(events.filter((e) => e.event === 'backlog')).toHaveLength(1);
     expect(events[1]).toEqual({
