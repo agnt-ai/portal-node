@@ -188,7 +188,7 @@ function approvalPendingAnswer(pending: PendingKeyRequest, profileFlag: string, 
 const CLOSED_REQUEST: Record<string, string> = {
   key_request_denied: 'My person denied the new key, so I did not get one. The key that address already has keeps working.',
   key_request_expired: 'The request for a new key ran out (24 hours) before it was approved. I can ask again with a new code.',
-  key_request_claimed: 'That key was already claimed. If it was not by me, my person should check the app now.',
+  key_request_claimed: 'That key was already claimed. If it was not by me, or I never received it, my person should check the app now and remove the key I do not hold.',
   key_request_gone: 'That address is no longer live, so there is no key to claim.',
 };
 
@@ -304,6 +304,12 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
         err.errorCode === 'agnt_username_reserved' ||
         (err.errorCode === 'agnt_username_taken' && !/new code/i.test(err.message)));
       if (pickAnother && attempt < USERNAME_TRIES - 1) continue;
+      // A request for a new key is already open for this address (G455). If it is the one this profile asked for, claim
+      // it rather than tell the agent to wait for something it already has.
+      if (err instanceof AgntApiError && err.errorCode === 'key_request_open') {
+        const mine = await pendingKeyRequest(profileName);
+        if (mine && mine.id === err.details?.keyRequestId) return claimPendingKey(profileName, mine, profileFlag, profileNote);
+      }
       if (err instanceof AgntApiError) {
         const hint = verifyErrorHint(err, code)?.replace(/run the same command/g, 'run the same join command');
         throw withHint(err, (given ? usernameHint(err) : undefined) ?? hint);

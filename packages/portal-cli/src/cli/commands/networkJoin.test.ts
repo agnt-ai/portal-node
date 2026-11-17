@@ -401,6 +401,32 @@ describe('orientation', () => {
       expect(done.result).toMatchObject({ status: 'joined', address: ADDRESS });
     });
 
+    it('a request already open (409 key_request_open): the profile\'s own is claimed; someone else\'s is explained plainly', async () => {
+      const open = (id: string) => answer(409, { status: 409, error_code: 'key_request_open', error: 'A request for a new key for this address is already open.', details: { address: ADDRESS, keyRequestId: id, state: 'pending', expiresAt: '2026-11-17T12:00:00.000Z', retryable: false } });
+      // Its own: claimed (still pending here), never a second request.
+      vi.mocked(pendingKeyRequest).mockResolvedValue(stored);
+      const fetchMock = vi.fn().mockResolvedValueOnce(open('kr1')).mockResolvedValueOnce(answer(202, { ok: true, status: 'pending' }));
+      global.fetch = fetchMock as any;
+      const own = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', apiUrl: 'https://api.example.test', username: 'claude-code-7k3m9q2x', profile: 'claude-code' });
+      expect(fetchMock.mock.calls[1][0]).toBe('https://api.example.test/portal/auth/agent/key-requests/kr1/claim');
+      expect(own.result).toMatchObject({ status: 'approval_pending', address: ADDRESS });
+      expect(own.exitCode).toBe(75);
+      expect(saveProfile).not.toHaveBeenCalled();
+
+      // Not its own (none kept, or another id): the refusal, with what to do.
+      for (const kept of [undefined, { ...stored, id: 'kr-other' }]) {
+        vi.mocked(pendingKeyRequest).mockResolvedValue(kept);
+        global.fetch = vi.fn().mockResolvedValueOnce(open('kr9')) as any;
+        const err: any = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', apiUrl: 'https://api.example.test', username: 'claude-code-7k3m9q2x', profile: 'claude-code' }).catch((e) => e);
+        expect(err.errorCode).toBe('key_request_open');
+        expect(err.cliHint).toMatch(/open request for a new key/);
+        expect(err.cliHint).toMatch(/deny it in the app/);
+        expect(err.cliHint).toMatch(/current key keeps working/);
+      }
+      expect(saveProfile).not.toHaveBeenCalled();
+      expect(setPendingKeyRequest).not.toHaveBeenCalledWith('claude-code', undefined);
+    });
+
     it('denied: the claim is forgotten, nothing saved, and the agent says so', async () => {
       vi.mocked(pendingKeyRequest).mockResolvedValue(stored);
       global.fetch = vi.fn().mockResolvedValueOnce(answer(403, { status: 403, error_code: 'key_request_denied', error: 'Denied' })) as any;
