@@ -311,7 +311,7 @@ describe("the app's network skill (SKILL.md)", () => {
     for (const code of ['not_joined', 'otp_invalid', 'otp_expired', 'rate_limited',
       'verify_unavailable', 'not_found', 'pair_bound_key', 'network_scope', 'confirm_mismatch', 'network_error',
       'invalid_match', 'invalid_url', 'url_not_public', 'webhook_disabled', 'person_block',
-      'network_no_domain', 'network_unavailable']) {
+      'network_no_domain', 'network_unavailable', 'agent_paused', 'agent_retired']) {
       expect(s).toContain(code);
     }
     // The server's own internally named codes are described in plain words; the CLI's hint names the case.
