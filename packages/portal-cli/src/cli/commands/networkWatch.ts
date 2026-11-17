@@ -139,7 +139,7 @@ export async function watchLoop(
   // Failures in a row that may pass. A --drain gives up after DRAIN_MAX_RETRIES of them, so scheduled runs never pile up.
   let failures = 0;
 
-  emit({ event: 'watching', from: from ?? null, drain: !!opts.drain, ...(opts.print ? { print: true, read: '{{accountSlug}} network inbox' } : {}) });
+  emit({ event: 'watching', from: from ?? null, drain: !!opts.drain, ...(opts.print ? { print: true, read: '{{accountSlug}} network listen' } : {}) });
   // --print alone follows the mailbox: a backlog digest, then one line per new message. Without a mailbox on the
   // server it answers 'legacy' and the older loop below (on `wait`) runs as it always did. It gets the completed
   // `from` (a bare username made a full address), the same one the loop below and the printed lines use.

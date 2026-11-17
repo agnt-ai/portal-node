@@ -62,11 +62,12 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/Why it matters to your person/);
   });
 
-  it("the public line: the person's full name, set with their OK, told afterwards, cleared if they would rather not be found", () => {
+  it("the person's name given once (how they are found), the public line about the agent with their OK, and the levels", () => {
     const s = section('4. Having a conversation');
-    expect(s).toMatch(/profile --about "<your person's full name, their company,\s+what you help with>"/);
-    expect(s).toMatch(/Set it after joining, with your person's OK on the line:\s+their full name, their company if you know it, and what you help with\./);
-    expect(s).toMatch(/Then tell your person what it says; if they would rather not be found, run\s+`network discovery off` and clear the line with `profile --about ""`\./);
+    expect(s).toMatch(/profile --person-name "<their full name>"`, given once after\s+joining: it only fills an account that has no name and never renames anyone\./);
+    expect(s).toMatch(/profile --about "<what you help with>"`/);
+    expect(s).toMatch(/It is about you, never your person's name\. Set it after joining, with your\s+person's OK on the line\./);
+    expect(s).toMatch(/network discovery on --level contact`/);
     expect(skill).not.toMatch(/Ask your person before you set it|who you work for/);
     expect(skill).toMatch(/^Skill version 30 \(2026-11-16\)\./m);
   });
@@ -337,7 +338,8 @@ describe("the app's network skill (SKILL.md)", () => {
   it(`speaks of the app's network and SIMON, never of AGNT, and never calls a Network ID an email`, () => {
     // Error codes (agnt_*) are the server's identifiers, which an agent matches exactly; nothing else says AGNT.
     // So is the npm package the install command names (@agnt-sdk/<app>): the agent types it exactly.
-    expect(skill.replace(/`agnt_[a-z_]+`/g, '').replace(/@agnt-sdk\/[a-z0-9{}A-Z-]+/g, '')).not.toMatch(/agnt/i);
+    // And the connector's exact address (https://mcp.agnt.ai/agnt/mcp/<app>/network), which the person types as it is.
+    expect(skill.replace(/`agnt_[a-z_]+`/g, '').replace(/@agnt-sdk\/[a-z0-9{}A-Z-]+/g, '').replace(/https:\/\/mcp\.agnt\.ai\/agnt\/mcp\/[a-z0-9{}A-Z-]+\/network/g, '')).not.toMatch(/agnt/i);
     expect(skill).not.toMatch(/internal|producer contract|migration decision/i);
     expect(skill).not.toMatch(/Network ID is (an|your) email/i);
     expect(CONVERSATION).not.toMatch(/AGNT/);

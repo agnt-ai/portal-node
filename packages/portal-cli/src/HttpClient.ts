@@ -77,6 +77,20 @@ export function setClientVersion(version: string | undefined): void {
 
 const versionHeader = (): Record<string, string> => (clientVersion ? { [CLIENT_VERSION_HEADER]: clientVersion } : {});
 
+/** Told when an answer carries the server's `update` (a newer CLI is out); set once by the CLI. Never lets a listener break a call. */
+let updateListener: ((update: unknown) => void) | undefined;
+export function setUpdateListener(fn: ((update: unknown) => void) | undefined): void {
+  updateListener = fn;
+}
+function noticeUpdate(json: unknown): void {
+  if (!updateListener || !json || typeof json !== 'object' || !('update' in json)) return;
+  try {
+    updateListener((json as { update: unknown }).update);
+  } catch {
+    /* a notice must never fail the call */
+  }
+}
+
 export interface SseEvent {
   event: string;
   data: any;
@@ -145,7 +159,9 @@ export class HttpClient {
     }
 
     if (response.status === 204) return undefined as T;
-    return response.json() as Promise<T>;
+    const json = (await response.json()) as T;
+    noticeUpdate(json);
+    return json;
   }
 
   get<T>(path: string, params?: Record<string, any>, opts: { timeoutMs?: number } = {}): Promise<T> {

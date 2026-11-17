@@ -218,6 +218,14 @@ describe('network thread', () => {
     expect(out.notice).toBeUndefined();
   });
 
+  it('takes a post id too: every reply to that post', async () => {
+    const post = `post_${'a'.repeat(32)}`;
+    const inbox = vi.fn().mockResolvedValue(page([entry(A, { replyToPost: post })]));
+    const out = await networkThread(client({ inbox }), post.toUpperCase(), {});
+    expect(inbox.mock.calls[0][0]).toMatchObject({ thread: post });
+    expect((out.result as any).messages[0].replyToPost).toBe(post);
+  });
+
   it('says on a plain line when the thread is longer than it will follow', async () => {
     const inbox = vi.fn().mockResolvedValue(page([entry(A)], true, 'again'));
     const out = await networkThread(client({ inbox }), A, {});

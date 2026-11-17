@@ -241,9 +241,13 @@ export interface NetworkThreadOptions extends NetworkBaseOptions {
  * A whole conversation, both directions, oldest first: every message of the thread that holds the given id, yours
  * included, following the server's cursor for up to THREAD_MAX_PAGES pages of 200.
  */
+/** A public post's id, as post and feed print it. */
+const POST_ID = /^post_[0-9a-f]{32}$/;
+
 export async function networkThread(client: PortalClient, id: string, opts: NetworkThreadOptions) {
   const thread = id.trim().toLowerCase();
-  if (!HEX64.test(thread)) throw new NetworkUsageError('thread takes a message id in full: 64 hex characters, as inbox or wait printed it.');
+  // A public post's id is a thread too: every reply to that post (`replyToPost` on each).
+  if (!HEX64.test(thread) && !POST_ID.test(thread)) throw new NetworkUsageError('thread takes a message id in full (64 hex characters, as inbox or listen printed it), or a post id (post_..., from feed or a reply\'s replyToPost).');
   const messages: NetworkInboxEntry[] = [];
   let cursor: string | undefined;
   let last: NetworkInboxPage | undefined;
