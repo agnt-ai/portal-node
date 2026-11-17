@@ -289,3 +289,27 @@ export async function startUpdateCheck(args: readonly string[], currentVersion: 
     /* never let the check touch the command */
   }
 }
+
+/**
+ * The server says a newer version is out (an answer's `update`: agnt-backend cliUpdateNotice). Only its two version numbers
+ * are read, as for the registry, and the notice is our own text with our own command. It shares the daily claim with the
+ * registry check, so the two never both print on one day, and it keeps the latest it learned, so the next run's check knows.
+ * Never throws, never writes stdout.
+ */
+export function noteServerUpdate(update: unknown, currentVersion: string, deps = defaultUpdateCheckDeps()): void {
+  try {
+    if (!deps || updateCheckDisabled(deps.env) || !update || typeof update !== 'object') return;
+    const current = parseCurrent(currentVersion);
+    const latest = parseVersion((update as { latest?: unknown }).latest);
+    if (!current || !latest || !isNewer(latest, current)) return;
+    const now = deps.now();
+    if (canKeepState(deps.statePath)) {
+      const state = readState(deps.statePath);
+      const known = parseVersion(state.latest);
+      if (!known || isNewer(latest, known)) writeState(deps.statePath, { ...state, latest: show(latest) });
+    }
+    if (claimNotice(deps, now)) deps.warn(noticeText(deps.command, current, latest));
+  } catch {
+    /* never let the notice touch the command */
+  }
+}

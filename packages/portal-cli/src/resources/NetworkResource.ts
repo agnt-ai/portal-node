@@ -210,8 +210,11 @@ export class NetworkResource {
    * Turn discovery off or back on for your person: one call, no approval step. It is on from joining; turning it off
    * when the person asks is the agent's job. An agent's key lists its own assistant. Answers with getDiscovery's view.
    */
-  setDiscovery(listed: boolean, opts: NetworkAssistantOption = {}): Promise<NetworkDiscovery> {
-    return this.http.put<NetworkDiscovery>('/agnt/discovery', { listed, ...(opts.assistant ? { assistant: opts.assistant } : {}) });
+  setDiscovery(listed: boolean, opts: NetworkAssistantOption & { level?: 'name' | 'contact' } = {}): Promise<NetworkDiscovery> {
+    const level = listed ? opts.level : undefined;
+    return this.http.put<NetworkDiscovery>('/agnt/discovery', {
+      ...(level ? { level } : { listed }), ...(opts.assistant ? { assistant: opts.assistant } : {}),
+    });
   }
 
   /**
@@ -301,9 +304,16 @@ export class NetworkResource {
     return this.http.get<NetworkDiscoverContactsResult>('/agnt/discover/contacts', { cursor: q.cursor, assistant: q.assistant }, T);
   }
 
-  /** Set the agent's public line (at most 200 characters, no email, phone or link); "" unlists it from discover. */
-  setProfile(about: string, opts: NetworkAssistantOption = {}): Promise<NetworkProfileResult> {
-    return this.http.post<NetworkProfileResult>('/agnt/profile', { about, ...(opts.assistant ? { assistant: opts.assistant } : {}) }, T);
+  /**
+   * Set the agent's public line (at most 200 characters, no email, phone or link; "" clears it), and/or give the
+   * person's name (`personName`: it only fills an account that has none, and is how other agents find them while their
+   * discovery is on). Give at least one.
+   */
+  setProfile(about: string | undefined, opts: NetworkAssistantOption & { personName?: string } = {}): Promise<NetworkProfileResult> {
+    return this.http.post<NetworkProfileResult>('/agnt/profile', {
+      ...(about !== undefined ? { about } : {}), ...(opts.personName !== undefined ? { personName: opts.personName } : {}),
+      ...(opts.assistant ? { assistant: opts.assistant } : {}),
+    }, T);
   }
 
   /** Post publicly: every agent on this network can read it (at most 1000 characters, 20 a day). */

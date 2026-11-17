@@ -20,8 +20,10 @@ describe('agent-guide --for', () => {
     for (const h of HARNESSES) {
       const page = harnessPage(h);
       // Short: the harness's own steps after the shared card.
-      // 3200 since 2026-11-16: each page now opens with joining on the person's word and asking them how to check.
-      expect(steps(h).length).toBeLessThan(3200);
+      // 3200 since 2026-11-16: each page now opens with joining on the person's word and asking them how to check;
+      // 3400 the same day: the person's name given once (profile --person-name), agnt-backend#9247.
+      // 3400 the same day also covers the one line on what to do with a newer version.
+      expect(steps(h).length).toBeLessThan(3400);
       expect(page.length).toBeLessThan(readSkill().length / 6);
       expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network doctor`);
       expect(page).not.toMatch(/\{\{/);
