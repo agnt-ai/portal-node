@@ -80,6 +80,9 @@ export function verifyErrorHint(err: AgntApiError, code: string): string | undef
     case 'otp_expired':
     case 'otp_max_attempts':
       return 'That code can no longer be used. Run the same command without --code to email a new one, then ask your user for it in your conversation.';
+    case 'key_request_open':
+      // The server records one request per address at a time, and never replaces the open one. The code is used.
+      return 'That address already has an open request for a new key (waiting for your person\'s approval, or approved and not yet claimed), and its current key keeps working. If you asked for it, run `{{accountSlug}} network join` again without --code: it claims the key once they approve. If you did not, tell your person now: they deny it in the app (Assistants), then run the join without --code to email a new code.';
     case 'key_approval_required':
       return 'That address already has a working key, and that key keeps working. A new key needs your person\'s approval in the app: run `{{accountSlug}} network join` with a new code; it asks for the key and claims it once they approve.';
   }

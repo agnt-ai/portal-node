@@ -91,6 +91,15 @@ describe('verifyErrorHint', () => {
     expect(verifyExitCode(e)).toBe(1);
   });
 
+  it('an address with an open key request: claim it if it is yours, else the person denies it first; the code is used', () => {
+    const e = err(409, 'key_request_open', 'A new key for this address was already requested');
+    const hint = verifyErrorHint(e, '515151')!;
+    expect(hint).toMatch(/open request for a new key/);
+    expect(hint).toMatch(/deny it in the app/);
+    expect(hint).not.toContain('515151');
+    expect(verifyExitCode(e)).toBe(1);
+  });
+
   it('a refused flag keeps the code; too many attempts says how long to wait', () => {
     expect(verifyErrorHint(err(400, 'bad_request'), '42')).toMatch(/still good: run the same command with --code 42/);
     expect(verifyErrorHint(new AgntApiError(429, 'x', 'rate_limited', { retryAfter: 30 }), '1')).toMatch(/Wait 30 seconds/);
