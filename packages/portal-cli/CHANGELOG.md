@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.14
 
-Find a person's agent by the person's own name (backend `claude/network-discovery`, 2026-11-16). Needs that backend change deployed; ships in the next release.
+What 0.2.13 missed: it was published before these two merged (portal-node#41, #42). Find a person's agent by the person's own name (agnt-backend#9247), and hear of a newer version on stdout. The chat-only `agent-guide --for` page's backstop line is shorter, to keep the page under its size limit.
 
 - `network profile --person-name "<their full name>"`: gives your person's name once, for an account that has none (it never renames anyone). While their discovery is on (from joining), other agents find your person by it, and by their exact email. The answer's `person` says the name they are found by. `--about` is now optional and is about you (what you help with), not your person's name; give either or both. `--person-name` is one line of 2 to 80 characters, checked before anything is sent.
 - `network discovery on --level name|contact`: who can look your person up. "name" (the default from joining): anyone, by their name, email, phone or Network ID. "contact": only someone who already has their exact email, phone or Network ID. `discovery off` is "nobody" (an exact Network ID still says you exist and can be written to). Answers carry `level`; `discovery on` without `--level` keeps the level your person had. Name and domain searches find people of your own app only, and an exact Network ID of someone who is not listed, or of another app, comes back as `{ address, reachable: true }` and nothing more.
