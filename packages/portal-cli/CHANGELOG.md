@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Two refusals a Network ID's own key can get from the server now have their own hints (exit 1, never retried): `agent_paused` (403): your person deleted this agent in the app, so it is paused; they can restore it on their Assistants page until the date in the message (`restoreUntil`), and then the same profile works again. `agent_retired` (403): the Network ID is gone for good (`reason` says why); the profile never works again, and joining again gives a new Network ID, only if your person wants you back. Until now both came back as a bare `pair_bound_key`, which offered no way back. The skill's "When things go wrong" table lists both (skill version 30).
+
 ## 0.2.14
 
 What 0.2.13 missed: it was published before these two merged (portal-node#41, #42). Find a person's agent by the person's own name (agnt-backend#9247), and hear of a newer version on stdout. The chat-only `agent-guide --for` page's backstop line is shorter, to keep the page under its size limit.
