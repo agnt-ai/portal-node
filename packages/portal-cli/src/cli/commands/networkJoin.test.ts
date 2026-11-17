@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { networkJoin, pickUsername, guessProduct, randomSuffix, SUFFIX_ALPHABET, usernameOf, defaultUsername } from './networkJoin.js';
 import { NetworkUsageError, describeError } from './network.js';
-import { saveProfile, resolveProfile } from '../utils/credentials.js';
+import { saveProfile, resolveProfile, pendingKeyRequest, setPendingKeyRequest } from '../utils/credentials.js';
 import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
 import { builtInFirstCard, builtInTellUser } from '../utils/firstCard.js';
 import { NETWORK_CORE } from '../networkCore.js';
@@ -14,6 +14,8 @@ vi.mock('../utils/credentials.js', () => ({
   saveProfile: vi.fn().mockResolvedValue(undefined),
   resolveProfileName: vi.fn().mockImplementation(async (name?: string) => name ?? 'default'),
   resolveProfile: vi.fn(),
+  pendingKeyRequest: vi.fn().mockResolvedValue(undefined),
+  setPendingKeyRequest: vi.fn().mockResolvedValue(undefined),
 }));
 
 const ADDRESS = 'claude-code-7k3m9q2x@agent.example.test';
@@ -64,6 +66,8 @@ describe('network join', () => {
   beforeEach(() => {
     vi.mocked(saveProfile).mockClear();
     vi.mocked(resolveProfile).mockReset().mockRejectedValue(new Error('No profile'));
+    vi.mocked(pendingKeyRequest).mockReset().mockResolvedValue(undefined);
+    vi.mocked(setPendingKeyRequest).mockClear();
   });
   afterEach(() => { global.fetch = originalFetch; vi.restoreAllMocks(); });
 
@@ -181,6 +185,7 @@ describe('network join', () => {
     expect(JSON.parse(verify[1].body)).toEqual({
       email: 'person@example.com', account: 'acme', code: '1', label: 'Codex', purpose: 'network', timezone: 'Europe/Paris',
       agent: { username: 'codex-7k3m9q2x', displayName: 'Codex', product: 'Codex' },
+      keyApproval: true,
     });
     for (const [, init] of fetchMock.mock.calls) expect(JSON.stringify(init.headers ?? {})).not.toMatch(/authorization/i);
   });
@@ -351,5 +356,85 @@ describe('orientation', () => {
       const builtIn = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
       expect(builtIn.result.orientation).toBe(NETWORK_CORE);
     }
+  });
+
+  describe('an address that already has a working key (G455)', () => {
+    const pendingAnswer = {
+      ok: true, status: 'approval_pending', agnt: { address: ADDRESS, custody: 'custodial' },
+      keyRequest: { id: 'kr1', claimSecret: 'claim-secret-sample', expiresAt: '2026-11-17T12:00:00.000Z' },
+      tellUser: 'I asked for a new key. Please approve it in the app.',
+    };
+    const stored = { apiUrl: 'https://api.example.test', account: 'acme', id: 'kr1', claimSecret: 'claim-secret-sample', address: ADDRESS, expiresAt: '2026-11-17T12:00:00.000Z' };
+    const originalFetch = global.fetch;
+    beforeEach(() => {
+      vi.mocked(saveProfile).mockClear();
+      vi.mocked(resolveProfile).mockReset().mockRejectedValue(new Error('No profile'));
+      vi.mocked(pendingKeyRequest).mockReset().mockResolvedValue(undefined);
+      vi.mocked(setPendingKeyRequest).mockClear();
+    });
+    afterEach(() => { global.fetch = originalFetch; });
+
+    it('a 202 approval_pending saves no key over the profile; it keeps the claim for later and says what to tell the person', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce(answer(202, pendingAnswer)) as any;
+      const out = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', apiUrl: 'https://api.example.test', username: 'claude-code-7k3m9q2x', profile: 'claude-code' });
+      expect(saveProfile).not.toHaveBeenCalled();
+      expect(setPendingKeyRequest).toHaveBeenCalledWith('claude-code', stored);
+      expect(out.exitCode).toBe(75);
+      expect(out.result).toMatchObject({ status: 'approval_pending', address: ADDRESS, tellUser: pendingAnswer.tellUser });
+      expect(JSON.stringify(out.result)).not.toContain('claim-secret-sample');
+    });
+
+    it('join again claims it: still pending, then the key saved and the claim forgotten', async () => {
+      vi.mocked(pendingKeyRequest).mockResolvedValue(stored);
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(answer(202, { ok: true, status: 'pending' }))
+        .mockResolvedValueOnce(answer(200, { ok: true, apiKey: 'ak_live_new', apiKeyId: 'k2', revokedKeys: 1, agnt: { address: ADDRESS } }));
+      global.fetch = fetchMock as any;
+      const waiting = await networkJoin({ profile: 'claude-code' });
+      expect(waiting.result).toMatchObject({ status: 'approval_pending' });
+      expect(saveProfile).not.toHaveBeenCalled();
+      const done = await networkJoin({ profile: 'claude-code' });
+      expect(fetchMock.mock.calls[1][0]).toBe('https://api.example.test/portal/auth/agent/key-requests/kr1/claim');
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ claimSecret: 'claim-secret-sample' });
+      expect(saveProfile).toHaveBeenCalledWith('claude-code', { apiUrl: 'https://api.example.test', apiKey: 'ak_live_new', apiKeyId: 'k2', account: 'acme' });
+      expect(setPendingKeyRequest).toHaveBeenLastCalledWith('claude-code', undefined);
+      expect(done.result).toMatchObject({ status: 'joined', address: ADDRESS });
+    });
+
+    it('a request already open (409 key_request_open): the profile\'s own is claimed; someone else\'s is explained plainly', async () => {
+      const open = (id: string) => answer(409, { status: 409, error_code: 'key_request_open', error: 'A request for a new key for this address is already open.', details: { address: ADDRESS, keyRequestId: id, state: 'pending', expiresAt: '2026-11-17T12:00:00.000Z', retryable: false } });
+      // Its own: claimed (still pending here), never a second request.
+      vi.mocked(pendingKeyRequest).mockResolvedValue(stored);
+      const fetchMock = vi.fn().mockResolvedValueOnce(open('kr1')).mockResolvedValueOnce(answer(202, { ok: true, status: 'pending' }));
+      global.fetch = fetchMock as any;
+      const own = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', apiUrl: 'https://api.example.test', username: 'claude-code-7k3m9q2x', profile: 'claude-code' });
+      expect(fetchMock.mock.calls[1][0]).toBe('https://api.example.test/portal/auth/agent/key-requests/kr1/claim');
+      expect(own.result).toMatchObject({ status: 'approval_pending', address: ADDRESS });
+      expect(own.exitCode).toBe(75);
+      expect(saveProfile).not.toHaveBeenCalled();
+
+      // Not its own (none kept, or another id): the refusal, with what to do.
+      for (const kept of [undefined, { ...stored, id: 'kr-other' }]) {
+        vi.mocked(pendingKeyRequest).mockResolvedValue(kept);
+        global.fetch = vi.fn().mockResolvedValueOnce(open('kr9')) as any;
+        const err: any = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', apiUrl: 'https://api.example.test', username: 'claude-code-7k3m9q2x', profile: 'claude-code' }).catch((e) => e);
+        expect(err.errorCode).toBe('key_request_open');
+        expect(err.cliHint).toMatch(/open request for a new key/);
+        expect(err.cliHint).toMatch(/deny it in the app/);
+        expect(err.cliHint).toMatch(/current key keeps working/);
+      }
+      expect(saveProfile).not.toHaveBeenCalled();
+      expect(setPendingKeyRequest).not.toHaveBeenCalledWith('claude-code', undefined);
+    });
+
+    it('denied: the claim is forgotten, nothing saved, and the agent says so', async () => {
+      vi.mocked(pendingKeyRequest).mockResolvedValue(stored);
+      global.fetch = vi.fn().mockResolvedValueOnce(answer(403, { status: 403, error_code: 'key_request_denied', error: 'Denied' })) as any;
+      const out = await networkJoin({ profile: 'claude-code' });
+      expect(out.exitCode).toBe(1);
+      expect(out.result).toMatchObject({ status: 'key_request_denied' });
+      expect(saveProfile).not.toHaveBeenCalled();
+      expect(setPendingKeyRequest).toHaveBeenCalledWith('claude-code', undefined);
+    });
   });
 });

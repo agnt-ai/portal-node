@@ -20,7 +20,7 @@
 import { randomBytes } from 'node:crypto';
 import { publicRequest, AgntApiError } from '../../HttpClient.js';
 import { PortalClient } from '../../index.js';
-import { saveProfile, resolveProfile } from '../utils/credentials.js';
+import { saveProfile, resolveProfile, pendingKeyRequest, setPendingKeyRequest, type PendingKeyRequest } from '../utils/credentials.js';
 import { DEFAULT_API_URL, envProfileName, apiUrlProblem, apiUrlWarning, resolveApiUrl, resolveDefaultAccountSlug } from '../../defaults.js';
 import { signupFieldsFrom, verifyErrorHint, flagWord, type LoginOptions } from './login.js';
 import { NetworkUsageError, connectContactsStep } from './network.js';
@@ -30,7 +30,7 @@ import { firstCardFrom, tellUserFrom } from '../utils/firstCard.js';
 import { orientationFrom } from '../networkCore.js';
 
 export { guessProduct };
-import type { AgentAuthVerifyResult, AgentSignupPurpose } from '../../types.js';
+import type { AgentAuthVerifyResult, AgentKeyApprovalPending, AgentKeyClaimResult, AgentSignupPurpose } from '../../types.js';
 
 export interface JoinOptions {
   email?: string;
@@ -173,12 +173,58 @@ function withHint(err: AgntApiError, hint: string | undefined): AgntApiError {
   return err;
 }
 
+/** What a join says while its new key waits for the person's approval in the app (G455). */
+function approvalPendingAnswer(pending: PendingKeyRequest, profileFlag: string, tellUser?: string) {
+  return {
+    status: 'approval_pending',
+    address: pending.address,
+    expiresAt: pending.expiresAt,
+    tellUser: tellUser || `I asked for a new key for ${pending.address}. Please approve it in the app (Assistants) within 24 hours; the old key stops working once I claim the new one.`,
+    next: `{{accountSlug}} network join${profileFlag}`,
+    note: 'This address already had a working key, so the new one needs your person\'s approval. Run next once they say they approved (or at most every few minutes): it claims the key then. Until then it answers approval_pending.',
+  };
+}
+
+const CLOSED_REQUEST: Record<string, string> = {
+  key_request_denied: 'My person denied the new key, so I did not get one. The key that address already has keeps working.',
+  key_request_expired: 'The request for a new key ran out (24 hours) before it was approved. I can ask again with a new code.',
+  key_request_claimed: 'That key was already claimed. If it was not by me, or I never received it, my person should check the app now and remove the key I do not hold.',
+  key_request_gone: 'That address is no longer live, so there is no key to claim.',
+};
+
+/** Claim the key this profile asked for: saved once approved; the request forgotten once it is closed. */
+async function claimPendingKey(profileName: string, pending: PendingKeyRequest, profileFlag: string, profileNote: string): Promise<{ result: unknown; exitCode?: number; notice?: string }> {
+  let got: AgentKeyClaimResult;
+  try {
+    got = await publicRequest<AgentKeyClaimResult>(pending.apiUrl, `/portal/auth/agent/key-requests/${pending.id}/claim`, { claimSecret: pending.claimSecret });
+  } catch (err) {
+    if (err instanceof AgntApiError && [403, 404, 409, 410].includes(err.status ?? 0)) {
+      await setPendingKeyRequest(profileName, undefined);
+      const code = err.errorCode ?? 'key_request_closed';
+      return { result: { status: code, address: pending.address, tellUser: CLOSED_REQUEST[code] ?? 'The request for a new key is closed. I can ask again with a new code.' }, exitCode: 1 };
+    }
+    throw err;
+  }
+  if (!got.apiKey) return { result: approvalPendingAnswer(pending, profileFlag), exitCode: 75 };
+  await saveProfile(profileName, { apiUrl: pending.apiUrl, apiKey: got.apiKey, apiKeyId: got.apiKeyId, account: pending.account });
+  await setPendingKeyRequest(profileName, undefined);
+  const address = got.agnt?.address ?? pending.address;
+  return { result: joinedAnswer({ status: 'joined', address }), notice: joinedNotice(address, profileNote) };
+}
+
 export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown; exitCode?: number; notice?: string }> {
   // The agent's own profile (claude-code, codex, ...), never the shared default: two agents on one computer
   // never share keys, and a profile made earlier by hand is never picked up. --profile wins.
   const profileName = opts.profile?.trim() || envProfileName() || agentProfileName();
   // A profile chosen by hand is not the one a bare command finds: every command needs it then.
   const profileNote = opts.profile ? ` Add ${flagWord('--profile', opts.profile)} to every command you run.` : '';
+
+  const profileFlag = opts.profile ? ` ${flagWord('--profile', opts.profile)}` : '';
+  // A new key this profile asked for, waiting on its person's approval: claim it (or say it still waits).
+  if (!opts.code) {
+    const pending = await pendingKeyRequest(profileName);
+    if (pending) return claimPendingKey(profileName, pending, profileFlag, profileNote);
+  }
 
   // Already joined on this profile: just say where the agent is.
   if (!opts.code) {
@@ -241,7 +287,7 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
   const pickFor = (attempt: number) => given ?? (opts.randomUsername ? pickUsername(product) : attempt === 0 ? defaultUsername(email) : pickUsername(defaultUsername(email)));
   // The key's label, where the person sees their keys: the one they chose, else the product. Never this computer's name.
   const label = opts.label?.trim() || product;
-  let result: AgentAuthVerifyResult | undefined;
+  let result: (AgentAuthVerifyResult | AgentKeyApprovalPending) | undefined;
   for (let attempt = 0; attempt < USERNAME_TRIES && !result; attempt++) {
     const username = pickFor(attempt);
     const login: LoginOptions = {
@@ -250,12 +296,20 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     const read = signupFieldsFrom(login);
     if ('error' in read) throw new NetworkUsageError(read.error);
     try {
-      result = await publicRequest<AgentAuthVerifyResult>(apiUrl, '/portal/auth/agent/verify', { email, account, code, label, ...read.fields });
+      // keyApproval: this client can wait for its person's approval and claim a new key for an address that already
+      // has one (G455). Without it the server answers 409 rather than a 2xx an older client would take for a key.
+      result = await publicRequest<AgentAuthVerifyResult | AgentKeyApprovalPending>(apiUrl, '/portal/auth/agent/verify', { email, account, code, label, ...read.fields, keyApproval: true });
     } catch (err) {
       const pickAnother = err instanceof AgntApiError && !given && (
         err.errorCode === 'agnt_username_reserved' ||
         (err.errorCode === 'agnt_username_taken' && !/new code/i.test(err.message)));
       if (pickAnother && attempt < USERNAME_TRIES - 1) continue;
+      // A request for a new key is already open for this address (G455). If it is the one this profile asked for, claim
+      // it rather than tell the agent to wait for something it already has.
+      if (err instanceof AgntApiError && err.errorCode === 'key_request_open') {
+        const mine = await pendingKeyRequest(profileName);
+        if (mine && mine.id === err.details?.keyRequestId) return claimPendingKey(profileName, mine, profileFlag, profileNote);
+      }
       if (err instanceof AgntApiError) {
         const hint = verifyErrorHint(err, code)?.replace(/run the same command/g, 'run the same join command');
         throw withHint(err, (given ? usernameHint(err) : undefined) ?? hint);
@@ -265,13 +319,23 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
   }
   if (!result) throw new NetworkUsageError('Could not find a free name. Run the same join command with --name <short name>.');
 
-  await saveProfile(profileName, { apiUrl, apiKey: result.apiKey, apiKeyId: result.apiKeyId, account });
+  if ('status' in result && result.status === 'approval_pending') {
+    // No key yet, and nothing saved over this profile: the claim secret is kept on its own until the key is claimed.
+    const pending: PendingKeyRequest = {
+      apiUrl, account, id: result.keyRequest.id, claimSecret: result.keyRequest.claimSecret,
+      address: result.agnt.address, expiresAt: result.keyRequest.expiresAt,
+    };
+    await setPendingKeyRequest(profileName, pending);
+    return { result: approvalPendingAnswer(pending, profileFlag, result.tellUser), exitCode: 75 };
+  }
+  const issued = result as AgentAuthVerifyResult;
+  await saveProfile(profileName, { apiUrl, apiKey: issued.apiKey, apiKeyId: issued.apiKeyId, account });
 
-  if (!result.agnt) {
+  if (!issued.agnt) {
     // The server took no agent (no `agnt` in its answer): the {{accountName}} Network is off for this app.
     return {
       result: {
-        status: 'signed_in_without_network', email: result.user.email, savedProfile: profileName,
+        status: 'signed_in_without_network', email: issued.user.email, savedProfile: profileName,
         tellUser: 'I signed in, but the {{accountName}} Network is not turned on for this app yet, so I cannot talk to other agents here.',
       },
       exitCode: 1,
@@ -279,11 +343,11 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
   }
 
   const short = joinedAnswer({
-    status: 'joined', address: result.agnt.address, nextSteps: result.nextSteps, tellUser: result.tellUser, email,
-    orientation: result.orientation, connectContactsUrl: result.connectContactsUrl,
+    status: 'joined', address: issued.agnt.address, nextSteps: issued.nextSteps, tellUser: issued.tellUser, email,
+    orientation: issued.orientation, connectContactsUrl: issued.connectContactsUrl,
   });
-  const notice = joinedNotice(result.agnt.address, profileNote);
+  const notice = joinedNotice(issued.agnt.address, profileNote);
   if (!opts.json) return { result: short, notice };
-  const { apiKey: _apiKey, ...shown } = result;
-  return { result: { ...short, purpose: result.purpose, savedProfile: profileName, signup: shown }, notice };
+  const { apiKey: _apiKey, ...shown } = issued;
+  return { result: { ...short, purpose: issued.purpose, savedProfile: profileName, signup: shown }, notice };
 }

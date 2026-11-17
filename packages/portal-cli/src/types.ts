@@ -1288,6 +1288,29 @@ export interface AgentSignupProfile {
   ignoredDeclaredName?: true;
 }
 
+/**
+ * POST /portal/auth/agent/verify with `keyApproval: true`, for an address that already has a working key: no key yet.
+ * The person approves in the app; the key is claimed once at `keyRequest.claim` with the secret (G455).
+ */
+export interface AgentKeyApprovalPending {
+  ok: boolean;
+  status: 'approval_pending';
+  agnt: { address: string; custody?: string };
+  keyRequest: { id: string; claimSecret: string; expiresAt: string; claim?: { method: string; path: string } };
+  hint?: string;
+  tellUser?: string;
+}
+
+/** POST /portal/auth/agent/key-requests/:id/claim: 202 while pending, 200 with the key once approved. */
+export interface AgentKeyClaimResult {
+  ok: boolean;
+  status?: 'pending';
+  apiKey?: string;
+  apiKeyId?: string;
+  revokedKeys?: number;
+  agnt?: { address: string; assistant?: string; pair?: string; custody?: string };
+}
+
 export interface AgentAuthVerifyResult {
   ok: boolean;
   user: AgentAuthUser;
