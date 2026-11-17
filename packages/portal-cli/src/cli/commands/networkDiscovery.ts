@@ -7,7 +7,7 @@
  */
 
 import type { PortalClient } from '../../index.js';
-import { runNetworkVerb } from './network.js';
+import { runNetworkVerb, NetworkUsageError } from './network.js';
 import { clientFor } from '../utils/api.js';
 import { networkProfile } from '../utils/agentIdentity.js';
 import { flagWord } from './login.js';
@@ -15,17 +15,24 @@ import { flagWord } from './login.js';
 export interface DiscoveryOptions {
   profile?: string;
   assistant?: string;
+  level?: string;
 }
 
+export const DISCOVERY_LEVELS = ['name', 'contact'] as const;
+
 /** Said with every answer, so an agent never takes the switch as its own to flip. */
-export const ASK_FIRST = 'Being found by your person\'s exact email or phone is on from joining. Tell your person it is on; turn it off when they ask.';
+export const ASK_FIRST = 'Your person is findable from joining: by default anyone finds them by their name, email, phone or Network ID (level "name"). Tell your person; change it (--level contact: only by an exact email, phone or Network ID) or turn it off when they ask.';
 
 export async function networkDiscoveryShow(client: PortalClient) {
   return { result: { ...(await client.network.getDiscovery()), note: ASK_FIRST } };
 }
 
 export async function networkDiscoverySet(client: PortalClient, listed: boolean, opts: DiscoveryOptions) {
-  return { result: { ...(await client.network.setDiscovery(listed, { assistant: opts.assistant })), note: ASK_FIRST } };
+  const level = opts.level?.trim().toLowerCase();
+  if (level !== undefined && !(DISCOVERY_LEVELS as readonly string[]).includes(level)) {
+    throw new NetworkUsageError('--level is name (anyone, by name too) or contact (only by an exact email, phone or Network ID); `discovery off` is nobody.');
+  }
+  return { result: { ...(await client.network.setDiscovery(listed, { assistant: opts.assistant, level: level as 'name' | 'contact' | undefined })), note: ASK_FIRST } };
 }
 
 /** The flags a follow-up command needs to act as the same profile and assistant. */

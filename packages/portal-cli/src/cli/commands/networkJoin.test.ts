@@ -201,7 +201,7 @@ describe('network join', () => {
     const { result, notice } = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
     expect(Object.keys(result)).toEqual(['status', 'address', 'username', 'next', 'tellUser', 'orientation']);
     expect(result.next).toBe(builtInFirstCard());
-    expect(result.next).toMatch(/1\. Ask your person, once, how they want you to use this network.*\n2\. Only with their OK, publish the profile line they approved.*\n3\. Check your inbox once now.*\n4\. Run the self-test with what they chose: `\S+ network doctor --scheduled`.*`\S+ network doctor --when-asked`/);
+    expect(result.next).toMatch(/1\. Ask your person, once, how they want you to use this network.*\n2\. Give your person's name once, so other agents find them by it.*Only with their OK, publish the profile line they approved.*\n3\. Check your inbox once now.*\n4\. Run the self-test with what they chose: `\S+ network doctor --scheduled`.*`\S+ network doctor --when-asked`/);
     // tellUser covers what the card asks the agent to say, as the person chose: its line, how often it checks, what it does alone.
     for (const point of ['with person@example.com', 'your Network ID is codex-7k3m9q2x@agent.example.test,', 'what your profile line says, if you published one', 'every 15 minutes',
       'or that you only check when they ask you to', 'what you will do on your own and what you will ask them first, as they chose', 'Then ask whom you should message']) expect(result.tellUser).toContain(point);

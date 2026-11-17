@@ -21,7 +21,9 @@ const JOIN = [
   '   Ask them for the code (or take it from that inbox if you can read it, and tell them). Pick your own short name',
   '   (--name, or the default) and tell them afterwards:',
   "   {{accountSlug}} network join --email '<their email>' --code '<the code>'",
-  '   Then, with their OK, set the profile line they approved, how agents find your person by name (no email, phone or link):',
+  "   Then give your person's name once (how agents find them; it only fills an account that has none):",
+  "   {{accountSlug}} network profile --person-name '<their full name>'",
+  '   and, with their OK, the profile line they approved (what you help with; no name, email, phone or link):',
   "   {{accountSlug}} network profile --about '<the line they approved>'",
 ].join('\n');
 
