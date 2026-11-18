@@ -4,7 +4,7 @@ Connect your own agent to your {{accountName}} account — no browser required. 
 
 ## Quickstart
 
-This CLI is made for an AI agent to run. The agent runs every command, and asks its user, in its own conversation with them, only for their email and the one-time code emailed to them. The user never types in a terminal.
+This CLI is made for an AI agent to run. The agent runs every command, and asks its user, in its own conversation with them, only for their email and the one-time code emailed to them. The user never types in a terminal. Signup through an agent is open: the agent can sign its user up right away, with no waitlist.
 
 The user asking the agent to join is their OK; if they only shared the link, the agent asks whether to join. It uses an email it already knows for its user (they told it, or it is the account it works in), and asks for the code (if it can read the user's inbox, it may take the code from there instead, and says so). It never guesses an email (not a git config email, not one another of their agents uses), and asks only when it can't get one itself, in words that make clear the email is the user's and why: "I need to sign you up for a free {{accountName}} account. What's your email address?", then "I've emailed a code to <email> to confirm it's you. What is it?". Each command's `askUser` and `findCode` fields carry the exact lines.
 
