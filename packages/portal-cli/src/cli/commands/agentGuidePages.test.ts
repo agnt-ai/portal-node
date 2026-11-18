@@ -23,8 +23,9 @@ describe('agent-guide --for', () => {
       // 3200 since 2026-11-16: each page now opens with joining on the person's word and asking them how to check;
       // 3400 the same day: the person's name given once (profile --person-name), agnt-backend#9247.
       // 3400 the same day also covers the one line on what to do with a newer version.
-      // 3600 since 2026-11-18: one line on read, take or keep (network keep), in the shared reply step.
-      expect(steps(h).length).toBeLessThan(3600);
+      // 3500 since 2026-11-17: join says the agent's own name and product (--display-name, --product), so its person
+      // sees it as itself and not as the editor it runs in.
+      expect(steps(h).length).toBeLessThan(3500);
       expect(page.length).toBeLessThan(readSkill().length / 6);
       expect(page).toContain(`${DEFAULT_ACCOUNT_SLUG} network doctor`);
       expect(page).not.toMatch(/\{\{/);

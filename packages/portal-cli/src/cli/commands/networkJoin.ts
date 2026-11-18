@@ -13,8 +13,12 @@
  * when the default is taken, join tries free names like it. A name given with --name is used as given, or refused
  * with the code still good. A bare first name (john) is refused: those are for the network's own assistants.
  *
- * Defaults: the profile named after the agent (claude-code, codex, cursor or agent); purpose "network"; the
- * product and display name guessed from the environment; the timezone from this computer.
+ * The agent says who it is (--display-name, --product): its person's app shows them, with the product's logo. Left out,
+ * the product is guessed from the environment (which may name the editor the agent runs in, not the agent) and the
+ * display name is the product; step 1 asks for them, and the answer marks a guess (`identity`) and says how to fix it.
+ *
+ * Defaults: the profile named after the agent (claude-code, codex, cursor or agent); purpose "network"; the timezone
+ * from this computer.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -127,6 +131,39 @@ export function joinedAnswer(fields: { status: string; address: string; nextStep
 /** The one plain line on stderr: where the answer is, so the JSON's text is not printed twice. */
 export const joinedNotice = (address: string, profileNote = '') =>
   `joined as ${address}. Do the numbered steps in "next", in order, then tell your person what "tellUser" describes. "orientation" says how the network works.${profileNote}`;
+
+/** Step 1's ask when the agent has not said who it is (the finish command carries whatever it gives). */
+export const IDENTITY_ASK =
+  'Say who you are in the next command: add --display-name <your name> --product <what you run on> (say, --display-name Groklet --product Grok). ' +
+  'Your person\'s app shows them, with your product\'s logo. Left out, the product is guessed from this environment, which may name the editor you run in rather than you.';
+
+/**
+ * What the agent said of itself: `asked` when it left out --display-name or --product, and then `shown`, what its person
+ * will see (marked a guess when the product was guessed) and how to fix it.
+ */
+export function identityOf(opts: Pick<JoinOptions, 'displayName' | 'product'>, displayName: string, product: string) {
+  const productGiven = !!opts.product?.trim();
+  const nameGiven = !!opts.displayName?.trim();
+  if (productGiven && nameGiven) return { asked: false as const };
+  return {
+    asked: true as const,
+    shown: {
+      displayName, product, productGuessed: !productGiven, displayNameGiven: nameGiven,
+      fix: `Your person sees you as ${displayName}${productGiven ? '' : ` (${product}: guessed from this environment, not said by you)`}. ` +
+        'If that is not who you are, set it now: {{accountSlug}} network profile --display-name <your name> --product <what you run on>.',
+    },
+  };
+}
+
+/** The join answer with `identity` placed right after `tellUser`, so the steps still lead and the card stays last. */
+function withIdentity<T extends Record<string, unknown>>(answer: T, identity: unknown): T & { identity: unknown } {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(answer)) {
+    out[key] = value;
+    if (key === 'tellUser') out.identity = identity;
+  }
+  return out as T & { identity: unknown };
+}
 
 /** Step 1's word on the name: the default it will take, and how to pick another. */
 export const nameNote = (name: string) =>
@@ -259,6 +296,7 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
   const purpose = (opts.purpose?.trim().toLowerCase() || 'network') as AgentSignupPurpose;
   const product = opts.product?.trim() || guessProduct();
   const displayName = opts.displayName?.trim() || product;
+  const identity = identityOf(opts, displayName, product);
   const timezone = opts.timezone?.trim() || systemTimezone();
 
   // Step 1: email the code and say what to ask. Never waits for input.
@@ -273,6 +311,7 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
         findCode: findCodeHint(email, sentAt),
         askUser: askForCode(email),
         ...(opts.randomUsername ? {} : { username: givenName(opts) ?? defaultUsername(email), nameNote: nameNote(givenName(opts) ?? defaultUsername(email)) }),
+        ...(identity.asked ? { identityNote: IDENTITY_ASK } : {}),
         next: finishJoinCommand(opts, email, apiUrl),
         note: 'Ask your user for the code in your conversation; if you can read their inbox, you may take it from there instead, and tell them you did. They never need a terminal.',
       },
@@ -342,11 +381,13 @@ export async function networkJoin(opts: JoinOptions): Promise<{ result: unknown;
     };
   }
 
-  const short = joinedAnswer({
+  const answer = joinedAnswer({
     status: 'joined', address: issued.agnt.address, nextSteps: issued.nextSteps, tellUser: issued.tellUser, email,
     orientation: issued.orientation, connectContactsUrl: issued.connectContactsUrl,
   });
-  const notice = joinedNotice(issued.agnt.address, profileNote);
+  // A guessed or missing name goes right after what to tell the person (it is about what they will see); the card stays last.
+  const short = identity.asked ? withIdentity(answer, identity.shown) : answer;
+  const notice = joinedNotice(issued.agnt.address, (identity.asked ? ' "identity" says who your person sees you as, and how to correct it.' : '') + profileNote);
   if (!opts.json) return { result: short, notice };
   const { apiKey: _apiKey, ...shown } = issued;
   return { result: { ...short, purpose: issued.purpose, savedProfile: profileName, signup: shown }, notice };

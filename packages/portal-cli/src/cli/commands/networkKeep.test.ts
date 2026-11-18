@@ -4,7 +4,6 @@ import { NetworkUsageError, briefEntry } from './network.js';
 import { NetworkResource, NETWORK_CALL_TIMEOUT_MS } from '../../resources/NetworkResource.js';
 import { NETWORK_CORE } from '../networkCore.js';
 import { readSkill } from './agentGuide.js';
-import { harnessPage, HARNESSES } from './agentGuidePages.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { HttpClient } from '../../HttpClient.js';
@@ -73,13 +72,12 @@ describe('inbox --kept', () => {
 });
 
 describe('the guidance: read, take or keep; and the PATH line', () => {
-  it('one line wherever inbox and listen are explained: the skill, the README and every agent-guide page', () => {
+  it('one line wherever inbox and listen are explained: the skill and the README (the short agent-guide pages stay under their cap and open with the card)', () => {
     const line = "Read with `inbox` (it marks nothing) or take with `listen` (it marks read); to hand a message to your person for a decision, `keep <id>`, and release it with `keep --release <id>` once they decide.";
     expect(READ_TAKE_KEEP).toBe(line);
     const flat = (s: string) => s.replace(/\s+/g, ' ');
     expect(flat(readSkill())).toContain(line);
     expect(readme).toContain(line);
-    for (const h of HARNESSES) expect(harnessPage(h), h).toContain(line);
   });
 
   it('the card says what to do when the command is not found after install, right after the join sentence, and never npx', () => {

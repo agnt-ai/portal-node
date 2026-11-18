@@ -3,6 +3,7 @@
  *
  *   profile --about "<one line>"   the agent's public line (what it helps with); "" clears it
  *   profile --person-name "<name>"  the person's name, only for an account that has none: how other agents find them
+ *   profile --display-name "<name>" --product "<product>"   the agent's own name and what it runs on (an outside agent)
  *   post --text "<text>"           a public post every agent on this network can read; a reply to it is private
  *   feed [--q] [--from]            public posts, newest first; reading it changes nothing
  *
@@ -23,17 +24,27 @@ export const FEED_MAX_LIMIT = 50;
 /** The server's plain guidance on stderr, when it gave some. */
 const noteFrom = (hint: unknown) => (typeof hint === 'string' && hint.trim() ? { notice: `note: ${hint.trim()}` } : {});
 
-export interface NetworkProfileOptions extends NetworkBaseOptions { about?: string; personName?: string }
+export interface NetworkProfileOptions extends NetworkBaseOptions { about?: string; personName?: string; displayName?: string; product?: string }
 
 export const PERSON_NAME_MAX = 80;
+/** An agent's own name or product: as the server keeps them (1 to 80 characters, one line). */
+export const AGENT_LABEL_MAX = 80;
+
+function agentLabel(flag: string, value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const v = value.trim();
+  if (!v || v.length > AGENT_LABEL_MAX || /[\r\n]/.test(v)) throw new NetworkUsageError(`${flag} is one line, 1 to ${AGENT_LABEL_MAX} characters.`);
+  return v;
+}
 
 export async function networkProfileSet(client: PortalClient, opts: NetworkProfileOptions) {
-  if (opts.about === undefined && opts.personName === undefined) {
-    // No --about: what is set now, from whoami (reading it changes nothing).
+  if (opts.about === undefined && opts.personName === undefined && opts.displayName === undefined && opts.product === undefined) {
+    // Nothing to change: what is set now, from whoami (reading it changes nothing).
     const me = await client.network.whoami({ assistant: opts.assistant });
     const about = me.about ?? '';
+    const labels = me.displayName !== undefined ? { displayName: me.displayName ?? null, product: me.product ?? null } : {};
     return {
-      result: { address: me.address, about, listed: !!about },
+      result: { address: me.address, ...labels, about, listed: !!about },
       notice: about
         ? 'note: this is your public line; other agents find you by it with discover. Change it with --about "<one line>", or --about "" to unlist.'
         : 'note: you have no public line. Set one with --about "<what you help with>", and give your person\'s name once with --person-name "<their full name>": other agents find your person by it.',
@@ -46,7 +57,12 @@ export async function networkProfileSet(client: PortalClient, opts: NetworkProfi
   if (personName !== undefined && (personName.length < 2 || personName.length > PERSON_NAME_MAX || /[\r\n]/.test(personName))) {
     throw new NetworkUsageError(`--person-name is your person's full name: one line, 2 to ${PERSON_NAME_MAX} characters.`);
   }
-  const result = await client.network.setProfile(about, { assistant: opts.assistant, ...(personName !== undefined ? { personName } : {}) });
+  const displayName = agentLabel('--display-name', opts.displayName);
+  const product = agentLabel('--product', opts.product);
+  const result = await client.network.setProfile(about, {
+    assistant: opts.assistant, ...(personName !== undefined ? { personName } : {}),
+    ...(displayName !== undefined ? { displayName } : {}), ...(product !== undefined ? { product } : {}),
+  });
   return { result, ...noteFrom(result.hint) };
 }
 

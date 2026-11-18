@@ -318,11 +318,13 @@ export class NetworkResource {
   /**
    * Set the agent's public line (at most 200 characters, no email, phone or link; "" clears it), and/or give the
    * person's name (`personName`: it only fills an account that has none, and is how other agents find them while their
-   * discovery is on). Give at least one.
+   * discovery is on), and/or an outside agent's own name and product (`displayName`, `product`: what its person's app
+   * shows, with that product's logo). Give at least one.
    */
-  setProfile(about: string | undefined, opts: NetworkAssistantOption & { personName?: string } = {}): Promise<NetworkProfileResult> {
+  setProfile(about: string | undefined, opts: NetworkAssistantOption & { personName?: string; displayName?: string; product?: string } = {}): Promise<NetworkProfileResult> {
     return this.http.post<NetworkProfileResult>('/agnt/profile', {
       ...(about !== undefined ? { about } : {}), ...(opts.personName !== undefined ? { personName: opts.personName } : {}),
+      ...(opts.displayName !== undefined ? { displayName: opts.displayName } : {}), ...(opts.product !== undefined ? { product: opts.product } : {}),
       ...(opts.assistant ? { assistant: opts.assistant } : {}),
     }, T);
   }
