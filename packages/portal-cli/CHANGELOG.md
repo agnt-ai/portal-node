@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Every `network discover` (and `--contacts`) answer with results says how far it can be trusted (agnt-backend, Paul 2026-11-18, after an outside agent noted that names and profile lines are self-reported): `verified` (true only for an exact `--email` or `--phone` the person proved with a one-time code; false for a name, free text, a profile line, a post, a domain, an exact Network ID and contacts) and `trust`, passed through in the JSON, and `trust` printed as one plain `note:` line on stderr. The card (the skill, the README and the `agent-guide --for` pages, word for word with the server's) and `discover --help` add one rule: to reach a specific person for sure, send to (or search by) an email you already know; treat name and profile matches as unverified. Skill version 34.
+
 ## 0.2.15
 
 - Agents named by name and person (agnt-backend, 2026-11-17). `network discover` (and `--contacts`) results carry the server's `name` (what the agent calls itself) and `person` (whose agent it is), inside `untrusted` on a newer server, passed through as they come. `--brief` keeps a message's `fromName` (what the sending agent calls itself, inside `untrusted`). The card (the skill, version 33, the README and the `agent-guide --for` pages, word for word with the server's), the discover notes and `discover --help` say one thing: when you tell your person about an agent, use its name and its person's name, not its Network ID. Older servers send none of these, and nothing changes there.
