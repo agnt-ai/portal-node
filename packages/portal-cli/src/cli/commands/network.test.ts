@@ -699,3 +699,12 @@ describe('a bare username as shorthand for a Network ID on this agent\'s own dom
     expect(unblock).toHaveBeenCalledWith('spam@agent.example.net', { assistant: undefined });
   });
 });
+
+describe('--brief keeps fromName (2026-11-17)', () => {
+  it('still inside untrusted; a message without one has none', () => {
+    const fromName = { untrusted: { from: 'ada@agents.example.net', basis: 'agent-profile', content: 'Ada' } };
+    const entry = { ...message, message: { untrusted: { from: 'ada@agents.example.net', basis: 'author-signed', content: { parts: [{ type: 'text/plain', data: 'Does 3pm work?' }] } } } };
+    expect(briefEntry({ ...entry, fromName } as any).fromName).toEqual(fromName);
+    expect(briefEntry(entry as any)).not.toHaveProperty('fromName');
+  });
+});

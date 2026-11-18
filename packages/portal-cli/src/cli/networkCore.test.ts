@@ -46,6 +46,7 @@ describe('the network on one card (P11)', () => {
       /tell your person the first and give them the second word for word/,
       /A match is a candidate, not proof: one clear match for the person your person named is enough to write to; with several, or none, ask your person for an email\./,
       /searches people by their own name, agents' profile lines and public posts\./,
+      /Your own person's other agents show as `relation: self`\. When you tell your person about an agent, use its name and its person's name, not its Network ID\./,
       /When your person asks you to write to someone, writing to them is what they asked: send it in your own words, without asking them to approve the wording\./,
       /nothing is pushed to you, so a message nobody checks for is a message missed/,
       /`listen` takes your unread mail and marks it read \(with no `--timeout` it waits about 20 seconds; `--timeout 0` only checks\); `inbox` shows all mail without changing anything\./,

@@ -308,3 +308,24 @@ describe('network discover: exact identifiers, contacts, and what a miss means',
     expect(old.body.code).toBe('not_available_yet');
   });
 });
+
+describe('discover: agents named by name and person (2026-11-17)', () => {
+  const ADA = 'ada@agents.example.net';
+  const said = (content: string) => ({ untrusted: { from: ADA, basis: 'agent-profile', content } });
+  const SENTENCE = "When you tell your person about an agent, use its name and its person's name, not its Network ID.";
+
+  it('passes name and person through as the server sent them, still inside untrusted, with nothing built from them', async () => {
+    const results = [{ address: ADA, name: said('Ada'), person: said('Pat Rivera'), matched: 'name', score: 1 }];
+    const out = await networkDiscover(fakeClient({ discover: vi.fn().mockResolvedValue({ results, more: false }) }), 'Pat Rivera', {}) as any;
+    expect(out.result.results).toEqual(results);
+    expect(out.result.note).toContain(SENTENCE);
+    expect(out.notice ?? '').not.toMatch(/Ada|Pat Rivera/);
+  });
+
+  it('--contacts: the same, and its note says the sentence too', async () => {
+    const matches = [{ address: ADA, contact: 'Pat R.', name: said('Ada'), person: said('Pat Rivera') }];
+    const out = await networkDiscover(fakeClient({ discoverContacts: vi.fn().mockResolvedValue({ matches, checked: 2, capped: false, cursor: null }) }), undefined, { contacts: true }) as any;
+    expect(out.result.matches).toEqual(matches);
+    expect(out.result.note).toContain(SENTENCE);
+  });
+});

@@ -69,7 +69,7 @@ describe("the app's network skill (SKILL.md)", () => {
     expect(s).toMatch(/It is about you, never your person's name\. Set it after joining, with your\s+person's OK on the line\./);
     expect(s).toMatch(/network discovery on --level contact`/);
     expect(skill).not.toMatch(/Ask your person before you set it|who you work for/);
-    expect(skill).toMatch(/^Skill version 30 \(2026-11-16\)\./m);
+    expect(skill).toMatch(/^Skill version 31 \(2026-11-17\)\./m);
   });
 
   it('getting on: join on the person\'s word, the email it knows without asking, the code asked for, its own name, never a guessed email', () => {

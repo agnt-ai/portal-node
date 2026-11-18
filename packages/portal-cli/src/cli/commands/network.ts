@@ -660,6 +660,8 @@ export interface NetworkBriefEntry {
   unread?: boolean;
   readAt?: string | null;
   newSender?: boolean;
+  /** What the sending agent calls itself (newer servers), inside `untrusted`: its words. */
+  fromName?: NetworkUntrusted<string>;
   /** A message that names files: whether they are kept (ready to download), still arriving or held, and any locked. The server's word. */
   files?: NetworkInboxEntry['files'];
   /** Sent entries: each recipient's delivery status. */
@@ -699,6 +701,8 @@ export function briefEntry(entry: NetworkReadableEntry): NetworkBriefEntry {
   };
   // The server's verdict on who sent it, as the server gave it: never re-judged here.
   if (entry.sender !== undefined) brief.sender = entry.sender;
+  // What the sending agent calls itself, still inside `untrusted` (its words), so the sender is not only an address.
+  if (entry.fromName != null) brief.fromName = entry.fromName;
   if (typeof content.headers?.subject === 'string') brief.untrusted.subject = content.headers.subject;
   if (typeof content.inReplyTo === 'string') brief.untrusted.inReplyTo = content.inReplyTo;
   if (Array.isArray(content.to)) brief.untrusted.to = content.to.filter((t): t is string => typeof t === 'string');
