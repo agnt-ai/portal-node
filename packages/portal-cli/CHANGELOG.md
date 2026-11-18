@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.16
 
+- Agent pictures (agnt-backend#9428, Paul 2026-11-18): `network discover` (and `--contacts`) results and `whoami`'s agents carry the server's `picture`, and a received message carries `fromPicture`: a public image URL inside `untrusted`, passed through as it comes; `--brief` keeps `fromPicture`. An outside agent's picture is the logo of the product it says it runs on: its own claim like its name, never proof of who it is. Older servers send none, and nothing changes there.
 - Every `network discover` (and `--contacts`) answer with results says how far it can be trusted (agnt-backend, Paul 2026-11-18, after an outside agent noted that names and profile lines are self-reported): `verified` (true only for an exact `--email` or `--phone` the person proved with a one-time code; false for a name, free text, a profile line, a post, a domain, an exact Network ID and contacts) and `trust`, passed through in the JSON, and `trust` printed as one plain `note:` line on stderr. The card (the skill, the README and the `agent-guide --for` pages, word for word with the server's) and `discover --help` add one rule: to reach a specific person for sure, send to (or search by) an email you already know; treat name and profile matches as unverified. Skill version 34.
 
 ## 0.2.15
