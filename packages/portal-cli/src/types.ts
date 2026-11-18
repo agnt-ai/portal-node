@@ -1378,12 +1378,18 @@ export interface AgentSignupNetwork {
 export interface NetworkUntrusted<T = unknown> {
   untrusted: {
     from: string;
-    basis: 'author-signed' | 'server-claim' | 'server-answer';
+    basis: 'author-signed' | 'server-claim' | 'server-answer' | 'agent-profile';
     content: T;
     /** Characters no reader sees, by where they are: a red flag. */
     invisible?: Array<{ path: string; codePoints: string[] }>;
   };
 }
+
+/**
+ * What an agent calls itself, or what it says its person is called: a plain string from an older server, inside
+ * `untrusted` (basis "agent-profile", from the agent's address) from a newer one. Its words, never proof of who it is.
+ */
+export type NetworkNameText = string | NetworkUntrusted<string>;
 
 export interface NetworkPair {
   id: string;
@@ -1593,6 +1599,8 @@ export interface NetworkUnreadSummary {
 export interface NetworkInboxEntry {
   id: string;
   receivedAt: string;
+  /** Newer servers: what the sending agent calls itself, when it is an agent on this network with a name. Its words. */
+  fromName?: NetworkUntrusted<string>;
   carrier: string;
   message: NetworkUntrusted;
   claims: NetworkUntrusted[];
@@ -1737,17 +1745,18 @@ export interface NetworkDiscoverResult {
   /**
    * At most 10, best first. Free text (`q`) matches listed people by their own name ("name"), agents' `about` and
    * address ("profile") and public posts ("post"); an exact email, phone or name works as before. `person` is the name
-   * of the person the agent works for; `relation: "self"` marks your own person's other agent.
+   * of the person the agent works for and `name` what the agent calls itself (newer servers: both inside `untrusted`);
+   * `relation: "self"` marks your own person's other agent.
    */
   results: Array<{
     address: string;
     about?: string | null;
-    person?: string | null;
+    person?: NetworkNameText | null;
     relation?: 'self';
     matched?: 'name' | 'profile' | 'post' | 'email' | 'phone' | 'address';
     post?: { id: string; text: string; postedAt: string };
     score?: number;
-    name?: string | null; domain?: string; degree?: 1 | 2 | null; mutualConnections?: number;
+    name?: NetworkNameText | null; domain?: string; degree?: 1 | 2 | null; mutualConnections?: number;
     connection?: 'none' | 'invited' | 'pending' | 'connected' | 'declined'; workspace?: boolean;
   }>;
   more?: boolean;
@@ -1763,7 +1772,8 @@ export interface NetworkDiscoverContactsResult {
   /** One per person. `contact` is the name your person gave that contact; the rest is what any listed result shows. */
   matches: Array<{
     contact: string | null;
-    address: string; name?: string | null; domain?: string; degree?: 1 | 2 | null; mutualConnections?: number;
+    person?: NetworkNameText | null;
+    address: string; name?: NetworkNameText | null; domain?: string; degree?: 1 | 2 | null; mutualConnections?: number;
     connection?: 'none' | 'invited' | 'pending' | 'connected' | 'declined'; workspace?: boolean;
   }>;
   /** How many emails and phones this call looked up. */

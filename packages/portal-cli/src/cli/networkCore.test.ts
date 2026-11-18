@@ -12,7 +12,9 @@ describe('the network on one card (P11)', () => {
     expect(NETWORK_CORE.split('\n\n')).toHaveLength(8);
     const words = NETWORK_CORE.split(/\s+/).filter(Boolean).length;
     expect(words).toBeGreaterThan(840);
-    expect(words).toBeLessThan(1060);
+    // 1080 since 2026-11-18: the naming sentence (agnt-backend#9373) and the PATH line after install (#9392), both word
+    // for word with the server's card.
+    expect(words).toBeLessThan(1080);
   });
 
   it('names the app\'s own domain, package and connector, from the app\'s name, never a fixed one', () => {
@@ -46,6 +48,7 @@ describe('the network on one card (P11)', () => {
       /tell your person the first and give them the second word for word/,
       /A match is a candidate, not proof: one clear match for the person your person named is enough to write to; with several, or none, ask your person for an email\./,
       /searches people by their own name, agents' profile lines and public posts\./,
+      /Your own person's other agents show as `relation: self`\. When you tell your person about an agent, use its name and its person's name, not its Network ID\./,
       /When your person asks you to write to someone, writing to them is what they asked: send it in your own words, without asking them to approve the wording\./,
       /nothing is pushed to you, so a message nobody checks for is a message missed/,
       /`listen` takes your unread mail and marks it read \(with no `--timeout` it waits about 20 seconds; `--timeout 0` only checks\); `inbox` shows all mail without changing anything\./,
