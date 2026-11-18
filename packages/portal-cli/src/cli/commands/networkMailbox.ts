@@ -13,7 +13,7 @@
  */
 
 import type { PortalClient } from '../../index.js';
-import type { NetworkAckResult, NetworkAckTarget, NetworkInboxEntry, NetworkInboxPage } from '../../types.js';
+import type { NetworkAckResult, NetworkAckTarget, NetworkInboxEntry, NetworkInboxPage, NetworkKeepResult, NetworkKeptSummary } from '../../types.js';
 import {
   NetworkUsageError, NotAvailableYetError, briefEntry, describeError, plainError, wholeNumber, runNetworkVerb, HEX64,
   type NetworkBaseOptions,
@@ -27,6 +27,16 @@ type Order = typeof ORDERS[number];
 
 /** The most ids one ack takes. */
 export const ACK_MAX_IDS = 200;
+/** The most ids one keep takes. */
+export const KEEP_MAX_IDS = 200;
+
+/**
+ * Read, take or keep (Paul, 2026-11-18), the one line every place that explains inbox and listen carries: the same idea
+ * as the server's guide.
+ */
+export const READ_TAKE_KEEP =
+  'Read with `inbox` (it marks nothing) or take with `listen` (it marks read); to hand a message to your person for a ' +
+  'decision, `keep <id>`, and release it with `keep --release <id>` once they decide.';
 /** `network thread` follows cursors for at most this many pages (200 messages each), then says there is more. */
 export const THREAD_MAX_PAGES = 10;
 
@@ -38,6 +48,8 @@ export interface NetworkInboxOptions extends NetworkBaseOptions {
   limit?: string;
   brief?: boolean;
   unread?: boolean;
+  /** Only the messages kept for your person's decision (`network keep`). */
+  kept?: boolean;
   from?: string;
   thread?: string;
   sent?: boolean;
@@ -59,6 +71,8 @@ export function inboxQuery(opts: NetworkInboxOptions) {
   if (limit !== undefined && (limit < 1 || limit > 200)) throw new NetworkUsageError('--limit is 1 to 200.');
   if (opts.sent && opts.all) throw new NetworkUsageError('Give --sent (only what you sent) or --all (received and sent), not both.');
   if (opts.unread && opts.sent) throw new NetworkUsageError('--unread is about messages you received: leave out --sent.');
+  if (opts.kept && opts.sent) throw new NetworkUsageError('--kept is about messages you received: leave out --sent.');
+  if (opts.kept && opts.unread) throw new NetworkUsageError('A kept message is read: give --kept or --unread, not both.');
   let order: Order | undefined;
   if (opts.order !== undefined) {
     if (!(ORDERS as readonly string[]).includes(opts.order)) throw new NetworkUsageError(`--order is one of ${ORDERS.join(', ')}, not ${opts.order}.`);
@@ -79,7 +93,7 @@ export function inboxQuery(opts: NetworkInboxOptions) {
   // Always asked for, so a server with the mailbox answers the mailbox: received by default.
   const view: 'received' | 'sent' | 'all' = thread ? 'all' : opts.sent ? 'sent' : opts.all ? 'all' : 'received';
   return {
-    since: opts.since, cursor: opts.cursor, limit, view, unread: opts.unread ? true : undefined, from, thread,
+    since: opts.since, cursor: opts.cursor, limit, view, unread: opts.unread ? true : undefined, kept: opts.kept ? true : undefined, from, thread,
     order: thread ? ('oldest' as const) : order, assistant: opts.assistant,
   };
 }
@@ -91,6 +105,7 @@ export const isMailboxPage = (page: Partial<NetworkInboxPage>): boolean => typeo
 function needsMailbox(q: ReturnType<typeof inboxQuery>): string | undefined {
   const asked: string[] = [];
   if (q.unread) asked.push('--unread');
+  if (q.kept) asked.push('--kept');
   if (q.from) asked.push('--from');
   if (q.thread) asked.push('--thread');
   if (q.view !== 'received') asked.push(q.view === 'sent' ? '--sent' : '--all');
@@ -159,6 +174,9 @@ export async function networkInbox(client: PortalClient, opts: NetworkInboxOptio
   } else if (unread) {
     notices.push(`mailbox: ${unread}.${opts.unread ? '' : ' Read them with `{{accountSlug}} network inbox --unread`.'} A reply to a message (or \`{{accountSlug}} network ack\`) marks it read.`);
   }
+
+  const kept = keptLine(page.kept);
+  if (kept) notices.push(kept);
 
   let result: Record<string, unknown> = opts.brief ? { ...page, messages: page.messages.map((m) => briefEntry(m)) } : { ...page };
   let exitCode: number | undefined;
@@ -231,6 +249,45 @@ export async function networkAck(client: PortalClient, ids: string[], opts: Netw
   };
 }
 
+// ── keep ────────────────────────────────────────────────────────────────────
+
+export interface NetworkKeepOptions extends NetworkBaseOptions {
+  /** Release them (once your person has decided) instead of keeping them. */
+  release?: boolean;
+}
+
+/** The ids keep takes: 1 to 200 message ids in full, each once. Throws a usage error before anything is sent. */
+export function keepIds(ids: string[]): string[] {
+  if (!ids.length) throw new NetworkUsageError('Say which messages: network keep <id> ... (message ids in full, as inbox or listen printed them).');
+  if (ids.length > KEEP_MAX_IDS) throw new NetworkUsageError(`At most ${KEEP_MAX_IDS} ids in one keep.`);
+  const clean = ids.map((i) => i.trim().toLowerCase());
+  if (clean.some((i) => !HEX64.test(i))) throw new NetworkUsageError('keep takes message ids in full: 64 hex characters each, as inbox or listen printed them.');
+  return [...new Set(clean)];
+}
+
+/** One plain line about what is kept, from its count only; undefined when nothing is. */
+export function keptLine(kept: NetworkKeptSummary | undefined): string | undefined {
+  const n = typeof kept?.count === 'number' && Number.isSafeInteger(kept.count) && kept.count > 0 ? kept.count : 0;
+  if (!n) return undefined;
+  return `kept: ${n} message${n === 1 ? '' : 's'} waiting on your person's decision (\`{{accountSlug}} network inbox --kept\` lists ${n === 1 ? 'it' : 'them'}; \`{{accountSlug}} network keep --release <id>\` once they decide).`;
+}
+
+/**
+ * Keep received messages pending for your person's decision, or release them (--release): kept ones are read, so listen
+ * and wait never hand them out again, and `inbox --kept` lists them. A reply in the thread does not release one.
+ */
+export async function networkKeep(client: PortalClient, ids: string[], opts: NetworkKeepOptions) {
+  const clean = keepIds(ids);
+  const answer: NetworkKeepResult = await client.network.keep(clean, !opts.release, { assistant: opts.assistant });
+  const changed = typeof answer?.changed === 'number' && Number.isSafeInteger(answer.changed) ? answer.changed : 0;
+  const all = typeof answer?.kept?.count === 'number' && Number.isSafeInteger(answer.kept.count) ? answer.kept.count : 0;
+  return {
+    result: answer,
+    notice: `${opts.release ? 'released' : 'kept'} ${changed} of ${clean.length}; ${all} kept in all.` +
+      (changed < clean.length ? ' An id that is not a message you received, or is already in that state, changes nothing.' : ''),
+  };
+}
+
 // ── thread ──────────────────────────────────────────────────────────────────
 
 export interface NetworkThreadOptions extends NetworkBaseOptions {
@@ -290,6 +347,11 @@ export const runNetworkAck = (ids: string[], opts: NetworkAckOptions) =>
   runNetworkVerb('ack', async () => {
     ackTarget(ids, opts);
     return networkAck(await clientFor(await networkProfile(opts.profile)), ids, opts);
+  });
+export const runNetworkKeep = (ids: string[], opts: NetworkKeepOptions) =>
+  runNetworkVerb('keep', async () => {
+    keepIds(ids);
+    return networkKeep(await clientFor(await networkProfile(opts.profile)), ids, opts);
   });
 export const runNetworkThread = (id: string, opts: NetworkThreadOptions) =>
   runNetworkVerb('thread', async () => networkThread(await clientFor(await networkProfile(opts.profile)), id, opts));

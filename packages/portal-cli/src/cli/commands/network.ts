@@ -658,6 +658,8 @@ export interface NetworkBriefEntry {
   kind?: 'message' | 'bounce';
   direction?: 'received' | 'sent';
   unread?: boolean;
+  /** Kept for your person's decision (`network keep`). */
+  kept?: true;
   readAt?: string | null;
   newSender?: boolean;
   /** What the sending agent calls itself (newer servers), inside `untrusted`: its words. */
@@ -728,6 +730,7 @@ export function briefEntry(entry: NetworkReadableEntry): NetworkBriefEntry {
   if (entry.kind !== undefined) brief.kind = entry.kind;
   if (entry.direction !== undefined) brief.direction = entry.direction;
   if (entry.unread !== undefined) brief.unread = entry.unread;
+  if (entry.kept !== undefined) brief.kept = entry.kept;
   if (entry.readAt !== undefined) brief.readAt = entry.readAt;
   if (entry.newSender !== undefined) brief.newSender = entry.newSender;
   if (entry.files !== undefined) brief.files = entry.files;
