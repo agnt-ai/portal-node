@@ -12,7 +12,9 @@ describe('the network on one card (P11)', () => {
     expect(NETWORK_CORE.split('\n\n')).toHaveLength(8);
     const words = NETWORK_CORE.split(/\s+/).filter(Boolean).length;
     expect(words).toBeGreaterThan(840);
-    expect(words).toBeLessThan(1060);
+    // 1080 since 2026-11-18: the naming sentence (agnt-backend#9373) and the PATH line after install (#9392), both word
+    // for word with the server's card.
+    expect(words).toBeLessThan(1080);
   });
 
   it('names the app\'s own domain, package and connector, from the app\'s name, never a fixed one', () => {
