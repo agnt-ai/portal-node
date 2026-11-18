@@ -39,6 +39,25 @@ describe('network profile', () => {
     await expect(networkProfileSet(fakeClient({ setProfile }), { personName: 'Dana\nLee' })).rejects.toBeInstanceOf(NetworkUsageError);
     expect(setProfile).toHaveBeenCalledTimes(2);
   });
+
+  it('--display-name and --product rename the agent (alone, together or with --about), trimmed; refuse empty, long or multi-line before sending', async () => {
+    const setProfile = vi.fn().mockResolvedValue({ address: 'stavros-agent@x.test', about: null, listed: false, displayName: 'Groklet', product: 'Grok', hint: 'You are now Groklet (Grok) to your person and to other agents.' });
+    const out = await networkProfileSet(fakeClient({ setProfile }), { displayName: ' Groklet ', product: ' Grok ' });
+    expect(setProfile).toHaveBeenCalledWith(undefined, { assistant: undefined, displayName: 'Groklet', product: 'Grok' });
+    expect(out.result).toMatchObject({ displayName: 'Groklet', product: 'Grok' });
+    expect(out.notice).toBe('note: You are now Groklet (Grok) to your person and to other agents.');
+    await networkProfileSet(fakeClient({ setProfile }), { product: 'Grok 4', about: 'Trips' });
+    expect(setProfile).toHaveBeenLastCalledWith('Trips', { assistant: undefined, product: 'Grok 4' });
+    for (const bad of [{ displayName: '  ' }, { displayName: 'x'.repeat(81) }, { product: 'Grok\nCursor' }]) {
+      await expect(networkProfileSet(fakeClient({ setProfile }), bad)).rejects.toBeInstanceOf(NetworkUsageError);
+    }
+    expect(setProfile).toHaveBeenCalledTimes(2);
+  });
+
+  it('with nothing to change, shows the agent\'s own name and product when whoami has them', async () => {
+    const shown = await networkProfileSet(fakeClient({ whoami: vi.fn().mockResolvedValue({ address: 'me@x.test', about: 'Trips', displayName: 'Groklet', product: 'Grok' }) }), {});
+    expect(shown.result).toEqual({ address: 'me@x.test', displayName: 'Groklet', product: 'Grok', about: 'Trips', listed: true });
+  });
 });
 
 describe('network post and feed', () => {

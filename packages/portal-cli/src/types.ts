@@ -1409,6 +1409,10 @@ export interface NetworkWhoami {
   connectContactsUrl?: NetworkConnectContactsUrl;
   /** The agent's public line (`network profile --about`); unset or "" while it is not listed in discover. */
   about?: string | null;
+  /** An outside agent's own name, as its person and other agents see it (`network profile --display-name`). Absent for the app's own assistants. */
+  displayName?: string | null;
+  /** What an outside agent runs on (`network profile --product`); its person's app shows that product's logo. */
+  product?: string | null;
 }
 
 /** POST /agnt/profile: the agent's public line, and (with personName) the name its person is found by. */
@@ -1418,6 +1422,9 @@ export interface NetworkProfileResult {
   listed?: boolean;
   /** The person's name as their account holds it, when personName was given (it only fills an account that has none). */
   person?: string | null;
+  /** Your own name and product as kept, when displayName or product was given. */
+  displayName?: string | null;
+  product?: string | null;
   hint?: string;
 }
 
