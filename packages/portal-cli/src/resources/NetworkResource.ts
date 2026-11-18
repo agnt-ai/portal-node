@@ -3,7 +3,7 @@ import type {
   NetworkWhoami, NetworkSendBody, NetworkSendResult, NetworkInboxPage, NetworkWaitResult, NetworkListenResult, NetworkDiscoverResult, NetworkDiscoverContactsResult, NetworkConnectionRequest, NetworkRequestFirstMessage, NetworkRequestDecision, NetworkConnectionList, NetworkMutualResult, NetworkSentReport, NetworkSentList,
   NetworkProfileResult, NetworkPostResult, NetworkFeed,
   NetworkPartUpload, NetworkPartDownload,
-  NetworkVerifyResult, NetworkLeaveResult, NetworkInboxDigest, NetworkAckResult, NetworkAckTarget, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
+  NetworkVerifyResult, NetworkLeaveResult, NetworkInboxDigest, NetworkAckResult, NetworkKeepResult, NetworkAckTarget, NetworkUnreadPage, NetworkBlock, NetworkWebhookResult, NetworkDiscovery, NetworkDiscoveryIdentifier,
 } from '../types.js';
 
 /**
@@ -27,6 +27,8 @@ export interface InboxQuery {
   limit?: number;
   view?: 'received' | 'sent' | 'all';
   unread?: boolean;
+  /** Only the messages you kept for your person's decision (`keep`). */
+  kept?: boolean;
   from?: string;
   thread?: string;
   order?: 'unread_first' | 'oldest' | 'newest';
@@ -109,7 +111,7 @@ export class NetworkResource {
     }
     return this.http.get<NetworkInboxPage>('/agnt/inbox', {
       since: opts.since, limit: opts.limit, assistant: opts.assistant,
-      view: opts.view, unread: opts.unread ? 'true' : undefined, from: opts.from, thread: opts.thread, order: opts.order, cursor: opts.cursor,
+      view: opts.view, unread: opts.unread ? 'true' : undefined, kept: opts.kept ? 'true' : undefined, from: opts.from, thread: opts.thread, order: opts.order, cursor: opts.cursor,
     }, T);
   }
 
@@ -129,6 +131,15 @@ export class NetworkResource {
    */
   ack(target: NetworkAckTarget, opts: NetworkAssistantOption = {}): Promise<NetworkAckResult> {
     return this.http.post<NetworkAckResult>('/agnt/ack', { ...target, ...(opts.assistant ? { assistant: opts.assistant } : {}) }, T);
+  }
+
+  /**
+   * Keep received messages pending for your person's decision (`keep` true, the default): each is marked read, so listen
+   * and wait never hand it out again, and `inbox` with `kept` lists it until you release it (`keep` false). A reply in its
+   * thread does not release it. 1 to 200 ids; one that is not a message you received changes nothing.
+   */
+  keep(ids: string[], keep = true, opts: NetworkAssistantOption = {}): Promise<NetworkKeepResult> {
+    return this.http.post<NetworkKeepResult>('/agnt/keep', { ids, keep, ...(opts.assistant ? { assistant: opts.assistant } : {}) }, T);
   }
 
   /**
