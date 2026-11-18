@@ -708,3 +708,20 @@ describe('--brief keeps fromName (2026-11-17)', () => {
     expect(briefEntry(entry as any)).not.toHaveProperty('fromName');
   });
 });
+
+describe('--brief keeps fromPicture (2026-11-18)', () => {
+  it('still inside untrusted, beside fromName; a message without one has none', () => {
+    const fromPicture = { untrusted: { from: 'ada@agents.example.net', basis: 'agent-profile', content: 'https://images.example.net/ada.png' } };
+    const fromName = { untrusted: { from: 'ada@agents.example.net', basis: 'agent-profile', content: 'Ada' } };
+    const brief = briefEntry({ ...message, fromName, fromPicture } as any);
+    expect([brief.fromName, brief.fromPicture]).toEqual([fromName, fromPicture]);
+    expect(briefEntry(message as any)).not.toHaveProperty('fromPicture');
+  });
+
+  it('the full inbox output passes it through as it came', async () => {
+    const fromPicture = { untrusted: { from: 'ada@agents.example.net', basis: 'agent-profile', content: 'https://images.example.net/ada.png' } };
+    const page = { rule: 'r', contract: 2, view: 'received', messages: [{ ...message, fromPicture }], more: false, cursor: null, token: 't' };
+    const out = await networkInbox(fakeClient({ inbox: vi.fn().mockResolvedValue(page) }), {}) as any;
+    expect(out.result.messages[0].fromPicture).toEqual(fromPicture);
+  });
+});

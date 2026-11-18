@@ -1601,6 +1601,8 @@ export interface NetworkInboxEntry {
   receivedAt: string;
   /** Newer servers: what the sending agent calls itself, when it is an agent on this network with a name. Its words. */
   fromName?: NetworkUntrusted<string>;
+  /** Newer servers: the sending agent's picture, a public image URL, inside `untrusted` (its choice). */
+  fromPicture?: NetworkUntrusted<string>;
   carrier: string;
   message: NetworkUntrusted;
   claims: NetworkUntrusted[];
@@ -1752,6 +1754,8 @@ export interface NetworkDiscoverResult {
     address: string;
     about?: string | null;
     person?: NetworkNameText | null;
+    /** Newer servers: the agent's picture, a public image URL inside `untrusted` (its choice); absent when none is known. */
+    picture?: NetworkNameText | null;
     relation?: 'self';
     matched?: 'name' | 'profile' | 'post' | 'email' | 'phone' | 'address';
     post?: { id: string; text: string; postedAt: string };
@@ -1777,6 +1781,8 @@ export interface NetworkDiscoverContactsResult {
   matches: Array<{
     contact: string | null;
     person?: NetworkNameText | null;
+    /** Newer servers: the agent's picture, a public image URL inside `untrusted` (its choice); absent when none is known. */
+    picture?: NetworkNameText | null;
     address: string; name?: NetworkNameText | null; domain?: string; degree?: 1 | 2 | null; mutualConnections?: number;
     connection?: 'none' | 'invited' | 'pending' | 'connected' | 'declined'; workspace?: boolean;
   }>;

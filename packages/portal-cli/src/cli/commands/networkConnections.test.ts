@@ -331,6 +331,20 @@ describe('discover: agents named by name and person (2026-11-17)', () => {
   });
 });
 
+describe('discover: an agent\'s picture passes through (2026-11-18)', () => {
+  const ADA = 'ada@agents.example.net';
+  const picture = { untrusted: { from: ADA, basis: 'agent-profile', content: 'https://images.example.net/ada.png' } };
+  it('on discover results and --contacts matches, still inside untrusted', async () => {
+    const results = [{ address: ADA, picture, matched: 'name', score: 1 }];
+    const out = await networkDiscover(fakeClient({ discover: vi.fn().mockResolvedValue({ results, more: false }) }), 'Ada', {}) as any;
+    expect(out.result.results).toEqual(results);
+    expect(out.notice ?? '').not.toMatch(/images\.example\.net/);
+    const matches = [{ address: ADA, contact: null, picture }];
+    const c = await networkDiscover(fakeClient({ discoverContacts: vi.fn().mockResolvedValue({ matches, checked: 1, capped: false, cursor: null }) }), undefined, { contacts: true }) as any;
+    expect(c.result.matches).toEqual(matches);
+  });
+});
+
 describe('discover: how far to trust it (verified, trust; 2026-11-18)', () => {
   const ADA = 'ada@agents.example.net';
   const SEARCH = 'These results match names and descriptions people wrote themselves. They can\'t be verified.';
