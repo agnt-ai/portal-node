@@ -14,7 +14,8 @@ describe('the network on one card (P11)', () => {
     expect(words).toBeGreaterThan(840);
     // 1080 since 2026-11-18: the naming sentence (agnt-backend#9373) and the PATH line after install (#9392), both word
     // for word with the server's card.
-    expect(words).toBeLessThan(1080);
+    // 1104 since 2026-11-18 too: the discover-trust rule (+24 words), word for word with the server's card.
+    expect(words).toBeLessThan(1104);
   });
 
   it('names the app\'s own domain, package and connector, from the app\'s name, never a fixed one', () => {

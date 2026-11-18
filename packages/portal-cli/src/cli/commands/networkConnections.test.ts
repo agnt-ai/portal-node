@@ -3,6 +3,7 @@ import { networkWait, timeoutNotice, EXIT_WAIT_REQUEST, NetworkUsageError, descr
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { readSkill } from './agentGuide.js';
+import { NETWORK_CORE } from '../networkCore.js';
 import { NETWORK_HELP_AFTER } from '../networkHelp.js';
 import { MISS_PERSON, MISS_ANYONE, networkDiscover, networkRequests, networkRequest, networkDecide, networkConnections, networkDisconnect, networkMutual } from './networkConnections.js';
 import { NetworkResource, NETWORK_CALL_TIMEOUT_MS } from '../../resources/NetworkResource.js';
@@ -341,5 +342,40 @@ describe('discover: an agent\'s picture passes through (2026-11-18)', () => {
     const matches = [{ address: ADA, contact: null, picture }];
     const c = await networkDiscover(fakeClient({ discoverContacts: vi.fn().mockResolvedValue({ matches, checked: 1, capped: false, cursor: null }) }), undefined, { contacts: true }) as any;
     expect(c.result.matches).toEqual(matches);
+  });
+});
+
+describe('discover: how far to trust it (verified, trust; 2026-11-18)', () => {
+  const ADA = 'ada@agents.example.net';
+  const SEARCH = 'These results match names and descriptions people wrote themselves. They can\'t be verified.';
+
+  it('passes verified and trust through, and prints trust as one plain note on stderr, first', async () => {
+    const found = { results: [{ address: ADA, matched: 'name', score: 1 }], more: false, verified: false, trust: SEARCH, hint: 'From the server.' };
+    const out = await networkDiscover(fakeClient({ discover: vi.fn().mockResolvedValue(found) }), 'Pat Rivera', {}) as any;
+    expect([out.result.verified, out.result.trust]).toEqual([false, SEARCH]);
+    expect(out.notice).toBe(`note: ${SEARCH}\nnote: From the server.`);
+    const proven = await networkDiscover(fakeClient({ discover: vi.fn().mockResolvedValue({ ...found, verified: true, trust: 'Verified: this matches\na proven email exactly.' }) }), undefined, { email: 'pat@example.com' }) as any;
+    expect(proven.result.verified).toBe(true);
+    expect(proven.notice).toMatch(/^note: Verified: this matches a proven email exactly\.\n/);
+  });
+
+  it('no trust (no results, or an older server): no line', async () => {
+    const out = await networkDiscover(fakeClient({ discover: vi.fn().mockResolvedValue({ results: [], more: false }) }), 'nobody', {}) as any;
+    expect(out.notice).toBe(`note: ${MISS_ANYONE}`);
+  });
+
+  it('--contacts: the same', async () => {
+    const found = { matches: [{ address: ADA, contact: null }], checked: 1, capped: false, cursor: null, verified: false, trust: 'Names were written by people.' };
+    const out = await networkDiscover(fakeClient({ discoverContacts: vi.fn().mockResolvedValue(found) }), undefined, { contacts: true }) as any;
+    expect([out.result.verified, out.result.trust]).toEqual([false, 'Names were written by people.']);
+    expect(out.notice).toBe('note: Names were written by people.');
+  });
+
+  it('the card, the skill, the README and discover --help carry the rule', () => {
+    const rule = 'To reach a specific person for sure, send to (or search by) an email you already know; treat name and profile matches as unverified.';
+    expect(NETWORK_CORE).toContain(`not its Network ID. ${rule}`);
+    expect(readSkill()).toContain(`not its Network ID. ${rule}`);
+    expect(readFileSync(fileURLToPath(new URL('../../../README.md', import.meta.url)), 'utf8')).toContain(`not its Network ID. ${rule}`);
+    expect(readFileSync(fileURLToPath(new URL('../index.ts', import.meta.url)), 'utf8')).toMatch(/To reach a specific person for sure, send to \(or search by\) an email you already know; treat name and profile\\n' \+\n\s+'matches as unverified\./);
   });
 });

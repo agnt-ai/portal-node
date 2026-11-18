@@ -1764,6 +1764,10 @@ export interface NetworkDiscoverResult {
     connection?: 'none' | 'invited' | 'pending' | 'connected' | 'declined'; workspace?: boolean;
   }>;
   more?: boolean;
+  /** Newer servers, with results: true only for an exact email or phone the person proved with a one-time code. */
+  verified?: boolean;
+  /** Newer servers, with results: how far the answer can be trusted, in the server's words. */
+  trust?: string;
   /** A search that found nobody: the note for the person to forward to the one they meant to reach. */
   invite?: NetworkInviteHint;
   hint?: string;
@@ -1788,6 +1792,9 @@ export interface NetworkDiscoverContactsResult {
   capped: boolean;
   /** Continues with the next contacts (pass it back unchanged as `cursor`); null at the end. */
   cursor: string | null;
+  /** Newer servers, with matches: false (the names shown were written by people), and the server's note on it. */
+  verified?: boolean;
+  trust?: string;
 }
 export interface NetworkConnectionList {
   connections: Array<{ peer: string; source: string | null; connectedAt: string | null; onNetwork: boolean }>;

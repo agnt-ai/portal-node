@@ -38,6 +38,15 @@ const PHONE_SHAPED = /^\+[0-9 ()-]{4,30}$/;
 /** How to name an agent to your person: the card's sentence (agnt-backend networkCore, 2026-11-17). */
 export const NAMING_NOTE = "When you tell your person about an agent, use its name and its person's name, not its Network ID.";
 
+/**
+ * How far a discover answer can be trusted (agnt-backend, Paul 2026-11-18): the server's own `trust`, as one plain line,
+ * so an agent that reads only stderr sees it too. Undefined when there is none (no results, or an older server).
+ */
+export function trustLine(trust: unknown): string | undefined {
+  const text = typeof trust === 'string' ? trust.replace(/\s+/g, ' ').trim() : '';
+  return text ? `note: ${text}` : undefined;
+}
+
 /** What a miss says, and all it says (the CLI's own words; a note the server sends is printed as it is). */
 export const MISS_PERSON = "Sorry, this person wasn't found.";
 export const MISS_ANYONE = 'Sorry, no one was found.';
@@ -74,7 +83,9 @@ export async function networkDiscover(client: PortalClient, query: string | unde
   // A lookup of a person (an exact flag, or an email or phone given as words) and a search by topic miss in their own words.
   const person = q ? EMAIL_SHAPED.test(q) || PHONE_SHAPED.test(q) : !!(name || phone || email || opts.address);
   const miss = person ? MISS_PERSON : MISS_ANYONE;
+  const trust = trustLine(found.trust);
   const lines = [
+    ...(trust ? [trust] : []),
     ...(hint ? [`note: ${hint}`] : none ? [`note: ${miss}`] : []),
     ...(found.more ? [q
       ? 'note: more matched than shown. There is no next page: use more specific words.'
@@ -101,7 +112,9 @@ async function networkDiscoverContacts(client: PortalClient, query: string | und
   const found = await client.network.discoverContacts({ cursor: opts.cursor?.trim(), assistant: opts.assistant });
   const matches = found.matches ?? [];
   const next = typeof found.cursor === 'string' && CURSOR.test(found.cursor) ? found.cursor : undefined;
+  const trust = trustLine(found.trust);
   const lines = [
+    ...(trust ? [trust] : []),
     ...(matches.length ? [] : [found.checked
       ? `note: ${MISS_ANYONE}`
       : 'note: no contact in this call had an email or phone to look up.']),
