@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { networkJoin, pickUsername, guessProduct, randomSuffix, SUFFIX_ALPHABET, usernameOf, defaultUsername } from './networkJoin.js';
+import { networkJoin, pickUsername, guessProduct, randomSuffix, SUFFIX_ALPHABET, usernameOf, defaultUsername, IDENTITY_ASK } from './networkJoin.js';
 import { NetworkUsageError, describeError } from './network.js';
 import { saveProfile, resolveProfile, pendingKeyRequest, setPendingKeyRequest } from '../utils/credentials.js';
 import { DEFAULT_ACCOUNT_NAME } from '../../defaults.js';
@@ -97,6 +97,34 @@ describe('network join', () => {
     expect(result.nameNote).toMatch(/^You will join as person-agent .*add --name <short name> to the next command/);
     expect(result).not.toHaveProperty('chooseUsername');
     expect(result.warning).toMatch(/sends your user's sign-in code to https:\/\/api\.example\.test, not the default API/);
+  });
+
+  it('says who it is: step 1 asks for a name and product when either is missing, and the finish command carries what was given', async () => {
+    global.fetch = vi.fn().mockResolvedValue(answer(200, { ok: true })) as any;
+    const asked = (await networkJoin({ email: 'person@example.com', account: 'acme' }) as any).result;
+    expect(asked.identityNote).toBe(IDENTITY_ASK);
+    expect(asked.identityNote).toMatch(/--display-name <your name> --product <what you run on>/);
+    const told = (await networkJoin({ email: 'person@example.com', account: 'acme', displayName: 'Groklet', product: 'Grok' }) as any).result;
+    expect(told.identityNote).toBeUndefined();
+    expect(told.next).toMatch(/ --display-name Groklet --product Grok /);
+  });
+
+  it('sends the name and product the agent gave; left out, the product is guessed and the answer says so, after tellUser and before the card', async () => {
+    vi.stubEnv('CLAUDECODE', '');
+    vi.stubEnv('CLAUDE_CODE_ENTRYPOINT', '');
+    vi.stubEnv('CURSOR_TRACE_ID', 'x');
+    const fetchMock = vi.fn().mockResolvedValue(answer(201, joined('stavros-agent')));
+    global.fetch = fetchMock as any;
+    const told = await networkJoin({ email: 'stavros@example.com', code: '1', account: 'acme', displayName: 'Groklet', product: 'Grok' }) as any;
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).agent).toMatchObject({ displayName: 'Groklet', product: 'Grok' });
+    expect(told.result.identity).toBeUndefined();
+    const guessed = await networkJoin({ email: 'stavros@example.com', code: '1', account: 'acme' }) as any;
+    vi.unstubAllEnvs();
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).agent).toMatchObject({ displayName: 'Cursor', product: 'Cursor' });
+    expect(Object.keys(guessed.result)).toEqual(['status', 'address', 'username', 'next', 'tellUser', 'identity', 'orientation']);
+    expect(guessed.result.identity).toMatchObject({ displayName: 'Cursor', product: 'Cursor', productGuessed: true, displayNameGiven: false });
+    expect(guessed.result.identity.fix).toMatch(/^Your person sees you as Cursor \(Cursor: guessed from this environment, not said by you\)\. If that is not who you are, set it now: \S+ network profile --display-name <your name> --product <what you run on>\.$/);
+    expect(guessed.notice).toMatch(/"identity" says who your person sees you as, and how to correct it\.$/);
   });
 
   it('step 1 repeats the chosen username and quotes what needs quoting', async () => {
@@ -203,7 +231,7 @@ describe('network join', () => {
 
   it('by default the result is short and leads with what to do: the steps, then what to tell the person, then the card', async () => {
     global.fetch = vi.fn().mockResolvedValue(answer(201, joined('codex-7k3m9q2x'))) as any;
-    const { result, notice } = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x' }) as any;
+    const { result, notice } = await networkJoin({ email: 'person@example.com', code: '1', account: 'acme', username: 'codex-7k3m9q2x', displayName: 'Codex', product: 'Codex' }) as any;
     expect(Object.keys(result)).toEqual(['status', 'address', 'username', 'next', 'tellUser', 'orientation']);
     expect(result.next).toBe(builtInFirstCard());
     expect(result.next).toMatch(/1\. Ask your person, once, how they want you to use this network.*\n2\. Give your person's name once, so other agents find them by it.*Only with their OK, publish the profile line they approved.*\n3\. Check your inbox once now.*\n4\. Run the self-test with what they chose: `\S+ network doctor --scheduled`.*`\S+ network doctor --when-asked`/);
