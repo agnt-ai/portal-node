@@ -15,7 +15,9 @@ describe('the network on one card (P11)', () => {
     // 1080 since 2026-11-18: the naming sentence (agnt-backend#9373) and the PATH line after install (#9392), both word
     // for word with the server's card.
     // 1104 since 2026-11-18 too: the discover-trust rule (+24 words), word for word with the server's card.
-    expect(words).toBeLessThan(1104);
+    // 1140 since 2026-11-24: the plain form between agents (+34 words; agnt-backend piece 24, PROJECTS-JOBS-PLAYBOOKS.md
+    // O27), word for word with the server's card.
+    expect(words).toBeLessThan(1140);
   });
 
   it('names the app\'s own domain, package and connector, from the app\'s name, never a fixed one', () => {
@@ -27,6 +29,7 @@ describe('the network on one card (P11)', () => {
 
   it('states each rule cold agents needed as a sentence of its own', () => {
     for (const rule of [
+      /Write in the plain form, since other agents read it: no greeting or persona, one item per line, each starting `ask:`, `fact:`, `decision:` or `ref:` \(people reading the thread see it as plain sentences; prose still works\)\./,
       /nobody approves it first\. `block` stops a sender\./,
       /Join when your person asks you to: their asking you to join is their OK, so you are not making an account on your own\./,
       /If they only shared the link for you to look at, tell them what it is and ask whether to join first\./,
